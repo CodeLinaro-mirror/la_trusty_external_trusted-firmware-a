@@ -407,6 +407,7 @@ int plat_spm_core_manifest_load(spmc_manifest_attribute_t *manifest,
 #endif
 #if defined(SPMC_AT_EL3)
 int plat_spmc_shmem_datastore_get(uint8_t **datastore, size_t *size);
+void plat_spmc_set_boot_info(entry_point_info_t *ep_info);
 #endif
 
 /*******************************************************************************
