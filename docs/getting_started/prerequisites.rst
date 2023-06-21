@@ -26,15 +26,21 @@ Toolchain
 |TF-A| can be built with any of the following *cross-compiler* toolchains that
 target the Armv7-A or Armv8-A architectures:
 
-- GCC >= 11.3.Rel1 (from the `Arm Developer website`_)
+- GCC >= 12.2.Rel1 (from the `Arm Developer website`_)
 
    You will need the targets ``arm-none-eabi`` and ``aarch64-none-elf`` for
    AArch32 and AArch64 builds respectively.
 
-- Clang >= 14.0.0
-- Arm Compiler >= 6.18
+- Clang == 14.0.0
+- Arm Compiler == 6.18
 
 In addition, a native compiler is required to build the supporting tools.
+
+.. note::
+   Versions greater than the ones specified are likely but not guaranteed to
+   work. This is predominantly because TF-A carries its own copy of compiler-rt,
+   which may be older than the version expected by the compiler. Fixes and bug
+   reports are always welcome.
 
 .. note::
    The software has also been built on Windows 7 Enterprise SP1, using CMD.EXE,
@@ -91,6 +97,13 @@ These tools are optional:
    Highly recommended, and necessary in order to install and use the packaged
    Git hooks and helper tools. Without these tools you will need to rely on the
    CI for feedback on commit message conformance.
+
+- Poetry >= 1.3.2
+
+   Required for managing Python dependencies, this will allow you to reliably
+   reproduce a Python environment to build documentation and run analysis tools.
+   Most importantly, it ensures your system environment will not be affected by
+   dependencies in the Python scripts.
 
 Package Installation (Linux)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -171,7 +184,7 @@ documentation, available `here <https://git-scm.com/docs/githooks>`_.
 
 --------------
 
-*Copyright (c) 2021-2022, Arm Limited. All rights reserved.*
+*Copyright (c) 2021-2023, Arm Limited. All rights reserved.*
 
 .. _Arm Developer website: https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/downloads
 .. _Gerrit Code Review: https://www.gerritcodereview.com/
