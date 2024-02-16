@@ -8,7 +8,8 @@
 # Trusted Firmware Version
 #
 VERSION_MAJOR			:= 2
-VERSION_MINOR			:= 7
+VERSION_MINOR			:= 8
+VERSION				:= ${VERSION_MAJOR}.${VERSION_MINOR}
 
 # Default goal is build all images
 .DEFAULT_GOAL			:= all
@@ -58,6 +59,7 @@ LIB_DIRS_TO_CHECK	:=	$(sort $(filter-out			\
 					lib/compiler-rt			\
 					lib/libfdt%			\
 					lib/libc,			\
+					lib/zlib			\
 					$(wildcard lib/*)))
 ROOT_DIRS_TO_CHECK	:=	$(sort $(filter-out			\
 					lib				\
@@ -147,7 +149,10 @@ endif
 CTX_INCLUDE_EL2_REGS := 1
 CTX_INCLUDE_AARCH32_REGS := 0
 ARM_ARCH_MAJOR := 8
-ARM_ARCH_MINOR := 6
+ARM_ARCH_MINOR := 5
+ENABLE_FEAT_ECV = 1
+ENABLE_FEAT_FGT = 1
+
 endif
 
 # USE_SPINLOCK_CAS requires AArch64 build
@@ -273,7 +278,7 @@ ifneq ($(findstring clang,$(notdir $(CC))),)
 		TF_CFLAGS_aarch64	:=	-target aarch64-arm-none-eabi $(march64-directive)
 		LD			:=	$(LINKER)
 	else
-		TF_CFLAGS_aarch32	:=	$(target32-directive) $(march32-directive)
+		TF_CFLAGS_aarch32	=	$(target32-directive) $(march32-directive)
 		TF_CFLAGS_aarch64	:=	-target aarch64-elf $(march64-directive)
 		LD			:=	$(shell $(CC) --print-prog-name ld.lld)
 
@@ -322,7 +327,7 @@ endif
 ifeq (${BUILD_STRING},)
         BUILD_STRING  :=  $(shell git describe --always --dirty --tags 2> /dev/null)
 endif
-VERSION_STRING    :=  v${VERSION_MAJOR}.${VERSION_MINOR}(${BUILD_TYPE}):${BUILD_STRING}
+VERSION_STRING    :=  v${VERSION}(${BUILD_TYPE}):${BUILD_STRING}
 
 ifeq (${AARCH32_INSTRUCTION_SET},A32)
 TF_CFLAGS_aarch32	+=	-marm
@@ -398,6 +403,8 @@ TF_CFLAGS		+=	$(CPPFLAGS) $(TF_CFLAGS_$(ARCH))		\
 				-ffunction-sections -fdata-sections		\
 				-ffreestanding -fno-builtin -fno-common		\
 				-Os -std=gnu99
+
+$(eval $(call add_define,SVE_VECTOR_LEN))
 
 ifeq (${SANITIZE_UB},on)
 TF_CFLAGS		+=	-fsanitize=undefined -fno-sanitize-recover
@@ -600,6 +607,9 @@ endif
 PIE_FOUND		:=	$(findstring --enable-default-pie,${GCC_V_OUTPUT})
 ifneq ($(PIE_FOUND),)
 	TF_CFLAGS	+=	-fno-PIE
+ifneq ($(findstring gcc,$(notdir $(LD))),)
+	TF_LDFLAGS	+=	-no-pie
+endif
 endif
 
 ifneq ($(findstring gcc,$(notdir $(LD))),)
@@ -707,8 +717,8 @@ endif
 
 # For RAS_EXTENSION, require that EAs are handled in EL3 first
 ifeq ($(RAS_EXTENSION),1)
-    ifneq ($(HANDLE_EA_EL3_FIRST),1)
-        $(error For RAS_EXTENSION, HANDLE_EA_EL3_FIRST must also be 1)
+    ifneq ($(HANDLE_EA_EL3_FIRST_NS),1)
+        $(error For RAS_EXTENSION, HANDLE_EA_EL3_FIRST_NS must also be 1)
     endif
 endif
 
@@ -726,7 +736,17 @@ ifeq ($(DYN_DISABLE_AUTH), 1)
     endif
 endif
 
-ifneq ($(filter 1,${MEASURED_BOOT} ${TRUSTED_BOARD_BOOT}),)
+ifeq ($(MEASURED_BOOT)-$(TRUSTED_BOARD_BOOT),1-1)
+# Support authentication verification and hash calculation
+    CRYPTO_SUPPORT := 3
+else ifeq ($(DRTM_SUPPORT)-$(TRUSTED_BOARD_BOOT),1-1)
+# Support authentication verification and hash calculation
+    CRYPTO_SUPPORT := 3
+else ifneq ($(filter 1,${MEASURED_BOOT} ${DRTM_SUPPORT}),)
+# Support hash calculation only
+    CRYPTO_SUPPORT := 2
+else ifeq (${TRUSTED_BOARD_BOOT},1)
+# Support authentication verification only
     CRYPTO_SUPPORT := 1
 else
     CRYPTO_SUPPORT := 0
@@ -790,11 +810,15 @@ ifeq (${ARCH},aarch32)
         $(error "ENABLE_SVE_FOR_NS cannot be used with ARCH=aarch32")
     endif
 
-    # BRBE is not supported in Aarch32
+    # BRBE is not supported in AArch32
     ifeq (${ENABLE_BRBE_FOR_NS},1)
         $(error "ENABLE_BRBE_FOR_NS cannot be used with ARCH=aarch32")
     endif
 
+    # FEAT_RNG_TRAP is not supported in AArch32
+    ifeq (${ENABLE_FEAT_RNG_TRAP},1)
+        $(error "ENABLE_FEAT_RNG_TRAP cannot be used with ARCH=aarch32")
+    endif
 endif
 
 # Ensure ENABLE_RME is not used with SME
@@ -832,6 +856,12 @@ endif
 
 ifeq ($(DRTM_SUPPORT),1)
     $(info DRTM_SUPPORT is an experimental feature)
+endif
+
+ifeq (${ENABLE_RME},1)
+    ifneq (${SEPARATE_CODE_AND_RODATA},1)
+        $(error `ENABLE_RME=1` requires `SEPARATE_CODE_AND_RODATA=1`)
+    endif
 endif
 
 ################################################################################
@@ -1005,7 +1035,7 @@ $(eval $(call assert_booleans,\
         FAULT_INJECTION_SUPPORT \
         GENERATE_COT \
         GICV2_G0_FOR_EL3 \
-        HANDLE_EA_EL3_FIRST \
+        HANDLE_EA_EL3_FIRST_NS \
         HW_ASSISTED_COHERENCY \
         INVERTED_MEMMAP \
         MEASURED_BOOT \
@@ -1027,7 +1057,6 @@ $(eval $(call assert_booleans,\
         SPMC_AT_EL3 \
         SPMD_SPM_AT_SEL2 \
         TRUSTED_BOARD_BOOT \
-        CRYPTO_SUPPORT \
         USE_COHERENT_MEM \
         USE_DEBUGFS \
         ARM_IO_IN_DTB \
@@ -1043,17 +1072,17 @@ $(eval $(call assert_booleans,\
         ENCRYPT_BL31 \
         ENCRYPT_BL32 \
         ERRATA_SPECULATIVE_AT \
-        RAS_TRAP_LOWER_EL_ERR_ACCESS \
+        RAS_TRAP_NS_ERR_REC_ACCESS \
         COT_DESC_IN_DTB \
         USE_SP804_TIMER \
         PSA_FWU_SUPPORT \
-        ENABLE_BRBE_FOR_NS \
-        ENABLE_TRBE_FOR_NS \
         ENABLE_SYS_REG_TRACE_FOR_NS \
         ENABLE_MPMM \
         ENABLE_MPMM_FCONF \
         SIMICS_BUILD \
         FEATURE_DETECTION \
+	TRNG_SUPPORT \
+	CONDITIONAL_CMO \
 )))
 
 $(eval $(call assert_numerics,\
@@ -1064,6 +1093,9 @@ $(eval $(call assert_numerics,\
         CTX_INCLUDE_PAUTH_REGS \
         CTX_INCLUDE_MTE_REGS \
         CTX_INCLUDE_NEVE_REGS \
+        CRYPTO_SUPPORT \
+        ENABLE_BRBE_FOR_NS \
+        ENABLE_TRBE_FOR_NS \
         ENABLE_BTI \
         ENABLE_PAUTH \
         ENABLE_FEAT_AMUv1 \
@@ -1075,6 +1107,7 @@ $(eval $(call assert_numerics,\
         ENABLE_FEAT_HCX \
         ENABLE_FEAT_PAN \
         ENABLE_FEAT_RNG \
+        ENABLE_FEAT_RNG_TRAP \
         ENABLE_FEAT_SB \
         ENABLE_FEAT_SEL2 \
         ENABLE_FEAT_VHE \
@@ -1087,6 +1120,7 @@ $(eval $(call assert_numerics,\
         RAS_EXTENSION \
         TWED_DELAY \
         ENABLE_FEAT_TWED \
+        SVE_VECTOR_LEN \
 )))
 
 ifdef KEY_SIZE
@@ -1142,7 +1176,7 @@ $(eval $(call add_defines,\
         ERROR_DEPRECATED \
         FAULT_INJECTION_SUPPORT \
         GICV2_G0_FOR_EL3 \
-        HANDLE_EA_EL3_FIRST \
+        HANDLE_EA_EL3_FIRST_NS \
         HW_ASSISTED_COHERENCY \
         LOG_LEVEL \
         MEASURED_BOOT \
@@ -1181,10 +1215,11 @@ $(eval $(call add_defines,\
         BL2_INV_DCACHE \
         USE_SPINLOCK_CAS \
         ERRATA_SPECULATIVE_AT \
-        RAS_TRAP_LOWER_EL_ERR_ACCESS \
+        RAS_TRAP_NS_ERR_REC_ACCESS \
         COT_DESC_IN_DTB \
         USE_SP804_TIMER \
         ENABLE_FEAT_RNG \
+        ENABLE_FEAT_RNG_TRAP \
         ENABLE_FEAT_SB \
         ENABLE_FEAT_DIT \
         NR_OF_FW_BANKS \
@@ -1209,6 +1244,7 @@ $(eval $(call add_defines,\
         FEATURE_DETECTION \
         TWED_DELAY \
         ENABLE_FEAT_TWED \
+	CONDITIONAL_CMO \
 )))
 
 ifeq (${SANITIZE_UB},trap)
@@ -1436,7 +1472,7 @@ checkpatch:		locate-checkpatch
 certtool: ${CRTTOOL}
 
 ${CRTTOOL}: FORCE
-	${Q}${MAKE} PLAT=${PLAT} USE_TBBR_DEFS=${USE_TBBR_DEFS} COT=${COT} OPENSSL_DIR=${OPENSSL_DIR} CRTTOOL=${CRTTOOL} --no-print-directory -C ${CRTTOOLPATH}
+	${Q}${MAKE} PLAT=${PLAT} USE_TBBR_DEFS=${USE_TBBR_DEFS} COT=${COT} OPENSSL_DIR=${OPENSSL_DIR} CRTTOOL=${CRTTOOL} DEBUG=${DEBUG} V=${V} --no-print-directory -C ${CRTTOOLPATH} all
 	@${ECHO_BLANK_LINE}
 	@echo "Built $@ successfully"
 	@${ECHO_BLANK_LINE}
@@ -1481,7 +1517,7 @@ fwu_fip: ${BUILD_PLAT}/${FWU_FIP_NAME}
 
 ${FIPTOOL}: FORCE
 ifdef UNIX_MK
-	${Q}${MAKE} CPPFLAGS="-DVERSION='\"${VERSION_STRING}\"'" FIPTOOL=${FIPTOOL} OPENSSL_DIR=${OPENSSL_DIR} --no-print-directory -C ${FIPTOOLPATH}
+	${Q}${MAKE} CPPFLAGS="-DVERSION='\"${VERSION_STRING}\"'" FIPTOOL=${FIPTOOL} OPENSSL_DIR=${OPENSSL_DIR} DEBUG=${DEBUG} V=${V} --no-print-directory -C ${FIPTOOLPATH} all
 else
 # Clear the MAKEFLAGS as we do not want
 # to pass the gnumake flags to nmake.
@@ -1502,7 +1538,7 @@ doc:
 enctool: ${ENCTOOL}
 
 ${ENCTOOL}: FORCE
-	${Q}${MAKE} PLAT=${PLAT} BUILD_INFO=0 OPENSSL_DIR=${OPENSSL_DIR} ENCTOOL=${ENCTOOL} --no-print-directory -C ${ENCTOOLPATH}
+	${Q}${MAKE} PLAT=${PLAT} BUILD_INFO=0 OPENSSL_DIR=${OPENSSL_DIR} ENCTOOL=${ENCTOOL} DEBUG=${DEBUG} V=${V} --no-print-directory -C ${ENCTOOLPATH} all
 	@${ECHO_BLANK_LINE}
 	@echo "Built $@ successfully"
 	@${ECHO_BLANK_LINE}
