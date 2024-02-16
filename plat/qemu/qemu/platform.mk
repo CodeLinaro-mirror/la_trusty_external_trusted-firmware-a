@@ -265,6 +265,9 @@ $(eval $(call add_define,ARM_PRELOADED_DTB_BASE))
 
 # Later QEMU versions support SME and SVE.
 ifneq (${ARCH},aarch32)
+# TODO: remove this check when FP registers are compatible with SVE/SME.
+ifeq (${CTX_INCLUDE_FPREGS},0)
 	ENABLE_SVE_FOR_NS	:= 1
 	ENABLE_SME_FOR_NS	:= 1
+endif
 endif
