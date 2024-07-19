@@ -374,7 +374,7 @@ int qemu_io_register_sp_pkg(const char *name, const char *uuid,
 	pkg->sh_file_spec.mode = FOPEN_MODE_RB;
 
 	mem_params->image_info.image_base = load_addr;
-	mem_params->image_info.image_max_size = SZ_4M;
+	mem_params->image_info.image_max_size = SZ_128M;
 	mem_params->image_info.h.attr &= ~IMAGE_ATTRIB_SKIP_LOADING;
 
 	sp_pkg_count++;
