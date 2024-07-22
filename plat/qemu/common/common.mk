@@ -131,6 +131,7 @@ ifeq (${ENABLE_SVE},0)
 	ENABLE_SME_FOR_NS	:= 0
 else
 	ENABLE_SVE_FOR_NS	:= 2
+	ENABLE_SVE_FOR_SWD	:= 1
 	ENABLE_SME_FOR_NS	:= 2
 endif
 
