@@ -52,8 +52,8 @@ static struct gic600_multichip_data n1sdp_multichip_data __init = {
 		PLAT_ARM_GICD_BASE >> 16
 	},
 	.spi_ids = {
-		{PLAT_ARM_GICD_BASE, 32, 479},
-		{PLAT_ARM_GICD_BASE, 512, 959}
+		{PLAT_ARM_GICD_BASE, 32, 511},
+		{PLAT_ARM_GICD_BASE, 512, 991}
 	}
 };
 
@@ -71,7 +71,6 @@ scmi_channel_plat_info_t *plat_css_get_scmi_info(unsigned int channel_id)
 const plat_psci_ops_t *plat_arm_psci_override_pm_ops(plat_psci_ops_t *ops)
 {
 	ops->pwr_domain_off = n1sdp_pwr_domain_off;
-	ops->pwr_domain_suspend = n1sdp_pwr_domain_suspend;
 	return css_scmi_override_pm_ops(ops);
 }
 
