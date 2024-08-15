@@ -77,7 +77,7 @@ static void security_setup(void)
 	 */
 }
 
-#ifdef SPD_trusty
+#if defined (SPD_trusty) || defined(SPD_spmd)
 
 #define GIC_SPI 0
 #define GIC_PPI 1
