@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2023, Arm Limited. All rights reserved.
+# Copyright (c) 2023-2024, Arm Limited. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -21,7 +21,7 @@
 # armv8.6-a armv8.7-a armv8.8-a armv8-r armv9-a
 # [...]
 #
-GCC_MARCH_OUTPUT := $(shell $(CC) -march=foo -Q --help=target -v 2>&1)
+GCC_MARCH_OUTPUT := $(if $($(ARCH)-cc),$(shell $($(ARCH)-cc) -march=foo -Q --help=target -v 2>&1))
 
 # This function is used to find the best march value supported by the given compiler.
 # We try to use `GCC_MARCH_OUTPUT` which has verbose message with supported march values we filter that
@@ -54,7 +54,7 @@ else
     provided-march = armv${ARM_ARCH_MAJOR}.${ARM_ARCH_MINOR}-a
 endif
 
-ifeq ($(findstring clang,$(notdir $(CC))),)
+ifeq ($(filter %-clang,$($(ARCH)-cc-id)),)
 
 # We expect from Platform to provide a correct Major/Minor value but expecting something
 # from compiler with unsupported march means we shouldn't fail without trying anything,
@@ -81,5 +81,14 @@ endif # provided-march supported
 endif # not clang
 
 march-directive := -march=${provided-march}
+
+# Set the compiler's architecture feature modifiers
+ifneq ($(arch-features), none)
+	# Strip "none+" from arch-features
+	arch-features	:=	$(subst none+,,$(arch-features))
+	march-directive	:=	$(march-directive)+$(arch-features)
+# Print features
+        $(info Arm Architecture Features specified: $(subst +, ,$(arch-features)))
+endif #(arch-features)
 
 endif # MARCH_DIRECTIVE
