@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2017-2024, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -186,8 +186,6 @@ void bl31_plat_runtime_setup(void)
 {
 	/* Change the DTB if the configuration requires so. */
 	sunxi_prepare_dtb(fdt);
-
-	console_switch_state(CONSOLE_FLAG_RUNTIME);
 }
 
 entry_point_info_t *bl31_plat_get_next_image_ep_info(uint32_t type)

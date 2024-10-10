@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2013-2023, Arm Limited and Contributors. All rights reserved.
+# Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -8,8 +8,9 @@
 # Trusted Firmware Version
 #
 VERSION_MAJOR			:= 2
-VERSION_MINOR			:= 10
-VERSION_PATCH			:= 0	# Only used for LTS releases
+VERSION_MINOR			:= 11
+# VERSION_PATCH is only used for LTS releases
+VERSION_PATCH			:= 0
 VERSION				:= ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}
 
 # Default goal is build all images
@@ -29,6 +30,23 @@ include ${MAKE_HELPERS_DIRECTORY}build_env.mk
 ################################################################################
 
 include ${MAKE_HELPERS_DIRECTORY}defaults.mk
+
+################################################################################
+# Configure the toolchains used to build TF-A and its tools
+################################################################################
+
+#
+# The clean and check targets do not behave correctly if the user's environment
+# does not appropriately configure a toolchain. While we try to find a permanent
+# solution to this, do not try to detect any toolchains if we are building
+# exclusively with targets which do not use any toolchain tools.
+#
+
+ifeq ($(filter-out check% %clean doc %tool,$(or $(MAKECMDGOALS),all)),)
+        toolchains :=
+endif
+
+include ${MAKE_HELPERS_DIRECTORY}toolchain.mk
 
 # Assertions enabled for DEBUG builds by default
 ENABLE_ASSERTIONS		:= ${DEBUG}
@@ -93,30 +111,6 @@ endif
 export Q ECHO
 
 ################################################################################
-# Toolchain
-################################################################################
-
-HOSTCC			:=	gcc
-export HOSTCC
-
-CC			:=	${CROSS_COMPILE}gcc
-CPP			:=	${CROSS_COMPILE}cpp
-AS			:=	${CROSS_COMPILE}gcc
-AR			:=	${CROSS_COMPILE}ar
-LINKER			:=	${CROSS_COMPILE}ld
-OC			:=	${CROSS_COMPILE}objcopy
-OD			:=	${CROSS_COMPILE}objdump
-NM			:=	${CROSS_COMPILE}nm
-PP			:=	${CROSS_COMPILE}gcc -E
-DTC			:=	dtc
-
-# Use ${LD}.bfd instead if it exists (as absolute path or together with $PATH).
-ifneq ($(strip $(wildcard ${LD}.bfd) \
-	$(foreach dir,$(subst :, ,${PATH}),$(wildcard ${dir}/${LINKER}.bfd))),)
-LINKER			:=	${LINKER}.bfd
-endif
-
-################################################################################
 # Auxiliary tools (fiptool, cert_create, etc)
 ################################################################################
 
@@ -162,45 +156,20 @@ endif #(ARM_ARCH_MAJOR)
 ################################################################################
 arch-features		=	${ARM_ARCH_FEATURE}
 
-# Set the compiler's architecture feature modifiers
-ifneq ($(arch-features), none)
-	# Strip "none+" from arch-features
-	arch-features	:=	$(subst none+,,$(arch-features))
-	march-directive	:=	$(march-directive)+$(arch-features)
-# Print features
-        $(info Arm Architecture Features specified: $(subst +, ,$(arch-features)))
-endif #(arch-features)
-
-ifneq ($(findstring clang,$(notdir $(CC))),)
-	ifneq ($(findstring armclang,$(notdir $(CC))),)
+ifneq ($(filter %-clang,$($(ARCH)-cc-id)),)
+	ifeq ($($(ARCH)-cc-id),arm-clang)
 		TF_CFLAGS_aarch32	:=	-target arm-arm-none-eabi
 		TF_CFLAGS_aarch64	:=	-target aarch64-arm-none-eabi
-		LD			:=	$(LINKER)
 	else
 		TF_CFLAGS_aarch32	=	$(target32-directive)
 		TF_CFLAGS_aarch64	:=	-target aarch64-elf
-		LD			:=	$(shell $(CC) --print-prog-name ld.lld)
-
-		AR			:=	$(shell $(CC) --print-prog-name llvm-ar)
-		OD			:=	$(shell $(CC) --print-prog-name llvm-objdump)
-		OC			:=	$(shell $(CC) --print-prog-name llvm-objcopy)
 	endif
 
-	CPP		:=	$(CC) -E $(TF_CFLAGS_$(ARCH))
-	PP		:=	$(CC) -E $(TF_CFLAGS_$(ARCH))
-	AS		:=	$(CC) -c -x assembler-with-cpp $(TF_CFLAGS_$(ARCH))
-else ifneq ($(findstring gcc,$(notdir $(CC))),)
-	ifeq ($(ENABLE_LTO),1)
-		# Enable LTO only for aarch64
-		ifeq (${ARCH},aarch64)
-			LTO_CFLAGS	=	-flto
-			# Use gcc as a wrapper for the ld, recommended for LTO
-			LINKER		:=	${CROSS_COMPILE}gcc
-		endif
+else ifeq ($($(ARCH)-cc-id),gnu-gcc)
+	# Enable LTO only for aarch64
+	ifeq (${ARCH},aarch64)
+		LTO_CFLAGS	=	$(if $(filter-out 0,$(ENABLE_LTO)),-flto)
 	endif
-	LD			=	$(LINKER)
-else
-	LD			=	$(LINKER)
 endif #(clang)
 
 # Process Debug flag
@@ -234,8 +203,6 @@ endif #(AARCH32_INSTRUCTION_SET)
 
 TF_CFLAGS_aarch32	+=	-mno-unaligned-access
 TF_CFLAGS_aarch64	+=	-mgeneral-regs-only -mstrict-align
-
-ASFLAGS		+=	$(march-directive)
 
 ##############################################################################
 # WARNINGS Configuration
@@ -299,7 +266,7 @@ else ifeq (${W},3)
 endif #(W)
 
 # Compiler specific warnings
-ifeq ($(findstring clang,$(notdir $(CC))),)
+ifeq ($(filter %-clang,$($(ARCH)-cc-id)),)
 # not using clang
 WARNINGS	+=		-Wunused-but-set-variable -Wmaybe-uninitialized	\
 				-Wpacked-bitfield-compat -Wshift-overflow=2 \
@@ -307,6 +274,10 @@ WARNINGS	+=		-Wunused-but-set-variable -Wmaybe-uninitialized	\
 
 # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=105523
 TF_CFLAGS		+= 	$(call cc_option, --param=min-pagesize=0)
+
+ifeq ($(HARDEN_SLS), 1)
+        TF_CFLAGS_aarch64       +=      $(call cc_option, -mharden-sls=all)
+endif
 
 else
 # using clang
@@ -339,28 +310,31 @@ ifeq (${SANITIZE_UB},trap)
 				-fsanitize-undefined-trap-on-error
 endif #(${SANITIZE_UB},trap)
 
-GCC_V_OUTPUT		:=	$(shell $(CC) -v 2>&1)
+GCC_V_OUTPUT		:=	$(if $($(ARCH)-cc),$(shell $($(ARCH)-cc) -v 2>&1))
 
 TF_LDFLAGS		+=	-z noexecstack
 
 # LD = armlink
-ifneq ($(findstring armlink,$(notdir $(LD))),)
+ifeq ($($(ARCH)-ld-id),arm-link)
 	TF_LDFLAGS		+=	--diag_error=warning --lto_level=O1
 	TF_LDFLAGS		+=	--remove --info=unused,unusedsymbols
 	TF_LDFLAGS		+=	$(TF_LDFLAGS_$(ARCH))
 
 # LD = gcc (used when GCC LTO is enabled)
-else ifneq ($(findstring gcc,$(notdir $(LD))),)
+else ifeq ($($(ARCH)-ld-id),gnu-gcc)
 	# Pass ld options with Wl or Xlinker switches
+	TF_LDFLAGS		+=	$(call ld_option,-Xlinker --no-warn-rwx-segments)
 	TF_LDFLAGS		+=	-Wl,--fatal-warnings -O1
 	TF_LDFLAGS		+=	-Wl,--gc-sections
 
 	TF_LDFLAGS		+=	-Wl,-z,common-page-size=4096 #Configure page size constants
 	TF_LDFLAGS		+=	-Wl,-z,max-page-size=4096
+	TF_LDFLAGS		+=	-Wl,--build-id=none
 
 	ifeq ($(ENABLE_LTO),1)
 		ifeq (${ARCH},aarch64)
 			TF_LDFLAGS	+=	-flto -fuse-linker-plugin
+			TF_LDFLAGS      +=	-flto-partition=one
 		endif
 	endif #(ENABLE_LTO)
 
@@ -384,12 +358,13 @@ else
 
 	TF_LDFLAGS		+=	-z common-page-size=4096 # Configure page size constants
 	TF_LDFLAGS		+=	-z max-page-size=4096
+	TF_LDFLAGS		+=	--build-id=none
 
 # ld.lld doesn't recognize the errata flags,
 # therefore don't add those in that case.
 # ld.lld reports section type mismatch warnings,
 # therefore don't add --fatal-warnings to it.
-	ifeq ($(findstring ld.lld,$(notdir $(LD))),)
+	ifneq ($($(ARCH)-ld-id),llvm-lld)
 		TF_LDFLAGS	+=	$(TF_LDFLAGS_$(ARCH)) --fatal-warnings
 	endif
 
@@ -399,14 +374,23 @@ endif #(LD = armlink)
 # Setup ARCH_MAJOR/MINOR before parsing arch_features.
 ################################################################################
 ifeq (${ENABLE_RME},1)
-	ARM_ARCH_MAJOR := 8
-	ARM_ARCH_MINOR := 6
+	ARM_ARCH_MAJOR := 9
+	ARM_ARCH_MINOR := 2
 endif
 
 ################################################################################
 # Common sources and include directories
 ################################################################################
 include lib/compiler-rt/compiler-rt.mk
+
+# Allow overriding the timestamp, for example for reproducible builds, or to
+# synchronize timestamps across multiple projects.
+# This must be set to a C string (including quotes where applicable).
+BUILD_MESSAGE_TIMESTAMP ?= __TIME__", "__DATE__
+
+DEFINES += -DBUILD_MESSAGE_TIMESTAMP='$(BUILD_MESSAGE_TIMESTAMP)'
+DEFINES += -DBUILD_MESSAGE_VERSION_STRING='"$(VERSION_STRING)"'
+DEFINES += -DBUILD_MESSAGE_VERSION='"$(VERSION)"'
 
 BL_COMMON_SOURCES	+=	common/bl_common.c			\
 				common/tf_log.c				\
@@ -421,7 +405,7 @@ BL_COMMON_SOURCES	+=	common/bl_common.c			\
 				plat/common/${ARCH}/platform_helpers.S	\
 				${COMPILER_RT_SRCS}
 
-ifeq ($(notdir $(CC)),armclang)
+ifeq ($($(ARCH)-cc-id),arm-clang)
 	BL_COMMON_SOURCES	+=	lib/${ARCH}/armclang_printf.S
 endif
 
@@ -487,8 +471,12 @@ ifneq (${SPD},none)
 			DTC_CPPFLAGS	+=	-DOPTEE_SP_FW_CONFIG
 		endif
 
+		ifeq ($(findstring trusty_sp,$(ARM_SPMC_MANIFEST_DTS)),trusty_sp)
+			DTC_CPPFLAGS	+=	-DTRUSTY_SP_FW_CONFIG
+		endif
+
 		ifeq ($(TS_SP_FW_CONFIG),1)
-		DTC_CPPFLAGS	+=	-DTS_SP_FW_CONFIG
+			DTC_CPPFLAGS	+=	-DTS_SP_FW_CONFIG
 		endif
 
 		ifneq ($(ARM_BL2_SP_LIST_DTS),)
@@ -602,14 +590,14 @@ include ${MAKE_HELPERS_DIRECTORY}arch_features.mk
 ifeq (${SUPPORT_STACK_MEMTAG},yes)
     ifdef mem_tag_arch_support
         # Check for armclang and clang compilers
-        ifneq ( ,$(filter $(notdir $(CC)),armclang clang))
+        ifneq ($(filter %-clang,$($(ARCH)-cc-id)),)
         # Add "memtag" architecture feature modifier if not specified
             ifeq ( ,$(findstring memtag,$(arch-features)))
                 arch-features	:=	$(arch-features)+memtag
             endif	# memtag
-            ifeq ($(notdir $(CC)),armclang)
+            ifeq ($($(ARCH)-cc-id),arm-clang)
                 TF_CFLAGS	+=	-mmemtag-stack
-            else ifeq ($(notdir $(CC)),clang)
+            else ifeq ($($(ARCH)-cc-id),llvm-clang)
                 TF_CFLAGS	+=	-fsanitize=memtag
             endif	# armclang
         endif
@@ -687,6 +675,7 @@ endif
 include ${MAKE_HELPERS_DIRECTORY}march.mk
 
 TF_CFLAGS   +=	$(march-directive)
+ASFLAGS		+=	$(march-directive)
 
 # This internal flag is common option which is set to 1 for scenarios
 # when the BL2 is running in EL3 level. This occurs in two scenarios -
@@ -722,12 +711,12 @@ endif
 PIE_FOUND		:=	$(findstring --enable-default-pie,${GCC_V_OUTPUT})
 ifneq ($(PIE_FOUND),)
 	TF_CFLAGS	+=	-fno-PIE
-ifneq ($(findstring gcc,$(notdir $(LD))),)
+ifeq ($($(ARCH)-ld-id),gnu-gcc)
 	TF_LDFLAGS	+=	-no-pie
 endif
 endif #(PIE_FOUND)
 
-ifneq ($(findstring gcc,$(notdir $(LD))),)
+ifeq ($($(ARCH)-ld-id),gnu-gcc)
 	PIE_LDFLAGS	+=	-Wl,-pie -Wl,--no-dynamic-linker
 else
 	PIE_LDFLAGS	+=	-pie --no-dynamic-linker
@@ -929,16 +918,6 @@ ifeq ($(CTX_INCLUDE_PAUTH_REGS),1)
 	endif
 endif #(CTX_INCLUDE_PAUTH_REGS)
 
-ifeq ($(CTX_INCLUDE_MTE_REGS),1)
-	ifneq (${ARCH},aarch64)
-                $(error CTX_INCLUDE_MTE_REGS requires AArch64)
-	endif
-endif #(CTX_INCLUDE_MTE_REGS)
-
-ifeq ($(PSA_FWU_SUPPORT),1)
-        $(info PSA_FWU_SUPPORT is an experimental feature)
-endif #(PSA_FWU_SUPPORT)
-
 ifeq ($(FEATURE_DETECTION),1)
         $(info FEATURE_DETECTION is an experimental feature)
 endif #(FEATURE_DETECTION)
@@ -1041,14 +1020,12 @@ ifeq (${ENABLE_RME},1)
 	endif
 endif
 
-# Determine if FEAT_RNG is supported
-ENABLE_FEAT_RNG		=	$(if $(findstring rng,${arch-features}),1,0)
-
-# Determine if FEAT_SB is supported
-ENABLE_FEAT_SB		=	$(if $(findstring sb,${arch-features}),1,0)
-
 ifeq ($(PSA_CRYPTO),1)
         $(info PSA_CRYPTO is an experimental feature)
+endif
+
+ifeq ($(DICE_PROTECTION_ENVIRONMENT),1)
+        $(info DICE_PROTECTION_ENVIRONMENT is an experimental feature)
 endif
 
 ################################################################################
@@ -1164,6 +1141,7 @@ $(eval $(call assert_booleans,\
 	CTX_INCLUDE_AARCH32_REGS \
 	CTX_INCLUDE_FPREGS \
 	CTX_INCLUDE_EL2_REGS \
+	CTX_INCLUDE_MPAM_REGS \
 	DEBUG \
 	DYN_DISABLE_AUTH \
 	EL3_EXCEPTION_HANDLING \
@@ -1171,7 +1149,6 @@ $(eval $(call assert_booleans,\
 	ENABLE_AMU_FCONF \
 	AMU_RESTRICT_COUNTERS \
 	ENABLE_ASSERTIONS \
-	ENABLE_FEAT_SB \
 	ENABLE_PIE \
 	ENABLE_PMF \
 	ENABLE_PSCI_STAT \
@@ -1185,13 +1162,14 @@ $(eval $(call assert_booleans,\
 	GENERATE_COT \
 	GICV2_G0_FOR_EL3 \
 	HANDLE_EA_EL3_FIRST_NS \
+	HARDEN_SLS \
 	HW_ASSISTED_COHERENCY \
 	MEASURED_BOOT \
+	DICE_PROTECTION_ENVIRONMENT \
 	DRTM_SUPPORT \
 	NS_TIMER_SWITCH \
 	OVERRIDE_LIBC \
 	PL011_GENERIC_UART \
-	PLAT_RSS_NOT_SUPPORTED \
 	PROGRAMMABLE_RESET_ADDRESS \
 	PSCI_EXTENDED_STATE_ID \
 	PSCI_OS_INIT_MODE \
@@ -1227,6 +1205,7 @@ $(eval $(call assert_booleans,\
 	COT_DESC_IN_DTB \
 	USE_SP804_TIMER \
 	PSA_FWU_SUPPORT \
+	PSA_FWU_METADATA_FW_STORE_DESC \
 	ENABLE_MPMM \
 	ENABLE_MPMM_FCONF \
 	FEATURE_DETECTION \
@@ -1237,6 +1216,9 @@ $(eval $(call assert_booleans,\
 	PSA_CRYPTO	\
 	ENABLE_CONSOLE_GETC \
 	INIT_UNUSED_NS_EL2	\
+	PLATFORM_REPORT_CTX_MEM_USE \
+	EARLY_CONSOLE \
+	PRESERVE_DSU_PMU_REGS \
 )))
 
 # Numeric_Flags
@@ -1246,7 +1228,6 @@ $(eval $(call assert_numerics,\
 	ARM_ARCH_MINOR \
 	BRANCH_PROTECTION \
 	CTX_INCLUDE_PAUTH_REGS \
-	CTX_INCLUDE_MTE_REGS \
 	CTX_INCLUDE_NEVE_REGS \
 	CRYPTO_SUPPORT \
 	DISABLE_MTPMU \
@@ -1257,22 +1238,24 @@ $(eval $(call assert_numerics,\
 	ENABLE_FEAT_AMU \
 	ENABLE_FEAT_AMUv1p1 \
 	ENABLE_FEAT_CSV2_2 \
+	ENABLE_FEAT_CSV2_3 \
 	ENABLE_FEAT_DIT \
 	ENABLE_FEAT_ECV \
 	ENABLE_FEAT_FGT \
 	ENABLE_FEAT_HCX \
+	ENABLE_FEAT_MTE2 \
 	ENABLE_FEAT_PAN \
 	ENABLE_FEAT_RNG \
 	ENABLE_FEAT_RNG_TRAP \
 	ENABLE_FEAT_SEL2 \
 	ENABLE_FEAT_TCR2 \
+	ENABLE_FEAT_SB \
 	ENABLE_FEAT_S2PIE \
 	ENABLE_FEAT_S1PIE \
 	ENABLE_FEAT_S2POE \
 	ENABLE_FEAT_S1POE \
 	ENABLE_FEAT_GCS \
 	ENABLE_FEAT_VHE \
-	ENABLE_FEAT_MTE_PERM \
 	ENABLE_FEAT_MPAM \
 	ENABLE_RME \
 	ENABLE_SPE_FOR_NS \
@@ -1314,8 +1297,8 @@ $(eval $(call add_defines,\
 	CTX_INCLUDE_AARCH32_REGS \
 	CTX_INCLUDE_FPREGS \
 	CTX_INCLUDE_PAUTH_REGS \
+	CTX_INCLUDE_MPAM_REGS \
 	EL3_EXCEPTION_HANDLING \
-	CTX_INCLUDE_MTE_REGS \
 	CTX_INCLUDE_EL2_REGS \
 	CTX_INCLUDE_NEVE_REGS \
 	DECRYPTION_SUPPORT_${DECRYPTION_SUPPORT} \
@@ -1350,11 +1333,11 @@ $(eval $(call add_defines,\
 	HW_ASSISTED_COHERENCY \
 	LOG_LEVEL \
 	MEASURED_BOOT \
+	DICE_PROTECTION_ENVIRONMENT \
 	DRTM_SUPPORT \
 	NS_TIMER_SWITCH \
 	PL011_GENERIC_UART \
 	PLAT_${PLAT} \
-	PLAT_RSS_NOT_SUPPORTED \
 	PROGRAMMABLE_RESET_ADDRESS \
 	PSCI_EXTENDED_STATE_ID \
 	PSCI_OS_INIT_MODE \
@@ -1399,6 +1382,7 @@ $(eval $(call add_defines,\
 	NR_OF_FW_BANKS \
 	NR_OF_IMAGES_IN_FW_BANK \
 	PSA_FWU_SUPPORT \
+	PSA_FWU_METADATA_FW_STORE_DESC \
 	ENABLE_BRBE_FOR_NS \
 	ENABLE_TRBE_FOR_NS \
 	ENABLE_SYS_REG_TRACE_FOR_NS \
@@ -1412,6 +1396,7 @@ $(eval $(call add_defines,\
 	ENABLE_FEAT_SEL2 \
 	ENABLE_FEAT_VHE \
 	ENABLE_FEAT_CSV2_2 \
+	ENABLE_FEAT_CSV2_3 \
 	ENABLE_FEAT_PAN \
 	ENABLE_FEAT_TCR2 \
 	ENABLE_FEAT_S2PIE \
@@ -1419,7 +1404,7 @@ $(eval $(call add_defines,\
 	ENABLE_FEAT_S2POE \
 	ENABLE_FEAT_S1POE \
 	ENABLE_FEAT_GCS \
-	ENABLE_FEAT_MTE_PERM \
+	ENABLE_FEAT_MTE2 \
 	FEATURE_DETECTION \
 	TWED_DELAY \
 	ENABLE_FEAT_TWED \
@@ -1430,7 +1415,17 @@ $(eval $(call add_defines,\
 	PSA_CRYPTO	\
 	ENABLE_CONSOLE_GETC \
 	INIT_UNUSED_NS_EL2	\
+	PLATFORM_REPORT_CTX_MEM_USE \
+	EARLY_CONSOLE \
+	PRESERVE_DSU_PMU_REGS \
 )))
+
+ifeq (${PLATFORM_REPORT_CTX_MEM_USE}, 1)
+ifeq (${DEBUG}, 0)
+        $(warning "PLATFORM_REPORT_CTX_MEM_USE can be applied when DEBUG=1 only")
+        override PLATFORM_REPORT_CTX_MEM_USE := 0
+endif
+endif
 
 ifeq (${SANITIZE_UB},trap)
         $(eval $(call add_define,MONITOR_TRAPS))
@@ -1452,7 +1447,7 @@ ifeq (${DYN_DISABLE_AUTH},1)
         $(eval $(call add_define,DYN_DISABLE_AUTH))
 endif
 
-ifneq ($(findstring armlink,$(notdir $(LD))),)
+ifeq ($($(ARCH)-ld-id),arm-link)
         $(eval $(call add_define,USE_ARM_LINK))
 endif
 
@@ -1484,7 +1479,7 @@ msg_start:
 
 ifeq (${ERROR_DEPRECATED},0)
 # Check if deprecated declarations and cpp warnings should be treated as error or not.
-ifneq ($(findstring clang,$(notdir $(CC))),)
+ifneq ($(filter %-clang,$($(ARCH)-cc-id)),)
     CPPFLAGS		+= 	-Wno-error=deprecated-declarations
 else
     CPPFLAGS		+= 	-Wno-error=deprecated-declarations -Wno-error=cpp
@@ -1575,8 +1570,8 @@ endif #(NEED_FDT)
 
 # Add Secure Partition packages
 ifeq (${NEED_SP_PKG},yes)
-$(BUILD_PLAT)/sp_gen.mk : ${SP_MK_GEN} ${SP_LAYOUT_FILE} | ${BUILD_PLAT}
-	${PYTHON} "$<" "$@" $(filter-out $<,$^) $(BUILD_PLAT) ${COT} ${SP_DTS_LIST_FRAGMENT}
+$(BUILD_PLAT)/sp_gen.mk: ${SP_MK_GEN} ${SP_LAYOUT_FILE} | ${BUILD_PLAT}
+	@${PYTHON} "$<" "$@" $(filter-out $<,$^) $(BUILD_PLAT) ${COT} ${SP_DTS_LIST_FRAGMENT}
 sp: $(DTBS) $(BUILD_PLAT)/sp_gen.mk $(SP_PKGS)
 	@${ECHO_BLANK_LINE}
 	@echo "Built SP Images successfully"
@@ -1711,7 +1706,7 @@ else
 endif #(UNIX_MK)
 
 romlib.bin: libraries FORCE
-	${Q}${MAKE} PLAT_DIR=${PLAT_DIR} BUILD_PLAT=${BUILD_PLAT} ENABLE_BTI=${ENABLE_BTI} ARM_ARCH_MINOR=${ARM_ARCH_MINOR} INCLUDES='${INCLUDES}' DEFINES='${DEFINES}' --no-print-directory -C ${ROMLIBPATH} all
+	${Q}${MAKE} PLAT_DIR=${PLAT_DIR} BUILD_PLAT=${BUILD_PLAT} ENABLE_BTI=${ENABLE_BTI} ARM_ARCH_MINOR=${ARM_ARCH_MINOR} INCLUDES=$(call escape-shell,$(INCLUDES)) DEFINES=$(call escape-shell,$(DEFINES)) --no-print-directory -C ${ROMLIBPATH} all
 
 memmap: all
 ifdef UNIX_MK
