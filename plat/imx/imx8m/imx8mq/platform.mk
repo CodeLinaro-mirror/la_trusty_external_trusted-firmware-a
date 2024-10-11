@@ -31,6 +31,7 @@ BL31_SOURCES		+=	plat/imx/common/imx8_helpers.S			\
 				plat/imx/imx8m/gpc_common.c			\
 				plat/imx/imx8m/imx_aipstz.c			\
 				plat/imx/imx8m/imx8m_caam.c			\
+				plat/imx/imx8m/imx8m_ccm.c			\
 				plat/imx/imx8m/imx8m_psci_common.c		\
 				plat/imx/imx8m/imx8mq/gpc.c			\
 				plat/imx/common/imx8_topology.c			\
@@ -55,6 +56,10 @@ ERRATA_A53_835769	:=	1
 ERRATA_A53_843419	:=	1
 ERRATA_A53_855873	:=	1
 
+ifneq (${PRELOADED_BL33_BASE},)
+$(eval $(call add_define_val,PLAT_NS_IMAGE_OFFSET,${PRELOADED_BL33_BASE}))
+endif
+
 BL32_BASE		?=	0xfe000000
 $(eval $(call add_define,BL32_BASE))
 
@@ -62,6 +67,9 @@ BL32_SIZE		?=	0x2000000
 $(eval $(call add_define,BL32_SIZE))
 
 IMX_BOOT_UART_BASE	?=	0x30860000
+ifeq (${IMX_BOOT_UART_BASE},auto)
+    override IMX_BOOT_UART_BASE	:=	0
+endif
 $(eval $(call add_define,IMX_BOOT_UART_BASE))
 
 ifeq (${SPD},trusty)
