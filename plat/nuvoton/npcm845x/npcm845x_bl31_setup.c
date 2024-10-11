@@ -47,6 +47,20 @@ static entry_point_info_t bl33_image_ep_info;
 					BL31_END - BL31_START, \
 					MT_MEMORY | MT_RW | EL3_PAS)
 
+#if RECLAIM_INIT_CODE
+IMPORT_SYM(unsigned long, __INIT_CODE_START__, BL_INIT_CODE_BASE);
+IMPORT_SYM(unsigned long, __INIT_CODE_END__, BL_CODE_END_UNALIGNED);
+
+#define	BL_INIT_CODE_END	((BL_CODE_END_UNALIGNED + PAGE_SIZE - 1) & \
+					~(PAGE_SIZE - 1))
+
+#define MAP_BL_INIT_CODE	MAP_REGION_FLAT( \
+					BL_INIT_CODE_BASE, \
+					BL_INIT_CODE_END - \
+					BL_INIT_CODE_BASE, \
+					MT_CODE | MT_SECURE)
+#endif /* RECLAIM_INIT_CODE */
+
 #if SEPARATE_NOBITS_REGION
 #define MAP_BL31_NOBITS		MAP_REGION_FLAT( \
 					BL31_NOBITS_BASE, \
@@ -103,7 +117,10 @@ int board_uart_init(void)
 
 unsigned int plat_get_syscnt_freq2(void)
 {
-	return (unsigned int)COUNTER_FREQUENCY;
+	/*
+	 * Do not overwrite the value set by BootBlock
+	 */
+	return (unsigned int)read_cntfrq_el0();
 }
 
 /******************************************************************************
@@ -117,6 +134,7 @@ unsigned int plat_get_syscnt_freq2(void)
 void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 		u_register_t arg2, u_register_t arg3)
 {
+	arg0 = arg1 = arg2 = arg3 = 0;
 #if RESET_TO_BL31
 	void *from_bl2 = (void *)arg0;
 	void *plat_params_from_bl2 = (void *)arg3;
@@ -309,24 +327,11 @@ void __init npcm845x_bl31_plat_arch_setup(void)
 {
 	const mmap_region_t bl_regions[] = {
 		MAP_BL31_TOTAL,
-#if SEPARATE_NOBITS_REGION
-		MAP_BL31_NOBITS,
-#endif /* SEPARATE_NOBITS_REGION */
 		ARM_MAP_BL_RO,
-#if USE_ROMLIB
-		ARM_MAP_ROMLIB_CODE,
-		ARM_MAP_ROMLIB_DATA,
-#endif /* USE_ROMLIB */
 #if USE_COHERENT_MEM
 		ARM_MAP_BL_COHERENT_RAM,
 #endif /* USE_COHERENT_MEM */
 		ARM_MAP_SHARED_RAM,
-#ifdef SECONDARY_BRINGUP
-		ARM_MAP_NS_DRAM1,
-	#ifdef BL32_BASE
-		ARM_MAP_BL32_CORE_MEM
-	#endif /* BL32_BASE */
-#endif /* SECONDARY_BRINGUP */
 		{0}
 	};
 	setup_page_tables(bl_regions, plat_arm_get_mmap());

@@ -1,13 +1,16 @@
 #
-# Copyright (c) 2014-2023, Arm Limited and Contributors. All rights reserved.
+# Copyright (c) 2014-2024, Arm Limited and Contributors. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
+
+toolchains := host
 
 MAKE_HELPERS_DIRECTORY := ../../make_helpers/
 include ${MAKE_HELPERS_DIRECTORY}build_macros.mk
 include ${MAKE_HELPERS_DIRECTORY}build_env.mk
 include ${MAKE_HELPERS_DIRECTORY}defaults.mk
+include ${MAKE_HELPERS_DIRECTORY}toolchain.mk
 
 FIPTOOL ?= fiptool${BIN_EXT}
 PROJECT := $(notdir ${FIPTOOL})
@@ -58,8 +61,6 @@ else
   Q :=
 endif
 
-HOSTCC ?= gcc
-
 ifneq (${PLAT},)
 TF_PLATFORM_ROOT	:=	../../plat/
 include ${MAKE_HELPERS_DIRECTORY}plat_helpers.mk
@@ -81,14 +82,14 @@ all: --openssl ${PROJECT}
 
 ${PROJECT}: ${OBJECTS} Makefile
 	@echo "  HOSTLD  $@"
-	${Q}${HOSTCC} ${OBJECTS} -o $@ $(LDOPTS)
+	${Q}$(host-cc) ${OBJECTS} -o $@ $(LDOPTS)
 	@${ECHO_BLANK_LINE}
 	@echo "Built $@ successfully"
 	@${ECHO_BLANK_LINE}
 
 %.o: %.c Makefile
 	@echo "  HOSTCC  $<"
-	${Q}${HOSTCC} -c ${CPPFLAGS} ${HOSTCCFLAGS} ${INCLUDE_PATHS} -MD -MP $< -o $@
+	${Q}$(host-cc) -c ${CPPFLAGS} ${HOSTCCFLAGS} ${INCLUDE_PATHS} -MD -MP $< -o $@
 
 -include $(DEPS)
 
