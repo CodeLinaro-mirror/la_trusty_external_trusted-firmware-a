@@ -249,7 +249,7 @@ static int qemu_dt_fixup_securemem(void *fdt)
 	/*
 	 * QEMU adds a device tree node for secure memory. Linux fails to ignore
 	 * it and will crash when it allocates memory out of this secure memory
-	 * region. We currently don't use this node for anything, remove it.
+	 * region. Change its device type to secure-memory so Linux ignores it.
 	 */
 
 	int offs;
@@ -276,10 +276,10 @@ static int qemu_dt_fixup_securemem(void *fdt)
 		if ((strcmp(prop, "okay") != 0))
 			continue;
 
-		if (fdt_del_node(fdt, offs)) {
+		if (fdt_setprop_string(fdt, offs, "device_type", "secure-memory")) {
 			return -1;
 		}
-		INFO("Removed secure memory node\n");
+		INFO("Updated secure memory node\n");
 	}
 
 	return 0;
