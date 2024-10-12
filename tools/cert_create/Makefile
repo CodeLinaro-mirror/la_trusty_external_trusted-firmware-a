@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2015-2022, Arm Limited and Contributors. All rights reserved.
+# Copyright (c) 2015-2024, Arm Limited and Contributors. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -11,10 +11,13 @@ CRTTOOL		?= cert_create${BIN_EXT}
 BINARY		:= $(notdir ${CRTTOOL})
 COT		:= tbbr
 
+toolchains := host
+
 MAKE_HELPERS_DIRECTORY := ../../make_helpers/
 include ${MAKE_HELPERS_DIRECTORY}build_macros.mk
 include ${MAKE_HELPERS_DIRECTORY}build_env.mk
 include ${MAKE_HELPERS_DIRECTORY}defaults.mk
+include ${MAKE_HELPERS_DIRECTORY}toolchain.mk
 
 ifneq (${PLAT},none)
 TF_PLATFORM_ROOT	:=	../../plat/
@@ -81,8 +84,6 @@ INC_DIR += -I ./include -I ${PLAT_INCLUDE} -I ${OPENSSL_DIR}/include
 LIB_DIR := -L ${OPENSSL_DIR}/lib -L ${OPENSSL_DIR}
 LIB := -lssl -lcrypto
 
-HOSTCC ?= gcc
-
 .PHONY: all clean realclean --openssl
 
 all: --openssl ${BINARY}
@@ -91,12 +92,12 @@ ${BINARY}: ${OBJECTS} Makefile
 	@echo "  HOSTLD  $@"
 	@echo 'const char build_msg[] = "Built : "__TIME__", "__DATE__; \
                 const char platform_msg[] = "${PLAT_MSG}";' | \
-                ${HOSTCC} -c ${HOSTCCFLAGS} -xc - -o src/build_msg.o
-	${Q}${HOSTCC} src/build_msg.o ${OBJECTS} ${LIB_DIR} ${LIB} -o $@
+                $(host-cc) -c ${HOSTCCFLAGS} -xc - -o src/build_msg.o
+	${Q}$(host-cc) src/build_msg.o ${OBJECTS} ${LIB_DIR} ${LIB} -o $@
 
 %.o: %.c
 	@echo "  HOSTCC  $<"
-	${Q}${HOSTCC} -c ${HOSTCCFLAGS} ${INC_DIR} $< -o $@
+	${Q}$(host-cc) -c ${HOSTCCFLAGS} ${INC_DIR} $< -o $@
 
 --openssl:
 ifeq ($(DEBUG),1)
@@ -108,4 +109,3 @@ clean:
 
 realclean: clean
 	$(call SHELL_DELETE,${BINARY})
-
