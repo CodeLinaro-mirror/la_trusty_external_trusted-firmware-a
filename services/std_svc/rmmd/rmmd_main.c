@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2023, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2021-2024, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -70,7 +70,6 @@ uint64_t rmmd_rmm_sync_entry(rmmd_rmm_context_t *rmm_ctx)
 	cm_set_context(&(rmm_ctx->cpu_ctx), REALM);
 
 	/* Restore the realm context assigned above */
-	cm_el1_sysregs_context_restore(REALM);
 	cm_el2_sysregs_context_restore(REALM);
 	cm_set_next_eret_context(REALM);
 
@@ -78,12 +77,10 @@ uint64_t rmmd_rmm_sync_entry(rmmd_rmm_context_t *rmm_ctx)
 	rc = rmmd_rmm_enter(&rmm_ctx->c_rt_ctx);
 
 	/*
-	 * Save realm context. EL1 and EL2 Non-secure
-	 * contexts will be restored before exiting to
-	 * Non-secure world, therefore there is no need
-	 * to clear EL1 and EL2 context registers.
+	 * Save realm context. EL2 Non-secure context will be restored
+	 * before exiting Non-secure world, therefore there is no need
+	 * to clear EL2 context registers.
 	 */
-	cm_el1_sysregs_context_save(REALM);
 	cm_el2_sysregs_context_save(REALM);
 
 	return rc;
@@ -112,8 +109,8 @@ __dead2 void rmmd_rmm_sync_exit(uint64_t rc)
 
 static void rmm_el2_context_init(el2_sysregs_t *regs)
 {
-	regs->ctx_regs[CTX_SPSR_EL2 >> 3] = REALM_SPSR_EL2;
-	regs->ctx_regs[CTX_SCTLR_EL2 >> 3] = SCTLR_EL2_RES1;
+	write_el2_ctx_common(regs, spsr_el2, REALM_SPSR_EL2);
+	write_el2_ctx_common(regs, sctlr_el2, SCTLR_EL2_RES1);
 }
 
 /*******************************************************************************
@@ -134,6 +131,8 @@ static void manage_extensions_realm(cpu_context_t *ctx)
 
 static void manage_extensions_realm_per_world(void)
 {
+	cm_el3_arch_init_per_world(&per_world_context[CPU_CONTEXT_REALM]);
+
 	if (is_feat_sve_supported()) {
 	/*
 	 * Enable SVE and FPU in realm context when it is enabled for NS.
@@ -203,7 +202,7 @@ int rmmd_setup(void)
 	int rc;
 
 	/* Make sure RME is supported. */
-	assert(get_armv9_2_feat_rme_support() != 0U);
+	assert(is_feat_rme_present());
 
 	rmm_ep_info = bl31_plat_get_next_image_ep_info(REALM);
 	if (rmm_ep_info == NULL) {
@@ -233,8 +232,10 @@ int rmmd_setup(void)
 	assert((shared_buf_size == SZ_4K) &&
 					((void *)shared_buf_base != NULL));
 
-	/* Load the boot manifest at the beginning of the shared area */
+	/* Zero out and load the boot manifest at the beginning of the share area */
 	manifest = (struct rmm_manifest *)shared_buf_base;
+	(void)memset((void *)manifest, 0, sizeof(struct rmm_manifest));
+
 	rc = plat_rmmd_load_manifest(manifest);
 	if (rc != 0) {
 		ERROR("Error loading RMM Boot Manifest (%i)\n", rc);
@@ -277,11 +278,9 @@ static uint64_t	rmmd_smc_forward(uint32_t src_sec_state,
 	cpu_context_t *ctx = cm_get_context(dst_sec_state);
 
 	/* Save incoming security state */
-	cm_el1_sysregs_context_save(src_sec_state);
 	cm_el2_sysregs_context_save(src_sec_state);
 
 	/* Restore outgoing security state */
-	cm_el1_sysregs_context_restore(dst_sec_state);
 	cm_el2_sysregs_context_restore(dst_sec_state);
 	cm_set_next_eret_context(dst_sec_state);
 
