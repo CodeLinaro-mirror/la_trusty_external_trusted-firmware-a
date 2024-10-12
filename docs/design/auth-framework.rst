@@ -254,8 +254,8 @@ These functions are registered in the CM using the macro:
     REGISTER_CRYPTO_LIB(_name,
                         _init,
                         _verify_signature,
-                        _calc_hash,
                         _verify_hash,
+                        _calc_hash,
                         _auth_decrypt,
                         _convert_pk);
 
@@ -505,11 +505,12 @@ uses this information to:
 
     typedef enum {
         AUTH_PARAM_NONE,
-        AUTH_PARAM_RAW_DATA,        /* Raw image data */
+        AUTH_PARAM_RAW_DATA,    /* Raw image data */
         AUTH_PARAM_SIG,         /* The image signature */
         AUTH_PARAM_SIG_ALG,     /* The image signature algorithm */
         AUTH_PARAM_HASH,        /* A hash (including the algorithm) */
         AUTH_PARAM_PUB_KEY,     /* A public key */
+        AUTH_PARAM_NV_CTR,      /* A non-volatile counter */
     } auth_param_type_t;
 
 The AM defines the following structure to identify an authentication parameter
@@ -1018,4 +1019,4 @@ The mbedTLS library algorithm support is configured by both the
 
 *Copyright (c) 2017-2023, Arm Limited and Contributors. All rights reserved.*
 
-.. _TBBR-Client specification: https://developer.arm.com/docs/den0006/latest/trusted-board-boot-requirements-client-tbbr-client-armv8-a
+.. _TBBR-Client specification: https://developer.arm.com/docs/den0006/latest
