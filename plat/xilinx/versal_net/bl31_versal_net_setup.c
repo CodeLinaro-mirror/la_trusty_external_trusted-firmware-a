@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2018-2024, Arm Limited and Contributors. All rights reserved.
  * Copyright (c) 2018-2022, Xilinx, Inc. All rights reserved.
  * Copyright (c) 2022-2023, Advanced Micro Devices, Inc. All rights reserved.
  *
@@ -17,6 +17,7 @@
 #include <plat/common/platform.h>
 #include <plat_arm.h>
 #include <plat_console.h>
+#include <plat_clkfunc.h>
 
 #include <plat_fdt.h>
 #include <plat_private.h>
@@ -92,6 +93,10 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 	default:
 		panic();
 	}
+
+	syscnt_freq_config_setup();
+
+	set_cnt_freq();
 
 	setup_console();
 
@@ -211,8 +216,8 @@ void bl31_platform_setup(void)
 	prepare_dtb();
 
 	/* Initialize the gic cpu and distributor interfaces */
-	plat_versal_net_gic_driver_init();
-	plat_versal_net_gic_init();
+	plat_arm_gic_driver_init();
+	plat_arm_gic_init();
 }
 
 void bl31_plat_runtime_setup(void)
@@ -226,8 +231,6 @@ void bl31_plat_runtime_setup(void)
 	if (rc != 0) {
 		panic();
 	}
-
-	console_switch_state(CONSOLE_FLAG_RUNTIME);
 }
 
 /*
