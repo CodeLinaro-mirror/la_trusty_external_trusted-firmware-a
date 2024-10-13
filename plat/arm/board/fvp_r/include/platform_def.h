@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2021-2024, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -75,13 +75,6 @@
 #define PLAT_BL1_RO_LIMIT               (BL1_RO_BASE \
 					+ PLAT_ARM_TRUSTED_ROM_SIZE)
 
-#define PLAT_ARM_SYS_CNTCTL_BASE	UL(0xaa430000)
-#define PLAT_ARM_SYS_CNTREAD_BASE	UL(0xaa800000)
-#define PLAT_ARM_SYS_TIMCTL_BASE	UL(0xaa810000)
-#define PLAT_ARM_SYS_CNT_BASE_S		UL(0xaa820000)
-#define PLAT_ARM_SYS_CNT_BASE_NS	UL(0xaa830000)
-#define PLAT_ARM_SP805_TWDG_BASE	UL(0xaa490000)
-
 /* virtual address used by dynamic mem_protect for chunk_base */
 #define PLAT_ARM_MEM_PROTEC_VA_FRAME	UL(0xc0000000)
 
@@ -90,11 +83,11 @@
 
 #define PLAT_ARM_DRAM2_SIZE		UL(0x80000000)
 
-#define PLAT_HW_CONFIG_DTB_SIZE		ULL(0x8000)
+#define PLAT_ARM_HW_CONFIG_SIZE		ULL(0x8000)
 
 #define ARM_DTB_DRAM_NS			MAP_REGION_FLAT(		\
 					PLAT_HW_CONFIG_DTB_BASE,	\
-					PLAT_HW_CONFIG_DTB_SIZE,	\
+					PLAT_ARM_HW_CONFIG_SIZE,	\
 					MT_MEMORY | MT_RO | MT_NS)
 
 #define V2M_FVP_R_SYSREGS_BASE		UL(0x9c010000)
