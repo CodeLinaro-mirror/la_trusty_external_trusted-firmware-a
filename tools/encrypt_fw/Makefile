@@ -11,11 +11,13 @@ ENCTOOL		?= encrypt_fw${BIN_EXT}
 BINARY		:= $(notdir ${ENCTOOL})
 OPENSSL_DIR	:= /usr
 
+toolchains := host
 
 MAKE_HELPERS_DIRECTORY := ../../make_helpers/
 include ${MAKE_HELPERS_DIRECTORY}build_macros.mk
 include ${MAKE_HELPERS_DIRECTORY}build_env.mk
 include ${MAKE_HELPERS_DIRECTORY}defaults.mk
+include ${MAKE_HELPERS_DIRECTORY}toolchain.mk
 
 OBJECTS := src/encrypt.o \
            src/cmd_opt.o \
@@ -61,8 +63,6 @@ INC_DIR := -I ./include -I ../../include/tools_share -I ${OPENSSL_DIR}/include
 LIB_DIR := -L ${OPENSSL_DIR}/lib -L ${OPENSSL_DIR}
 LIB := -lssl -lcrypto
 
-HOSTCC ?= gcc
-
 .PHONY: all clean realclean --openssl
 
 all: --openssl ${BINARY}
@@ -70,12 +70,12 @@ all: --openssl ${BINARY}
 ${BINARY}: ${OBJECTS} Makefile
 	@echo "  HOSTLD  $@"
 	@echo 'const char build_msg[] = "Built : "__TIME__", "__DATE__;' | \
-                ${HOSTCC} -c ${HOSTCCFLAGS} -xc - -o src/build_msg.o
-	${Q}${HOSTCC} src/build_msg.o ${OBJECTS} ${LIB_DIR} ${LIB} -o $@
+                $(host-cc) -c ${HOSTCCFLAGS} -xc - -o src/build_msg.o
+	${Q}$(host-cc) src/build_msg.o ${OBJECTS} ${LIB_DIR} ${LIB} -o $@
 
 %.o: %.c
 	@echo "  HOSTCC  $<"
-	${Q}${HOSTCC} -c ${HOSTCCFLAGS} ${INC_DIR} $< -o $@
+	${Q}$(host-cc) -c ${HOSTCCFLAGS} ${INC_DIR} $< -o $@
 
 --openssl:
 ifeq ($(DEBUG),1)

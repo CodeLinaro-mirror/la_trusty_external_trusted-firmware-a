@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2023, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2024, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -12,6 +12,7 @@
 #include <drivers/arm/gic_common.h>
 #include <lib/utils_def.h>
 #include <lib/xlat_tables/xlat_tables_defs.h>
+#include <plat/arm/board/common/rotpk/rotpk_def.h>
 #include <plat/arm/common/smccc_def.h>
 #include <plat/common/common_def.h>
 
@@ -19,11 +20,6 @@
  * Definitions common to all ARM standard platforms
  *****************************************************************************/
 
-/*
- * Root of trust key lengths
- */
-#define ARM_ROTPK_HEADER_LEN		19
-#define ARM_ROTPK_HASH_LEN		32
 
 /* Special value used to verify platform parameters from BL2 to BL31 */
 #define ARM_BL31_PLAT_PARAM_VAL		ULL(0x0f1e2d3c4b5a6978)
@@ -154,10 +150,10 @@ MEASURED_BOOT
 #endif /* (SPD_tspd || SPD_opteed || SPD_spmd) && MEASURED_BOOT */
 
 #if ENABLE_RME
-#define ARM_L1_GPT_ADDR_BASE		(ARM_DRAM1_BASE +		\
+#define ARM_L1_GPT_BASE		(ARM_DRAM1_BASE +		\
 					ARM_DRAM1_SIZE -		\
 					ARM_L1_GPT_SIZE)
-#define ARM_L1_GPT_END			(ARM_L1_GPT_ADDR_BASE +		\
+#define ARM_L1_GPT_END			(ARM_L1_GPT_BASE +		\
 					ARM_L1_GPT_SIZE - 1U)
 
 #define ARM_REALM_BASE			(ARM_EL3_RMM_SHARED_BASE -	\
@@ -347,7 +343,7 @@ MEASURED_BOOT
 
 
 #define ARM_MAP_GPT_L1_DRAM	MAP_REGION_FLAT(			\
-					ARM_L1_GPT_ADDR_BASE,		\
+					ARM_L1_GPT_BASE,		\
 					ARM_L1_GPT_SIZE,		\
 					MT_MEMORY | MT_RW | EL3_PAS)
 
@@ -415,6 +411,8 @@ MEASURED_BOOT
 #define ARM_V2M_MAP_MEM_PROTECT		MAP_REGION_FLAT(PLAT_ARM_MEM_PROT_ADDR,	\
 						V2M_FLASH_BLOCK_SIZE,		\
 						MT_DEVICE | MT_RW | MT_SECURE)
+
+#if !TRANSFER_LIST
 /*
  * Map the region for device tree configuration with read and write permissions
  */
@@ -422,11 +420,13 @@ MEASURED_BOOT
 						(ARM_FW_CONFIGS_LIMIT		\
 							- ARM_BL_RAM_BASE),	\
 						MT_MEMORY | MT_RW | EL3_PAS)
+#endif
+
 /*
  * Map L0_GPT with read and write permissions
  */
 #if ENABLE_RME
-#define ARM_MAP_L0_GPT_REGION		MAP_REGION_FLAT(ARM_L0_GPT_ADDR_BASE,	\
+#define ARM_MAP_L0_GPT_REGION		MAP_REGION_FLAT(ARM_L0_GPT_BASE,	\
 						ARM_L0_GPT_SIZE,		\
 						MT_MEMORY | MT_RW | MT_ROOT)
 #endif
@@ -509,6 +509,14 @@ MEASURED_BOOT
  */
 #define CACHE_WRITEBACK_GRANULE		(U(1) << ARM_CACHE_WRITEBACK_SHIFT)
 
+/* Define memory configuration for trusted boot device tree files. */
+#ifdef PLAT_ARM_TB_FW_CONFIG_SIZE
+#define ARM_TB_FW_CONFIG_MAX_SIZE	PLAT_ARM_TB_FW_CONFIG_SIZE
+#else
+#define ARM_TB_FW_CONFIG_MAX_SIZE	U(0x400)
+#endif
+
+#if !TRANSFER_LIST
 /*
  * To enable FW_CONFIG to be loaded by BL1, define the corresponding base
  * and limit. Leave enough space of BL2 meminfo.
@@ -530,6 +538,7 @@ MEASURED_BOOT
  */
 #define ARM_FW_CONFIGS_SIZE		(PAGE_SIZE * 2)
 #define ARM_FW_CONFIGS_LIMIT		(ARM_BL_RAM_BASE + ARM_FW_CONFIGS_SIZE)
+#endif
 
 #if ENABLE_RME
 /*
@@ -537,8 +546,8 @@ MEASURED_BOOT
  * configuration memory, 4KB aligned.
  */
 #define ARM_L0_GPT_SIZE			(PAGE_SIZE)
-#define ARM_L0_GPT_ADDR_BASE		(ARM_FW_CONFIGS_LIMIT)
-#define ARM_L0_GPT_LIMIT		(ARM_L0_GPT_ADDR_BASE + ARM_L0_GPT_SIZE)
+#define ARM_L0_GPT_BASE		(ARM_FW_CONFIGS_LIMIT)
+#define ARM_L0_GPT_LIMIT		(ARM_L0_GPT_BASE + ARM_L0_GPT_SIZE)
 #else
 #define ARM_L0_GPT_SIZE			U(0)
 #endif
