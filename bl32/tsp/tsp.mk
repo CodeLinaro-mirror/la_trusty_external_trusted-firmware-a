@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2013-2023, Arm Limited and Contributors. All rights reserved.
+# Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -24,9 +24,9 @@ BL32_SOURCES		+=	bl32/tsp/aarch64/tsp_entrypoint.S	\
 
 BL32_DEFAULT_LINKER_SCRIPT_SOURCE := bl32/tsp/tsp.ld.S
 
-ifneq ($(findstring gcc,$(notdir $(LD))),)
+ifeq ($($(ARCH)-ld-id),gnu-gcc)
         BL32_LDFLAGS	+=	-Wl,--sort-section=alignment
-else ifneq ($(findstring ld,$(notdir $(LD))),)
+else ifneq ($(filter llvm-lld gnu-ld,$($(ARCH)-ld-id)),)
         BL32_LDFLAGS	+=	--sort-section=alignment
 endif
 
