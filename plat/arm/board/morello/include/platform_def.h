@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2023, Arm Limited. All rights reserved.
+ * Copyright (c) 2020-2024, Arm Limited. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -59,6 +59,10 @@
 
 #if CSS_USE_SCMI_SDS_DRIVER
 #define MORELLO_SCMI_PAYLOAD_BASE		ULL(0x45400000)
+/*
+ * Index of SDS region used in the communication with SCP
+ */
+#define SDS_SCP_AP_REGION_ID			U(0)
 #else
 #define PLAT_CSS_SCP_COM_SHARED_MEM_BASE	ULL(0x45400000)
 #endif
@@ -70,6 +74,9 @@
  * plus a little space for growth.
  */
 #define PLAT_ARM_MAX_BL1_RW_SIZE		UL(0xC000)
+
+/* Define memory configuration for device tree files. */
+#define PLAT_ARM_HW_CONFIG_SIZE			U(0x8000)
 
 /*
  * PLAT_ARM_MAX_ROMLIB_RW_SIZE is define to use a full page
