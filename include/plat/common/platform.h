@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2023, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -136,6 +136,7 @@ void plat_ic_set_spi_routing(unsigned int id, unsigned int routing_mode,
 void plat_ic_set_interrupt_pending(unsigned int id);
 void plat_ic_clear_interrupt_pending(unsigned int id);
 unsigned int plat_ic_set_priority_mask(unsigned int mask);
+unsigned int plat_ic_deactivate_priority(unsigned int mask);
 unsigned int plat_ic_get_interrupt_id(unsigned int raw);
 
 /*******************************************************************************
@@ -182,6 +183,14 @@ static inline int plat_mboot_measure_key(const void *pk_oid __unused,
 	return 0;
 }
 #endif /* MEASURED_BOOT */
+
+#if EARLY_CONSOLE
+void plat_setup_early_console(void);
+#else
+static inline void plat_setup_early_console(void)
+{
+}
+#endif /* EARLY_CONSOLE */
 
 /*******************************************************************************
  * Mandatory BL1 functions
@@ -242,6 +251,10 @@ __dead2 void bl1_plat_fwu_done(void *client_cookie, void *reserved);
 int bl1_plat_handle_pre_image_load(unsigned int image_id);
 int bl1_plat_handle_post_image_load(unsigned int image_id);
 
+/* Utility functions */
+void bl1_plat_calc_bl2_layout(const meminfo_t *bl1_mem_layout,
+			      meminfo_t *bl2_mem_layout);
+
 #if MEASURED_BOOT
 void bl1_plat_mboot_init(void);
 void bl1_plat_mboot_finish(void);
@@ -252,7 +265,7 @@ static inline void bl1_plat_mboot_init(void)
 static inline void bl1_plat_mboot_finish(void)
 {
 }
-#endif /* MEASURED_BOOT */
+#endif /* MEASURED_BOOT || DICE_PROTECTION_ENVIRONMENT */
 
 /*******************************************************************************
  * Mandatory BL2 functions
@@ -272,7 +285,7 @@ int bl2_plat_handle_post_image_load(unsigned int image_id);
 /*******************************************************************************
  * Optional BL2 functions (may be overridden)
  ******************************************************************************/
-#if MEASURED_BOOT
+#if (MEASURED_BOOT || DICE_PROTECTION_ENVIRONMENT)
 void bl2_plat_mboot_init(void);
 void bl2_plat_mboot_finish(void);
 #else
@@ -282,7 +295,7 @@ static inline void bl2_plat_mboot_init(void)
 static inline void bl2_plat_mboot_finish(void)
 {
 }
-#endif /* MEASURED_BOOT */
+#endif /* MEASURED_BOOT || DICE_PROTECTION_ENVIRONMENTs */
 
 /*******************************************************************************
  * Mandatory BL2 at EL3 functions: Must be implemented
