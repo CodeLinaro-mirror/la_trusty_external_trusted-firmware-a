@@ -171,6 +171,17 @@ BL31_SOURCES		+=	plat/common/plat_spmd_manifest.c	\
 				common/uuid.c				\
 				${LIBFDT_SRCS} 				\
 				${FDT_WRAPPERS_SOURCES}
+
+ifeq (${SPMC_AT_EL3},1)
+ifeq (${TRUSTY_SPD_WITH_GENERIC_SERVICES},1)
+# Add the Trusty SMCs from the SPDs so Trusty can get the GIC registers
+BL31_SOURCES		+=	services/spd/trusty/generic-arm64-smcall.c
+PLAT_INCLUDES		+=	-Iservices/spd/trusty/include
+# {TRUSTY_SPD_WITH_GENERIC_SERVICES},1
+endif
+# {SPMC_AT_EL3},1
+endif
+
 endif
 endif
 
