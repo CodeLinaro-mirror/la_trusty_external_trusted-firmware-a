@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2023, Linaro Limited and Contributors. All rights reserved.
+# Copyright (c) 2023-2024, Linaro Limited and Contributors. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -88,8 +88,8 @@ ifeq (${ARCH},aarch64)
 #
 # We go v8.0 by default and will enable all features we want
 
-ARM_ARCH_MAJOR		:=	8
-ARM_ARCH_MINOR		:=	0
+ARM_ARCH_MAJOR		?=	8
+ARM_ARCH_MINOR		?=	0
 
 # 8.0
 ENABLE_FEAT_CSV2_2	:=	2
@@ -106,12 +106,16 @@ ENABLE_FEAT_RAS		:=	0
 # 8.4
 ENABLE_FEAT_SEL2	:=	2
 ENABLE_FEAT_DIT		:=	2
+ENABLE_TRF_FOR_NS	:=	2
 
 # 8.5
 ENABLE_FEAT_RNG		:=	2
-ENABLE_FEAT_SB		:=	2
+# TF-A currently does not do dynamic detection of FEAT_SB.
+# Compiler puts SB instruction when it is enabled.
+ENABLE_FEAT_SB		:=	0
 
 # 8.6
+ENABLE_FEAT_ECV		:=	2
 ENABLE_FEAT_FGT		:=	2
 
 # 8.7
@@ -133,6 +137,11 @@ else
 	ENABLE_SVE_FOR_NS	:= 2
 	ENABLE_SVE_FOR_SWD	:= 1
 	ENABLE_SME_FOR_NS	:= 2
+endif
+
+ifeq (${ENABLE_RME},1)
+BL31_SOURCES			+= plat/qemu/common/qemu_plat_attest_token.c \
+				   plat/qemu/common/qemu_realm_attest_key.c
 endif
 
 # Treating this as a memory-constrained port for now

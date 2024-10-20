@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2021-2023, Arm Limited. All rights reserved.
+# Copyright (c) 2021-2024, Arm Limited. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -116,8 +116,11 @@ subsections:
       - title: Memory Partitioning and Monitoring (MPAM) Extension (FEAT_MPAM)
         scope: mpam
 
-      - title: Memory Tagging Extension
-        scope: mte
+      - title: Memory Tagging Extension2
+        scope: mte2
+
+        deprecated:
+          - mte
 
       - title: Pointer Authentication Extension
         scope: pauth
@@ -149,11 +152,15 @@ subsections:
       - title: Self-hosted Trace Extensions (FEAT_TRF)
         scope: trf
 
+      - title: DynamIQ Shared Unit (DSU)
+        scope: dsu
+
   - title: Platforms
     scope: platforms
 
     deprecated:
       - plat/common
+      - plat
 
     subsections:
       - title: Allwinner
@@ -212,12 +219,24 @@ subsections:
           - title: N1SDP
             scope: n1sdp
 
-          - title: RD
-            scope: rd
+          - title: Neoverse-RD
+            scope: neoverse-rd
 
             subsections:
-              - title: RD-N1 Edge
+              - title: SGI-575
+                scope: sgi575
+
+              - title: RD-E1-Edge
+                scope: rde1edge
+
+              - title: RD-N1-Edge
                 scope: rdn1edge
+
+              - title: RD-V1
+                scope: rdv1
+
+              - title: RD-V1-MC
+                scope: rdv1mc
 
               - title: RD-N2
                 scope: rdn2
@@ -225,12 +244,8 @@ subsections:
                 deprecated:
                   - board/rdn2
 
-          - title: SGI
-            scope: sgi
-
             deprecated:
-              - plat/sgi
-              - plat/arm/sgi
+              - neoverse
 
           - title: TC
             scope: tc
@@ -413,6 +428,9 @@ subsections:
               - title: i.MX 8
                 scope: imx8
 
+              - title: i.MX 8ULP
+                scope: imx8ulp
+
               - title: i.MX 9
                 scope: imx9
 
@@ -496,6 +514,13 @@ subsections:
                   - title: LS1088AQDS
                     scope: ls1088aqds
 
+          - title: S32G274A
+            scope: s32g274a
+
+            subsections:
+              - title: S32G274ARDB
+                scope: s32g274ardb
+
       - title: QEMU
         scope: qemu
 
@@ -541,6 +566,9 @@ subsections:
           - title: Raspberry Pi 4
             scope: rpi4
 
+          - title: Raspberry Pi 5
+            scope: rpi5
+
       - title: Renesas
         scope: renesas
 
@@ -568,6 +596,9 @@ subsections:
             deprecated:
               - rockchip/rk3399
               - rk3399/suspend
+
+          - title: RK3328
+            scope: rk3328
 
       - title: Socionext
         scope: socionext
@@ -630,12 +661,11 @@ subsections:
               - plat/xilinx/versal
               - plat/versal
 
-            subsections:
-             - title: Versal NET
-               scope: versal-net
+          - title: Versal NET
+            scope: versal-net
 
-               deprecated:
-                 - versal_net
+            deprecated:
+              - versal_net
 
           - title: ZynqMP
             scope: zynqmp
@@ -731,6 +761,9 @@ subsections:
         deprecated:
           - errata_abi
 
+      - title: ChromeOS
+        scope: cros
+
   - title: Libraries
     scope: lib
 
@@ -771,6 +804,9 @@ subsections:
       - title: PSCI
         scope: psci
 
+      - title: ROMlib
+        scope: romlib
+
       - title: GPT
         scope: gpt
 
@@ -795,6 +831,9 @@ subsections:
         deprecated:
           - lib/psa
 
+      - title: DICE Protection Environment
+        scope: dice
+
       - title: Context Management
         scope: context-mgmt
 
@@ -806,6 +845,9 @@ subsections:
 
       - title: Firmware Handoff
         scope: handoff
+
+      - title: Exception Handling Framework (EHF)
+        scope: ehf
 
   - title: Drivers
 
@@ -937,11 +979,12 @@ subsections:
             deprecated:
               - drivers/arm/mhu
 
-          - title: RSS
-            scope: rss
+          - title: RSE
+            scope: rse
 
             deprecated:
               - drivers/arm/rss
+              - rss
 
           - title: TZC
             scope: tzc
@@ -1365,6 +1408,9 @@ subsections:
 
         deprecated:
           - cert_create
+
+      - title: Marvell Tools
+        scope: marvell-tools
 
   - title: Dependencies
     scope: deps
