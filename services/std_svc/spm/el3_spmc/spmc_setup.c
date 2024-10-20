@@ -571,7 +571,25 @@ void spmc_sp_common_setup(struct secure_partition_desc *sp,
 		 * in ep_args so we can clear them.
 		 */
 		zeromem(&ep_info->args, sizeof(ep_info->args));
+
+		/*
+		 * Call platform specific hook to set ep_regs if FF-A boot
+		 * protocol is not used
+		 */
+		plat_spmc_set_boot_info(ep_info);
 	}
+}
+
+#if !defined(TSP_SEC_MEM_SIZE) && defined(BL32_MEM_SIZE)
+#define TSP_SEC_MEM_SIZE BL32_MEM_SIZE
+#endif
+
+#pragma weak plat_spmc_set_boot_info
+void plat_spmc_set_boot_info(entry_point_info_t *ep_info)
+{
+#ifdef TSP_SEC_MEM_SIZE
+	ep_info->args.arg0 = TSP_SEC_MEM_SIZE;
+#endif
 }
 
 /*
