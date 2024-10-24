@@ -21,6 +21,8 @@ IPI_CRC_CHECK := 0
 GIC_ENABLE_V4_EXTN :=  0
 GICV3_SUPPORT_GIC600 := 1
 TFA_NO_PM := 0
+CPU_PWRDWN_SGI ?= 6
+$(eval $(call add_define_val,CPU_PWR_DOWN_REQ_INTR,ARM_IRQ_SEC_SGI_${CPU_PWRDWN_SGI}))
 
 override CTX_INCLUDE_AARCH32_REGS    := 0
 
@@ -93,7 +95,9 @@ PLAT_BL_COMMON_SOURCES	:=	\
 				plat/arm/common/arm_common.c			\
 				plat/common/plat_gicv3.c			\
 				${PLAT_PATH}/aarch64/versal_net_helpers.S	\
-				${PLAT_PATH}/aarch64/versal_net_common.c
+				${PLAT_PATH}/aarch64/versal_net_common.c	\
+				${PLAT_PATH}/plat_topology.c                    \
+				${XLAT_TABLES_LIB_SRCS}
 
 BL31_SOURCES		+=	drivers/arm/cci/cci.c				\
 				lib/cpus/aarch64/cortex_a78_ae.S		\
@@ -112,14 +116,14 @@ endif
 BL31_SOURCES		+=	plat/xilinx/common/plat_fdt.c			\
 				plat/xilinx/common/plat_startup.c		\
 				plat/xilinx/common/plat_console.c		\
+				plat/xilinx/common/plat_clkfunc.c		\
 				plat/xilinx/common/ipi.c			\
 				plat/xilinx/common/ipi_mailbox_service/ipi_mailbox_svc.c \
 				plat/xilinx/common/versal.c			\
 				${PLAT_PATH}/bl31_versal_net_setup.c		\
-				${PLAT_PATH}/plat_topology.c			\
 				common/fdt_fixup.c				\
 				common/fdt_wrappers.c				\
+				plat/arm/common/arm_gicv3.c 			\
 				${LIBFDT_SRCS}					\
 				${PLAT_PATH}/sip_svc_setup.c			\
-				${PLAT_PATH}/versal_net_gicv3.c			\
 				${XLAT_TABLES_LIB_SRCS}
