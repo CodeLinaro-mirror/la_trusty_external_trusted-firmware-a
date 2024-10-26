@@ -176,7 +176,7 @@ int plat_get_mbedtls_heap(void **heap_addr, size_t *heap_size)
  * When using the EL3 SPMC implementation allocate the datastore
  * for tracking shared memory descriptors in normal memory.
  */
-#define PLAT_SPMC_SHMEM_DATASTORE_SIZE 64 * 1024
+#define PLAT_SPMC_SHMEM_DATASTORE_SIZE 384 * 1024
 
 uint8_t plat_spmc_shmem_datastore[PLAT_SPMC_SHMEM_DATASTORE_SIZE] __aligned(8);
 
