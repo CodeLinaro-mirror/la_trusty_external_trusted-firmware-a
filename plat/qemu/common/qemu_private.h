@@ -42,4 +42,6 @@ int qemu_set_nt_fw_info(
 
 void qemu_bl2_sync_transfer_list(void);
 
+int qemu_ffa_comp_set_shared(void *compv, bool shared, bool secure);
+
 #endif /* QEMU_PRIVATE_H */
