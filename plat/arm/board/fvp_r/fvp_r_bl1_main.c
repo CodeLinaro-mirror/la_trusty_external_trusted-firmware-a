@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2021-2024, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -12,6 +12,7 @@
 #include <arch_helpers.h>
 #include <bl1/bl1.h>
 #include <common/bl_common.h>
+#include <common/build_message.h>
 #include <common/debug.h>
 #include <drivers/auth/auth_mod.h>
 #include <drivers/console.h>
@@ -92,27 +93,6 @@ void bl1_load_bl33(void)
 }
 
 /*******************************************************************************
- * Helper utility to calculate the BL2 memory layout taking into consideration
- * the BL1 RW data assuming that it is at the top of the memory layout.
- ******************************************************************************/
-void bl1_calc_bl2_mem_layout(const meminfo_t *bl1_mem_layout,
-			meminfo_t *bl2_mem_layout)
-{
-	assert(bl1_mem_layout != NULL);
-	assert(bl2_mem_layout != NULL);
-
-	/*
-	 * Remove BL1 RW data from the scope of memory visible to BL2.
-	 * This is assuming BL1 RW data is at the top of bl1_mem_layout.
-	 */
-	assert(bl1_mem_layout->total_base < BL1_RW_BASE);
-	bl2_mem_layout->total_base = bl1_mem_layout->total_base;
-	bl2_mem_layout->total_size = BL1_RW_BASE - bl1_mem_layout->total_base;
-
-	flush_dcache_range((uintptr_t)bl2_mem_layout, sizeof(meminfo_t));
-}
-
-/*******************************************************************************
  * This function prepares for entry to BL33
  ******************************************************************************/
 void bl1_prepare_next_image(unsigned int image_id)
@@ -182,7 +162,7 @@ void bl1_main(void)
 
 	/* Announce our arrival */
 	NOTICE(FIRMWARE_WELCOME_STR);
-	NOTICE("BL1: %s\n", version_string);
+	NOTICE("BL1: %s\n", build_version_string);
 	NOTICE("BL1: %s\n", build_message);
 
 	INFO("BL1: RAM %p - %p\n", (void *)BL1_RAM_BASE, (void *)BL1_RAM_LIMIT);
@@ -265,4 +245,3 @@ void print_debug_loop_message(void)
 	NOTICE("BL1: Please connect the debugger to continue\n");
 }
 #endif
-

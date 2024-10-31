@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2018-2021, Arm Limited and Contributors. All rights reserved.
- * Copyright (c) 2022-2023, Advanced Micro Devices, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Advanced Micro Devices, Inc. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -14,10 +14,13 @@
 #include <plat/common/platform.h>
 #include <plat_arm.h>
 
+#include "drivers/delay_timer.h"
 #include <plat_private.h>
 #include "pm_api_sys.h"
 #include "pm_client.h"
 #include <pm_common.h>
+#include "pm_ipi.h"
+#include "pm_svc_main.h"
 
 static uintptr_t versal_sec_entry;
 
@@ -33,6 +36,9 @@ static int32_t versal_pwr_domain_on(u_register_t mpidr)
 	}
 
 	proc = pm_get_proc((uint32_t)cpu_id);
+	if (proc == NULL) {
+		return PSCI_E_INTERN_FAIL;
+	}
 
 	/* Send request to PMC to wake up selected ACPU core */
 	(void)pm_req_wakeup(proc->node_id, (versal_sec_entry & 0xFFFFFFFFU) | 0x1U,
@@ -55,6 +61,10 @@ static void versal_pwr_domain_suspend(const psci_power_state_t *target_state)
 	uint32_t state;
 	uint32_t cpu_id = plat_my_core_pos();
 	const struct pm_proc *proc = pm_get_proc(cpu_id);
+
+	if (proc == NULL) {
+		return;
+	}
 
 	for (size_t i = 0U; i <= PLAT_MAX_PWR_LVL; i++) {
 		VERBOSE("%s: target_state->pwr_domain_state[%lu]=%x\n",
@@ -92,6 +102,10 @@ static void versal_pwr_domain_suspend_finish(
 {
 	uint32_t cpu_id = plat_my_core_pos();
 	const struct pm_proc *proc = pm_get_proc(cpu_id);
+
+	if (proc == NULL) {
+		return;
+	}
 
 	for (size_t i = 0U; i <= PLAT_MAX_PWR_LVL; i++) {
 		VERBOSE("%s: target_state->pwr_domain_state[%lu]=%x\n",
@@ -145,9 +159,31 @@ static void __dead2 versal_system_off(void)
  */
 static void __dead2 versal_system_reset(void)
 {
-	/* Send the system reset request to the PMC */
-	(void)pm_system_shutdown(XPM_SHUTDOWN_TYPE_RESET,
-				 pm_get_shutdown_scope(), SECURE_FLAG);
+	uint32_t ret, timeout = 10000U;
+
+	request_cpu_pwrdwn();
+
+	/*
+	 * Send the system reset request to the firmware if power down request
+	 * is not received from firmware.
+	 */
+	if (!pwrdwn_req_received) {
+		(void)pm_system_shutdown(XPM_SHUTDOWN_TYPE_RESET,
+					 pm_get_shutdown_scope(), SECURE_FLAG);
+
+		/*
+		 * Wait for system shutdown request completed and idle callback
+		 * not received.
+		 */
+		do {
+			ret = ipi_mb_enquire_status(primary_proc->ipi->local_ipi_id,
+						    primary_proc->ipi->remote_ipi_id);
+			udelay(100);
+			timeout--;
+		} while ((ret != IPI_MB_STATUS_RECV_PENDING) && (timeout > 0U));
+	}
+
+	(void)psci_cpu_off();
 
 	while (1) {
 		wfi();
@@ -161,8 +197,13 @@ static void __dead2 versal_system_reset(void)
  */
 static void versal_pwr_domain_off(const psci_power_state_t *target_state)
 {
+	uint32_t ret, fw_api_version, version[PAYLOAD_ARG_CNT] = {0U};
 	uint32_t cpu_id = plat_my_core_pos();
 	const struct pm_proc *proc = pm_get_proc(cpu_id);
+
+	if (proc == NULL) {
+		return;
+	}
 
 	for (size_t i = 0U; i <= PLAT_MAX_PWR_LVL; i++) {
 		VERBOSE("%s: target_state->pwr_domain_state[%lu]=%x\n",
@@ -180,8 +221,17 @@ static void versal_pwr_domain_off(const psci_power_state_t *target_state)
 	 * invoking CPU_on function, during which resume address will
 	 * be set.
 	 */
-	(void)pm_self_suspend(proc->node_id, MAX_LATENCY, PM_STATE_CPU_IDLE, 0,
-			      SECURE_FLAG);
+	ret = pm_feature_check((uint32_t)PM_SELF_SUSPEND, &version[0], SECURE_FLAG);
+	if (ret == PM_RET_SUCCESS) {
+		fw_api_version = version[0] & 0xFFFFU;
+		if (fw_api_version >= 3U) {
+			(void)pm_self_suspend(proc->node_id, MAX_LATENCY, PM_STATE_CPU_OFF, 0,
+					      SECURE_FLAG);
+		} else {
+			(void)pm_self_suspend(proc->node_id, MAX_LATENCY, PM_STATE_CPU_IDLE, 0,
+					      SECURE_FLAG);
+		}
+	}
 }
 
 /**
