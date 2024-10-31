@@ -256,10 +256,10 @@ likely to be suitable for all platform ports.
 
    Defines the maximum address in secure RAM that the BL31 image can occupy.
 
--  **#define : PLAT_RSS_COMMS_PAYLOAD_MAX_SIZE**
+-  **#define : PLAT_RSE_COMMS_PAYLOAD_MAX_SIZE**
 
-   Defines the maximum message size between AP and RSS. Need to define if
-   platform supports RSS.
+   Defines the maximum message size between AP and RSE. Need to define if
+   platform supports RSE.
 
 For every image, the platform must define individual identifiers that will be
 used by BL1 or BL2 to load the corresponding image into memory from non-volatile
@@ -1711,6 +1711,18 @@ Function : bl1_plat_handle_pre_image_load() [optional]
 This function can be used by the platforms to update/use image information
 corresponding to ``image_id``. This function is invoked in BL1, both in cold
 boot and FWU code path, before loading the image.
+
+Function : bl1_plat_calc_bl2_layout() [optional]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+    Argument : const meminfo_t *bl1_mem_layout, meminfo_t *bl2_mem_layout
+    Return   : void
+
+This utility function calculates the memory layout of BL2, representing it in a
+`meminfo_t` structure. The default implementation derives this layout from the
+positioning of BL1’s RW data at the top of the memory layout.
 
 Function : bl1_plat_handle_post_image_load() [optional]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -3274,6 +3286,17 @@ This API is used by the crash reporting mechanism to force write of all buffered
 data on the designated crash console. It should only use general purpose
 registers x0 through x5 to do its work.
 
+Function : plat_setup_early_console [optional]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+    Argument : void
+    Return   : void
+
+This API is used to setup the early console, it is required only if the flag
+``EARLY_CONSOLE`` is enabled.
+
 .. _External Abort handling and RAS Support:
 
 External Abort handling and RAS Support
@@ -3560,7 +3583,7 @@ to :ref:`Measured Boot Design` for more details.
 
 --------------
 
-*Copyright (c) 2013-2023, Arm Limited and Contributors. All rights reserved.*
+*Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.*
 
 .. _PSCI: https://developer.arm.com/documentation/den0022/latest/
 .. _Arm Generic Interrupt Controller version 2.0 (GICv2): http://infocenter.arm.com/help/topic/com.arm.doc.ihi0048b/index.html

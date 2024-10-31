@@ -34,6 +34,7 @@
 #include "socfpga_mailbox.h"
 #include "socfpga_private.h"
 #include "socfpga_reset_manager.h"
+#include "socfpga_ros.h"
 #include "wdt/watchdog.h"
 
 
@@ -84,12 +85,19 @@ void bl2_el3_early_platform_setup(u_register_t x0, u_register_t x1,
 	PLAT_BAUDRATE, &console);
 
 	/* Store magic number */
-	mmio_write_32(L2_RESET_DONE_REG, PLAT_L2_RESET_REQ);
+	// TODO: Temp workaround to ungate testing
+	// mmio_write_32(L2_RESET_DONE_REG, PLAT_L2_RESET_REQ);
+
+	if (!intel_mailbox_is_fpga_not_ready()) {
+		socfpga_bridges_enable(SOC2FPGA_MASK | LWHPS2FPGA_MASK |
+					FPGA2SOC_MASK | F2SDRAM0_MASK);
+	}
 }
 
 void bl2_el3_plat_arch_setup(void)
 {
 	handoff reverse_handoff_ptr;
+	unsigned long offset = 0;
 
 	struct cdns_sdmmc_params params = EMMC_INIT_PARAMS((uintptr_t) &cdns_desc, get_mmc_clk());
 
@@ -103,7 +111,7 @@ void bl2_el3_plat_arch_setup(void)
 	case BOOT_SOURCE_SDMMC:
 		NOTICE("SDMMC boot\n");
 		sdmmc_init(&reverse_handoff_ptr, &params, &mmc_info);
-		socfpga_io_setup(boot_source);
+		socfpga_io_setup(boot_source, PLAT_SDMMC_DATA_BASE);
 		break;
 
 	case BOOT_SOURCE_QSPI:
@@ -111,13 +119,16 @@ void bl2_el3_plat_arch_setup(void)
 		cad_qspi_init(0, QSPI_CONFIG_CPHA, QSPI_CONFIG_CPOL,
 			QSPI_CONFIG_CSDA, QSPI_CONFIG_CSDADS,
 			QSPI_CONFIG_CSEOT, QSPI_CONFIG_CSSOT, 0);
-		socfpga_io_setup(boot_source);
+		if (ros_qspi_get_ssbl_offset(&offset) != ROS_RET_OK) {
+			offset = PLAT_QSPI_DATA_BASE;
+		}
+		socfpga_io_setup(boot_source, offset);
 		break;
 
 	case BOOT_SOURCE_NAND:
 		NOTICE("NAND boot\n");
 		nand_init(&reverse_handoff_ptr);
-		socfpga_io_setup(boot_source);
+		socfpga_io_setup(boot_source, PLAT_NAND_DATA_BASE);
 		break;
 
 	default:
