@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2023, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2024, Arm Limited and Contributors. All rights reserved.
  * Copyright (c) 2023, NVIDIA Corporation. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
@@ -34,8 +34,8 @@ static spinlock_t gic_lock;
 #pragma weak gicv3_rdistif_off
 #pragma weak gicv3_rdistif_on
 
-/* Check interrupt ID for SGI/(E)PPI and (E)SPIs */
-static bool is_sgi_ppi(unsigned int id);
+/* Check for valid SGI/PPI or SPI interrupt ID */
+static bool is_valid_interrupt(unsigned int id);
 
 /*
  * Helper macros to save and restore GICR and GICD registers
@@ -447,8 +447,12 @@ unsigned int gicv3_get_interrupt_group(unsigned int id, unsigned int proc_num)
 		return INTR_GROUP1NS;
 	}
 
+	if (!is_valid_interrupt(id)) {
+		panic();
+	}
+
 	/* Check interrupt ID */
-	if (is_sgi_ppi(id)) {
+	if (IS_SGI_PPI(id)) {
 		/* SGIs: 0-15, PPIs: 16-31, EPPIs: 1056-1119 */
 		assert(gicv3_driver_data->rdistif_base_addrs != NULL);
 		gicr_base = gicv3_driver_data->rdistif_base_addrs[proc_num];
@@ -942,8 +946,11 @@ unsigned int gicv3_get_interrupt_active(unsigned int id, unsigned int proc_num)
 	assert(proc_num < gicv3_driver_data->rdistif_num);
 	assert(gicv3_driver_data->rdistif_base_addrs != NULL);
 
+	if (!is_valid_interrupt(id)) {
+		panic();
+	}
 	/* Check interrupt ID */
-	if (is_sgi_ppi(id)) {
+	if (IS_SGI_PPI(id)) {
 		/* For SGIs: 0-15, PPIs: 16-31 and EPPIs: 1056-1119 */
 		return gicr_get_isactiver(
 			gicv3_driver_data->rdistif_base_addrs[proc_num], id);
@@ -973,9 +980,11 @@ void gicv3_enable_interrupt(unsigned int id, unsigned int proc_num)
 	 * interrupt trigger are observed before enabling interrupt.
 	 */
 	dsbishst();
-
+	if (!is_valid_interrupt(id)) {
+		panic();
+	}
 	/* Check interrupt ID */
-	if (is_sgi_ppi(id)) {
+	if (IS_SGI_PPI(id)) {
 		/* For SGIs: 0-15, PPIs: 16-31 and EPPIs: 1056-1119 */
 		gicr_set_isenabler(
 			gicv3_driver_data->rdistif_base_addrs[proc_num], id);
@@ -1004,9 +1013,11 @@ void gicv3_disable_interrupt(unsigned int id, unsigned int proc_num)
 	 * Disable interrupt, and ensure that any shared variable updates
 	 * depending on out of band interrupt trigger are observed afterwards.
 	 */
-
+	if (!is_valid_interrupt(id)) {
+		panic();
+	}
 	/* Check interrupt ID */
-	if (is_sgi_ppi(id)) {
+	if (IS_SGI_PPI(id)) {
 		/* For SGIs: 0-15, PPIs: 16-31 and EPPIs: 1056-1119 */
 		gicr_set_icenabler(
 			gicv3_driver_data->rdistif_base_addrs[proc_num], id);
@@ -1041,8 +1052,11 @@ void gicv3_set_interrupt_priority(unsigned int id, unsigned int proc_num,
 	assert(proc_num < gicv3_driver_data->rdistif_num);
 	assert(gicv3_driver_data->rdistif_base_addrs != NULL);
 
+	if (!is_valid_interrupt(id)) {
+		panic();
+	}
 	/* Check interrupt ID */
-	if (is_sgi_ppi(id)) {
+	if (IS_SGI_PPI(id)) {
 		/* For SGIs: 0-15, PPIs: 16-31 and EPPIs: 1056-1119 */
 		gicr_base = gicv3_driver_data->rdistif_base_addrs[proc_num];
 		gicr_set_ipriorityr(gicr_base, id, priority);
@@ -1088,8 +1102,11 @@ void gicv3_set_interrupt_group(unsigned int id, unsigned int proc_num,
 		break;
 	}
 
+	if (!is_valid_interrupt(id)) {
+		panic();
+	}
 	/* Check interrupt ID */
-	if (is_sgi_ppi(id)) {
+	if (IS_SGI_PPI(id)) {
 		/* For SGIs: 0-15, PPIs: 16-31 and EPPIs: 1056-1119 */
 		gicr_base = gicv3_driver_data->rdistif_base_addrs[proc_num];
 
@@ -1228,12 +1245,14 @@ void gicv3_clear_interrupt_pending(unsigned int id, unsigned int proc_num)
 	 * Clear pending interrupt, and ensure that any shared variable updates
 	 * depending on out of band interrupt trigger are observed afterwards.
 	 */
-
+	if (!is_valid_interrupt(id)) {
+		panic();
+	}
 	/* Check interrupt ID */
-	if (is_sgi_ppi(id)) {
+	if (IS_SGI_PPI(id)) {
 		/* For SGIs: 0-15, PPIs: 16-31 and EPPIs: 1056-1119 */
 		gicr_set_icpendr(
-			gicv3_driver_data->rdistif_base_addrs[proc_num], id);
+		gicv3_driver_data->rdistif_base_addrs[proc_num], id);
 	} else {
 		/* For SPIs: 32-1019 and ESPIs: 4096-5119 */
 		gicd_base = gicv3_get_multichip_base(id, gicv3_driver_data->gicd_base);
@@ -1263,8 +1282,12 @@ void gicv3_set_interrupt_pending(unsigned int id, unsigned int proc_num)
 	 */
 	dsbishst();
 
+	if (!is_valid_interrupt(id)) {
+		panic();
+	}
+
 	/* Check interrupt ID */
-	if (is_sgi_ppi(id)) {
+	if (IS_SGI_PPI(id)) {
 		/* For SGIs: 0-15, PPIs: 16-31 and EPPIs: 1056-1119 */
 		gicr_set_ispendr(
 			gicv3_driver_data->rdistif_base_addrs[proc_num], id);
@@ -1293,6 +1316,31 @@ unsigned int gicv3_set_pmr(unsigned int mask)
 	 */
 	dsbishst();
 	write_icc_pmr_el1(mask);
+
+	return old_mask;
+}
+
+/*******************************************************************************
+ * This function restores the PMR register to old value and also triggers
+ * gicv3_apply_errata_wa_2384374() that flushes the GIC buffer allowing any
+ * pending interrupts to processed. Returns the original PMR.
+ ******************************************************************************/
+unsigned int gicv3_deactivate_priority(unsigned int mask)
+{
+
+	unsigned int old_mask, proc_num;
+	uintptr_t gicr_base;
+
+	old_mask = gicv3_set_pmr(mask);
+
+	proc_num = plat_my_core_pos();
+	gicr_base = gicv3_driver_data->rdistif_base_addrs[proc_num];
+	assert(gicr_base != 0UL);
+
+	/* Add DSB to ensure visibility of System register writes */
+	dsb();
+
+	gicv3_apply_errata_wa_2384374(gicr_base);
 
 	return old_mask;
 }
@@ -1371,21 +1419,19 @@ int gicv3_rdistif_probe(const uintptr_t gicr_frame)
 }
 
 /******************************************************************************
- * This function checks the interrupt ID and returns true for SGIs and (E)PPIs
- * and false for (E)SPIs IDs.
+ * This function checks the interrupt ID and returns true for SGIs, (E)PPIs
+ * and (E)SPIs IDs. Any interrupt ID outside the range is invalid and returns
+ * false.
  *****************************************************************************/
-static bool is_sgi_ppi(unsigned int id)
+static bool is_valid_interrupt(unsigned int id)
 {
-	/* SGIs: 0-15, PPIs: 16-31, EPPIs: 1056-1119 */
-	if (IS_SGI_PPI(id)) {
+	/* Valid interrupts:
+	 * SGIs: 0-15, PPIs: 16-31, EPPIs: 1056-1119
+	 * SPIs: 32-1019, ESPIs: 4096-5119
+	 */
+	if ((IS_SGI_PPI(id)) || (IS_SPI(id))) {
 		return true;
 	}
 
-	/* SPIs: 32-1019, ESPIs: 4096-5119 */
-	if (IS_SPI(id)) {
-		return false;
-	}
-
-	assert(false);
-	panic();
+	return false;
 }

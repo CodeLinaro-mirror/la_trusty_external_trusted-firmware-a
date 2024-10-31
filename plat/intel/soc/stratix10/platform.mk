@@ -53,6 +53,7 @@ BL2_SOURCES     +=	\
 		plat/intel/soc/common/soc/socfpga_mailbox.c		\
 		plat/intel/soc/common/soc/socfpga_reset_manager.c	\
 		plat/intel/soc/common/drivers/qspi/cadence_qspi.c	\
+		plat/intel/soc/common/drivers/ddr/ddr.c	\
 		plat/intel/soc/common/drivers/wdt/watchdog.c
 
 include lib/zlib/zlib.mk
@@ -74,6 +75,8 @@ BL31_SOURCES	+=	\
 		plat/intel/soc/common/sip/socfpga_sip_fcs.c		\
 		plat/intel/soc/common/soc/socfpga_mailbox.c		\
 		plat/intel/soc/common/soc/socfpga_reset_manager.c
+
+$(eval $(call add_define,ARM_PRELOADED_DTB_BASE))
 
 PROGRAMMABLE_RESET_ADDRESS	:= 0
 RESET_TO_BL2			:= 1
