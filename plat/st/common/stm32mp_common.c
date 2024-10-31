@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2023, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2024, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -168,9 +168,9 @@ int stm32_get_otp_value_from_idx(const uint32_t otp_idx, uint32_t *otp_val)
 	assert(otp_val != NULL);
 
 #if defined(IMAGE_BL2)
-	ret = bsec_shadow_read_otp(otp_val, otp_idx);
-#elif defined(IMAGE_BL32)
-	ret = bsec_read_otp(otp_val, otp_idx);
+	ret = stm32_otp_shadow_read(otp_val, otp_idx);
+#elif defined(IMAGE_BL31) || defined(IMAGE_BL32)
+	ret = stm32_otp_read(otp_val, otp_idx);
 #else
 #error "Not supported"
 #endif
@@ -269,8 +269,8 @@ int stm32mp_uart_console_setup(void)
 	return 0;
 }
 
-#if STM32MP_EARLY_CONSOLE
-void stm32mp_setup_early_console(void)
+#if EARLY_CONSOLE
+void plat_setup_early_console(void)
 {
 #if defined(IMAGE_BL2) || STM32MP_RECONFIGURE_CONSOLE
 	plat_crash_console_init();
@@ -278,7 +278,7 @@ void stm32mp_setup_early_console(void)
 	set_console(STM32MP_DEBUG_USART_BASE, STM32MP_DEBUG_USART_CLK_FRQ);
 	NOTICE("Early console setup\n");
 }
-#endif /* STM32MP_EARLY_CONSOLE */
+#endif /* EARLY_CONSOLE */
 
 /*****************************************************************************
  * plat_is_smccc_feature_available() - This function checks whether SMCCC
