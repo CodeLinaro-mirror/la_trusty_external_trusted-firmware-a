@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2023, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -13,11 +13,13 @@
 #include <bl31/bl31.h>
 #include <bl31/ehf.h>
 #include <common/bl_common.h>
+#include <common/build_message.h>
 #include <common/debug.h>
 #include <common/feat_detect.h>
 #include <common/runtime_svc.h>
 #include <drivers/console.h>
 #include <lib/bootmarker_capture.h>
+#include <lib/el3_runtime/context_debug.h>
 #include <lib/el3_runtime/context_mgmt.h>
 #include <lib/pmf/pmf.h>
 #include <lib/runtime_instr.h>
@@ -82,7 +84,7 @@ uintptr_t get_arm_std_svc_args(unsigned int svc_mask)
 /*******************************************************************************
  * Simple function to initialise all BL31 helper libraries.
  ******************************************************************************/
-void __init bl31_lib_init(void)
+static void __init bl31_lib_init(void)
 {
 	cm_init();
 }
@@ -93,6 +95,9 @@ void __init bl31_lib_init(void)
 void bl31_setup(u_register_t arg0, u_register_t arg1, u_register_t arg2,
 		u_register_t arg3)
 {
+	/* Enable early console if EARLY_CONSOLE flag is enabled */
+	plat_setup_early_console();
+
 	/* Perform early platform-specific setup */
 	bl31_early_platform_setup2(arg0, arg1, arg2, arg3);
 
@@ -106,6 +111,9 @@ void bl31_setup(u_register_t arg0, u_register_t arg1, u_register_t arg2,
 	 */
 	assert(is_armv8_3_pauth_present());
 #endif /* CTX_INCLUDE_PAUTH_REGS */
+
+	/* Prints context_memory allocated for all the security states */
+	report_ctx_memory_usage();
 }
 
 /*******************************************************************************
@@ -124,7 +132,7 @@ void bl31_main(void)
 	/* Init per-world context registers for non-secure world */
 	manage_extensions_nonsecure_per_world();
 
-	NOTICE("BL31: %s\n", version_string);
+	NOTICE("BL31: %s\n", build_version_string);
 	NOTICE("BL31: %s\n", build_message);
 
 #if FEATURE_DETECTION
@@ -207,8 +215,6 @@ void bl31_main(void)
 	 */
 	bl31_prepare_next_image_entry();
 
-	console_flush();
-
 	/*
 	 * Perform any platform specific runtime setup prior to cold boot exit
 	 * from BL31
@@ -216,9 +222,12 @@ void bl31_main(void)
 	bl31_plat_runtime_setup();
 
 #if ENABLE_RUNTIME_INSTRUMENTATION
-	PMF_CAPTURE_TIMESTAMP(bl_svc, BL31_EXIT, PMF_CACHE_MAINT);
 	console_flush();
+	PMF_CAPTURE_TIMESTAMP(bl_svc, BL31_EXIT, PMF_CACHE_MAINT);
 #endif
+
+	console_flush();
+	console_switch_state(CONSOLE_FLAG_RUNTIME);
 }
 
 /*******************************************************************************

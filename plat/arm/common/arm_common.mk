@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2015-2023, Arm Limited and Contributors. All rights reserved.
+# Copyright (c) 2015-2024, Arm Limited and Contributors. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -299,6 +299,10 @@ BL31_SOURCES		+=	plat/arm/common/arm_bl31_setup.c		\
 				plat/arm/common/arm_topology.c			\
 				plat/common/plat_psci_common.c
 
+ifeq (${TRANSFER_LIST}, 1)
+	TRANSFER_LIST_SOURCES += plat/arm/common/arm_transfer_list.c
+endif
+
 ifneq ($(filter 1,${ENABLE_PMF} ${ETHOSN_NPU_DRIVER}),)
 ARM_SVC_HANDLER_SRCS :=
 
@@ -383,7 +387,12 @@ ifneq (${TRUSTED_BOARD_BOOT},0)
     else ifeq (${COT},dualroot)
         AUTH_SOURCES	+=	drivers/auth/dualroot/cot.c
     else ifeq (${COT},cca)
-        AUTH_SOURCES	+=	drivers/auth/cca/cot.c
+        BL1_SOURCES	+=	drivers/auth/cca/cot.c
+        ifneq (${COT_DESC_IN_DTB},0)
+            BL2_SOURCES	+=	lib/fconf/fconf_cot_getter.c
+        else
+            BL2_SOURCES	+=	drivers/auth/cca/cot.c
+        endif
     else
         $(error Unknown chain of trust ${COT})
     endif

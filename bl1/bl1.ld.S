@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2023, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -36,6 +36,9 @@ SECTIONS {
 
 #if SEPARATE_CODE_AND_RODATA
     .text . : {
+        ASSERT(. == ALIGN(PAGE_SIZE),
+        ".text address is not aligned on a page boundary.");
+
         __TEXT_START__ = .;
 
         *bl1_entrypoint.o(.text*)
@@ -80,6 +83,9 @@ SECTIONS {
     } >ROM
 #else /* SEPARATE_CODE_AND_RODATA */
     .ro . : {
+        ASSERT(. == ALIGN(PAGE_SIZE),
+        ".ro address is not aligned on a page boundary.");
+
         __RO_START__ = .;
 
         *bl1_entrypoint.o(.text*)
@@ -109,6 +115,8 @@ SECTIONS {
 
     ASSERT(BL1_RW_BASE == ALIGN(PAGE_SIZE),
         "BL1_RW_BASE address is not aligned on a page boundary.")
+
+    __RW_START__ = .;
 
     DATA_SECTION >RAM AT>ROM
 
@@ -141,6 +149,8 @@ SECTIONS {
         __COHERENT_RAM_END__ = .;
     } >RAM
 #endif /* USE_COHERENT_MEM */
+
+    __RW_END__ = .;
 
     __BL1_RAM_START__ = ADDR(.data);
     __BL1_RAM_END__ = .;
