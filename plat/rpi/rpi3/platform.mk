@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2013-2023, Arm Limited and Contributors. All rights reserved.
+# Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -17,6 +17,7 @@ PLAT_BL_COMMON_SOURCES	:=	drivers/ti/uart/aarch64/16550_console.S	\
 				drivers/rpi3/gpio/rpi3_gpio.c		\
 				plat/rpi/common/aarch64/plat_helpers.S	\
 				plat/rpi/common/rpi3_common.c		\
+				plat/rpi/common/rpi3_console_dual.c	\
 				${XLAT_TABLES_LIB_SRCS}
 
 BL1_SOURCES		+=	drivers/io/io_fip.c			\
@@ -52,9 +53,9 @@ BL31_SOURCES		+=	lib/cpus/aarch64/cortex_a53.S		\
 				${LIBFDT_SRCS}
 
 # Tune compiler for Cortex-A53
-ifeq ($(notdir $(CC)),armclang)
+ifeq ($($(ARCH)-cc-id),arm-clang)
     TF_CFLAGS_aarch64	+=	-mcpu=cortex-a53
-else ifneq ($(findstring clang,$(notdir $(CC))),)
+else ifneq ($(filter %-clang,$($(ARCH)-cc-id)),)
     TF_CFLAGS_aarch64	+=	-mcpu=cortex-a53
 else
     TF_CFLAGS_aarch64	+=	-mtune=cortex-a53

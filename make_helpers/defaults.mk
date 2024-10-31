@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2016-2023, Arm Limited. All rights reserved.
+# Copyright (c) 2016-2024, Arm Limited. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -150,6 +150,10 @@ HANDLE_EA_EL3_FIRST_NS		:= 0
 # Enable Handoff protocol using transfer lists
 TRANSFER_LIST			:= 0
 
+# Enables support for the gcc compiler option "-mharden-sls=all".
+# By default, disables all SLS hardening.
+HARDEN_SLS			:= 0
+
 # Secure hash algorithm flag, accepts 3 values: sha256, sha384 and sha512.
 # The default value is sha256.
 HASH_ALG			:= sha256
@@ -171,6 +175,9 @@ endif
 
 # Option to build TF with Measured Boot support
 MEASURED_BOOT			:= 0
+
+# Option to enable the DICE Protection Environmnet as a Measured Boot backend
+DICE_PROTECTION_ENVIRONMENT	:=0
 
 # NS timer register save and restore
 NS_TIMER_SWITCH			:= 0
@@ -347,8 +354,13 @@ NR_OF_IMAGES_IN_FW_BANK		:= 1
 # Disable Firmware update support by default
 PSA_FWU_SUPPORT			:= 0
 
-# By default, disable the mocking of RSS provided services
-PLAT_RSS_NOT_SUPPORTED		:= 0
+# Enable image description in FWU metadata by default when PSA_FWU_SUPPORT
+# is enabled.
+ifeq ($(PSA_FWU_SUPPORT),1)
+PSA_FWU_METADATA_FW_STORE_DESC	:= 1
+else
+PSA_FWU_METADATA_FW_STORE_DESC	:= 0
+endif
 
 # Dynamic Root of Trust for Measurement support
 DRTM_SUPPORT			:= 0
@@ -373,3 +385,17 @@ ENABLE_CONSOLE_GETC		:= 0
 # functions must be enabled by platforms if they require it.
 # Disabled by default.
 INIT_UNUSED_NS_EL2		:= 0
+
+# Disable including MPAM EL2 registers in context by default since currently
+# it's only enabled for NS world
+CTX_INCLUDE_MPAM_REGS		:= 0
+
+# Enable context memory usage reporting during BL31 setup.
+PLATFORM_REPORT_CTX_MEM_USE	:= 0
+
+# Enable early console
+EARLY_CONSOLE			:= 0
+
+# Allow platforms to save/restore DSU PMU registers over a power cycle.
+# Disabled by default and must be enabled by individual platforms.
+PRESERVE_DSU_PMU_REGS		:= 0

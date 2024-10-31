@@ -645,6 +645,35 @@ on entry, these should be enabled during ``bl31_plat_arch_setup()``.
 Data structures used in the BL31 cold boot interface
 ''''''''''''''''''''''''''''''''''''''''''''''''''''
 
+In the cold boot flow, ``entry_point_info`` is used to represent the execution
+state of an image; that is, the state of general purpose registers, PC, and
+SPSR.
+
+There are two variants of this structure, for AArch64:
+
+.. code:: c
+
+   typedef struct entry_point_info {
+        param_header_t h;
+        uintptr_t pc;
+        uint32_t spsr;
+
+        aapcs64_params_t args;
+   }
+
+and, AArch32:
+
+.. code:: c
+
+   typedef struct entry_point_info {
+      param_header_t h;
+      uintptr_t pc;
+      uint32_t spsr;
+
+      uintptr_t lr_svc;
+      aapcs32_params_t args;
+   } entry_point_info_t;
+
 These structures are designed to support compatibility and independent
 evolution of the structures and the firmware images. For example, a version of
 BL31 that can interpret the BL3x image information from different versions of
@@ -662,13 +691,17 @@ BL31 to detect which information is present and respond appropriately. The
         uint8_t type;       /* type of the structure */
         uint8_t version;    /* version of this structure */
         uint16_t size;      /* size of this structure in bytes */
-        uint32_t attr;      /* attributes: unused bits SBZ */
+        uint32_t attr;      /* attributes */
     } param_header_t;
 
-The structures using this format are ``entry_point_info``, ``image_info`` and
-``bl31_params``. The code that allocates and populates these structures must set
-the header fields appropriately, and the ``SET_PARAM_HEAD()`` a macro is defined
-to simplify this action.
+In `entry_point_info`, Bits 0 and 5 of ``attr`` field are used to encode the
+security state; in other words, whether the image is to be executed in Secure,
+Non-Secure, or Realm mode.
+
+Other structures using this format are ``image_info`` and ``bl31_params``. The
+code that allocates and populates these structures must set the header fields
+appropriately, the ``SET_PARAM_HEAD()`` macro is defined to simplify this
+action.
 
 Required CPU state for BL31 Warm boot initialization
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2767,13 +2800,11 @@ Armv8.5-A
 -  Branch Target Identification feature is selected by ``BRANCH_PROTECTION``
    option set to 1. This option defaults to 0.
 
--  Memory Tagging Extension feature is unconditionally enabled for both worlds
-   (at EL0 and S-EL0) if it is only supported at EL0. If instead it is
-   implemented at all ELs, it is unconditionally enabled for only the normal
-   world. To enable it for the secure world as well, the build option
-   ``CTX_INCLUDE_MTE_REGS`` is required. If the hardware does not implement
-   MTE support at all, it is always disabled, no matter what build options
-   are used.
+-  Memory Tagging Extension feature has few variants but not all of them require
+   enablement from EL3 to be used at lower EL. e.g. Memory tagging only at
+   EL0(MTE) does not require EL3 configuration however memory tagging at
+   EL2/EL1 (MTE2) does require EL3 enablement and we need to set this option
+   ``ENABLE_FEAT_MTE2`` to 1. This option defaults to 0.
 
 Armv7-A
 ~~~~~~~
@@ -2860,13 +2891,13 @@ kernel at boot time. These can be found in the ``fdts`` directory.
 
 --------------
 
-*Copyright (c) 2013-2023, Arm Limited and Contributors. All rights reserved.*
+*Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.*
 
 .. _SMCCC: https://developer.arm.com/docs/den0028/latest
 .. _PSCI: https://developer.arm.com/documentation/den0022/latest/
 .. _Arm ARM: https://developer.arm.com/docs/ddi0487/latest
 .. _SMC Calling Convention: https://developer.arm.com/docs/den0028/latest
-.. _Trusted Board Boot Requirements CLIENT (TBBR-CLIENT) Armv8-A (ARM DEN0006D): https://developer.arm.com/docs/den0006/latest/trusted-board-boot-requirements-client-tbbr-client-armv8-a
+.. _Trusted Board Boot Requirements CLIENT (TBBR-CLIENT) Armv8-A (ARM DEN0006D): https://developer.arm.com/docs/den0006/latest
 .. _Arm Confidential Compute Architecture (Arm CCA): https://www.arm.com/why-arm/architecture/security-features/arm-confidential-compute-architecture
 .. _AArch64 exception vector table: https://developer.arm.com/documentation/100933/0100/AArch64-exception-vector-table
 
