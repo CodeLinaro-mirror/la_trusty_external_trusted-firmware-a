@@ -50,6 +50,9 @@ endif
 ifeq (${SPD},trusty)
 PLAT_BL_COMMON_SOURCES	+=	${PLAT_QEMU_COMMON_PATH}/shared_mem.c
 endif
+ifeq (${SPMC_AT_EL3},1)
+PLAT_BL_COMMON_SOURCES	+=	${PLAT_QEMU_COMMON_PATH}/shared_mem.c
+endif
 
 ifneq (${TRUSTED_BOARD_BOOT},0)
 
