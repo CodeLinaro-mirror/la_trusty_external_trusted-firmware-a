@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2023, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2020-2024, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -227,9 +227,10 @@ static uint64_t spmd_secure_interrupt_handler(uint32_t id,
 	assert(handle == cm_get_context(NON_SECURE));
 
 	/* Save the non-secure context before entering SPMC */
-	cm_el1_sysregs_context_save(NON_SECURE);
 #if SPMD_SPM_AT_SEL2
 	cm_el2_sysregs_context_save(NON_SECURE);
+#else
+	cm_el1_sysregs_context_save(NON_SECURE);
 #endif
 
 	/* Convey the event to the SPMC through the FFA_INTERRUPT interface. */
@@ -252,9 +253,10 @@ static uint64_t spmd_secure_interrupt_handler(uint32_t id,
 
 	ctx->secure_interrupt_ongoing = false;
 
-	cm_el1_sysregs_context_restore(NON_SECURE);
 #if SPMD_SPM_AT_SEL2
 	cm_el2_sysregs_context_restore(NON_SECURE);
+#else
+	cm_el1_sysregs_context_restore(NON_SECURE);
 #endif
 	cm_set_next_eret_context(NON_SECURE);
 
@@ -593,14 +595,17 @@ static int spmd_spmc_init(void *pm_addr)
 	 */
 #if (EL3_EXCEPTION_HANDLING == 0)
 	/*
-	 * Register an interrupt handler routing Group0 interrupts to SPMD
-	 * while the NWd is running.
+	 * If EL3 interrupts are supported by the platform, register an
+	 * interrupt handler routing Group0 interrupts to SPMD while the NWd is
+	 * running.
 	 */
-	rc = register_interrupt_type_handler(INTR_TYPE_EL3,
-					     spmd_group0_interrupt_handler_nwd,
-					     flags);
-	if (rc != 0) {
-		panic();
+	if (plat_ic_has_interrupt_type(INTR_TYPE_EL3)) {
+		rc = register_interrupt_type_handler(INTR_TYPE_EL3,
+						     spmd_group0_interrupt_handler_nwd,
+						     flags);
+		if (rc != 0) {
+			panic();
+		}
 	}
 #endif
 
@@ -667,16 +672,24 @@ uint64_t spmd_smc_switch_state(uint32_t smc_fid,
 			       uint64_t x2,
 			       uint64_t x3,
 			       uint64_t x4,
-			       void *handle)
+			       void *handle,
+			       uint64_t flags)
 {
 	unsigned int secure_state_in = (secure_origin) ? SECURE : NON_SECURE;
 	unsigned int secure_state_out = (!secure_origin) ? SECURE : NON_SECURE;
 
+#if SPMD_SPM_AT_SEL2
+	if ((secure_state_out == SECURE) && (is_sve_hint_set(flags) == true)) {
+		/*
+		 * Set the SVE hint bit in x0 and pass to the lower secure EL,
+		 * if it was set by the caller.
+		 */
+		smc_fid |= (FUNCID_SVE_HINT_MASK << FUNCID_SVE_HINT_SHIFT);
+	}
+#endif
+
 	/* Save incoming security state */
 #if SPMD_SPM_AT_SEL2
-	if (secure_state_in == NON_SECURE) {
-		cm_el1_sysregs_context_save(secure_state_in);
-	}
 	cm_el2_sysregs_context_save(secure_state_in);
 #else
 	cm_el1_sysregs_context_save(secure_state_in);
@@ -684,9 +697,6 @@ uint64_t spmd_smc_switch_state(uint32_t smc_fid,
 
 	/* Restore outgoing security state */
 #if SPMD_SPM_AT_SEL2
-	if (secure_state_out == NON_SECURE) {
-		cm_el1_sysregs_context_restore(secure_state_out);
-	}
 	cm_el2_sysregs_context_restore(secure_state_out);
 #else
 	cm_el1_sysregs_context_restore(secure_state_out);
@@ -746,8 +756,9 @@ static uint64_t spmd_smc_forward(uint32_t smc_fid,
 		return spmc_smc_handler(smc_fid, secure_origin, x1, x2, x3, x4,
 					cookie, handle, flags);
 	}
+
 	return spmd_smc_switch_state(smc_fid, secure_origin, x1, x2, x3, x4,
-				     handle);
+				     handle, flags);
 
 }
 
@@ -844,7 +855,7 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 	unsigned int linear_id = plat_my_core_pos();
 	spmd_spm_core_context_t *ctx = spmd_get_context();
 	bool secure_origin;
-	int32_t ret;
+	int ret;
 	uint32_t input_version;
 
 	/* Determine which security state this SMC originated from */
@@ -936,9 +947,10 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 				break;
 			}
 			/* Save non-secure system registers context */
-			cm_el1_sysregs_context_save(NON_SECURE);
 #if SPMD_SPM_AT_SEL2
 			cm_el2_sysregs_context_save(NON_SECURE);
+#else
+			cm_el1_sysregs_context_save(NON_SECURE);
 #endif
 
 			/*
@@ -1151,6 +1163,25 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 		}
 		break; /* Not reached */
 
+	case FFA_MSG_SEND_DIRECT_REQ2_SMC64:
+		if (!secure_origin) {
+			/* Validate source endpoint is non-secure for non-secure caller. */
+			if (ffa_is_secure_world_id(ffa_endpoint_source(x1))) {
+				return spmd_ffa_error_return(handle,
+						FFA_ERROR_INVALID_PARAMETER);
+			}
+		}
+		/* FFA_MSG_SEND_DIRECT_REQ2 not used for framework messages. */
+		if (secure_origin && spmd_is_spmc_message(x1)) {
+			return spmd_ffa_error_return(handle, FFA_ERROR_INVALID_PARAMETER);
+		} else {
+			/* Forward direct message to the other world */
+			return spmd_smc_forward(smc_fid, secure_origin,
+						x1, x2, x3, x4, cookie,
+						handle, flags);
+		}
+		break; /* Not reached */
+
 	case FFA_MSG_SEND_DIRECT_RESP_SMC32:
 	case FFA_MSG_SEND_DIRECT_RESP_SMC64:
 		if (secure_origin && (spmd_is_spmc_message(x1) ||
@@ -1163,7 +1194,12 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 						handle, flags);
 		}
 		break; /* Not reached */
-
+	case FFA_MSG_SEND_DIRECT_RESP2_SMC64:
+		/* Forward direct message to the other world */
+		return spmd_smc_forward(smc_fid, secure_origin,
+					x1, x2, x3, x4, cookie,
+					handle, flags);
+		break; /* Not reached */
 	case FFA_RX_RELEASE:
 	case FFA_RXTX_MAP_SMC32:
 	case FFA_RXTX_MAP_SMC64:
@@ -1279,6 +1315,12 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 					handle, flags);
 		break; /* Not reached */
 #endif
+	case FFA_CONSOLE_LOG_SMC32:
+	case FFA_CONSOLE_LOG_SMC64:
+		/* This interface must not be forwarded to other worlds. */
+		return spmd_ffa_error_return(handle, FFA_ERROR_NOT_SUPPORTED);
+		break; /* not reached */
+
 	case FFA_EL3_INTR_HANDLE:
 		if (secure_origin) {
 			return spmd_handle_group0_intr_swd(handle);
