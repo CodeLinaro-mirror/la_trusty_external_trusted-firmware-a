@@ -13,6 +13,7 @@
 #include <common/bl_common.h>
 #include <lib/xlat_tables/xlat_tables_v2.h>
 #include <services/el3_spmc_ffa_memory.h>
+#include <services/ffa_svc.h>
 #if ENABLE_RME
 #include <services/rmm_core_manifest.h>
 #endif
@@ -187,14 +188,36 @@ int plat_spmc_shmem_datastore_get(uint8_t **datastore, size_t *size)
 	return 0;
 }
 
+static int qemu_spmc_mem_set_shared(struct ffa_mtd *desc, bool shared)
+{
+	struct ffa_emad_v1_0 *emad0;
+	struct ffa_comp_mrd *comp;
+	bool secure;
+	int ret;
+
+#if MAKE_FFA_VERSION(1, 1) > FFA_VERSION_COMPILED
+#error "TF-A was compiled for FF-A v1.0"
+#endif
+	assert(is_aligned(desc->emad_offset, 16));
+	emad0 = (struct ffa_emad_v1_0 *)((uint8_t *)desc + desc->emad_offset);
+	comp = (struct ffa_comp_mrd *)((uint8_t *)desc + emad0->comp_mrd_offset);
+	secure = (desc->flags & FFA_MTD_FLAG_TYPE_MASK) == FFA_MTD_FLAG_TYPE_LEND_MEMORY;
+
+	ret = qemu_ffa_comp_set_shared(comp, shared, secure);
+	if (!ret && secure) {
+		desc->memory_region_attributes &= ~FFA_MEM_ATTR_NS_BIT;
+	}
+	return ret;
+}
+
 int plat_spmc_shmem_begin(struct ffa_mtd *desc)
 {
-	return 0;
+	return qemu_spmc_mem_set_shared(desc, true);
 }
 
 int plat_spmc_shmem_reclaim(struct ffa_mtd *desc)
 {
-	return 0;
+	return qemu_spmc_mem_set_shared(desc, false);
 }
 #endif
 
