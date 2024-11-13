@@ -1364,7 +1364,8 @@ void spmc_ffa_mem_retrieve_clear_ns_bit(struct ffa_mtd *resp,
  *                      FFA_MEM_RETRIEVE_RESP.
  *
  * Implements a subset of the FF-A FFA_MEM_RETRIEVE_REQ call.
- * Used by secure os to retrieve memory already shared by non-secure os.
+ * Used by secure os to retrieve memory already shared by non-secure os,
+ * or by the hypervisor to retrieve the memory region for a specific handle.
  * If the data does not fit in a single FFA_MEM_RETRIEVE_RESP message,
  * the client must call FFA_MEM_FRAG_RX until the full response has been
  * received.
@@ -1400,12 +1401,6 @@ spmc_ffa_mem_retrieve_req(uint32_t smc_fid,
 	uint32_t ffa_version = get_partition_ffa_version(secure_origin);
 	struct secure_partition_desc *sp_ctx = spmc_get_current_sp_ctx();
 
-	if (!secure_origin) {
-		WARN("%s: unsupported retrieve req direction.\n", __func__);
-		return spmc_ffa_error_return(handle,
-					     FFA_ERROR_INVALID_PARAMETER);
-	}
-
 	if (address != 0U || page_count != 0U) {
 		WARN("%s: custom memory region not supported.\n", __func__);
 		return spmc_ffa_error_return(handle,
@@ -1437,7 +1432,8 @@ spmc_ffa_mem_retrieve_req(uint32_t smc_fid,
 		goto err_unlock_mailbox;
 	}
 
-	if (req->emad_count == 0U) {
+	/* req->emad_count is not set for retrieve by hypervisor */
+	if (secure_origin && req->emad_count == 0U) {
 		WARN("%s: unsupported attribute desc count %u.\n",
 		     __func__, obj->desc.emad_count);
 		ret = FFA_ERROR_INVALID_PARAMETER;
@@ -1493,6 +1489,20 @@ spmc_ffa_mem_retrieve_req(uint32_t smc_fid,
 		goto err_unlock_all;
 	}
 
+	/*
+	 * TODO: add support for descriptors with more than one EMAD
+	 * If we get a retrieve from the hypervisor, we currently just
+	 * copy the existing descriptor below as is. The spec requires
+	 * that the returned descriptor only contain one EMAD, so for
+	 * now we enforce that here.
+	 */
+	if (req->emad_count == 0U && obj->desc.emad_count != 1U) {
+		WARN("%s: unsupported endpoint count %u != 1\n", __func__,
+		     obj->desc.emad_count);
+		ret = FFA_ERROR_INVALID_PARAMETER;
+		goto err_unlock_all;
+	}
+
 	/* Ensure the NS bit is set to 0 in the request. */
 	if ((req->memory_region_attributes & FFA_MEM_ATTR_NS_BIT) != 0U) {
 		WARN("%s: NS mem attributes flags MBZ.\n", __func__);
@@ -1526,7 +1536,8 @@ spmc_ffa_mem_retrieve_req(uint32_t smc_fid,
 	}
 
 	/* Validate the caller is a valid participant. */
-	if (!spmc_shmem_obj_validate_id(obj, sp_ctx->sp_id)) {
+	if (req->emad_count != 0U &&
+	    !spmc_shmem_obj_validate_id(obj, sp_ctx->sp_id)) {
 		WARN("%s: Invalid endpoint ID (0x%x).\n",
 			__func__, sp_ctx->sp_id);
 		ret = FFA_ERROR_INVALID_PARAMETER;
@@ -1610,8 +1621,45 @@ spmc_ffa_mem_retrieve_req(uint32_t smc_fid,
 		memcpy(resp, &obj->desc, copy_size);
 	}
 
+	if (req->emad_count == 0U) {
+		size_t emad_size;
+		struct ffa_emad_v1_0 *emad;
+
+		assert(resp->handle == req->handle);
+		assert(resp->emad_count == 1U);
+
+		emad = spmc_shmem_obj_get_emad(resp, 0, ffa_version,
+					       &emad_size);
+		/*
+		 * The Sender endpoint ID field must be set to the Lender
+		 * or Owner VM ID in the transaction descriptor.
+		 */
+		emad->mapd.endpoint_id = obj->desc.sender_id;
+	}
+
 	/* Clear the NS bit in the response if applicable. */
-	spmc_ffa_mem_retrieve_clear_ns_bit(resp, sp_ctx);
+	if (secure_origin) {
+		spmc_ffa_mem_retrieve_clear_ns_bit(resp, sp_ctx);
+	} else {
+		/*
+		 * The NS bit is set by the SPMC in the corresponding invocation
+		 * of the FFA_MEM_RETRIEVE_RESP ABI at the Non-secure physical
+		 * FF-A instance as follows.
+		 */
+		if (ffa_version > MAKE_FFA_VERSION(1, 0)) {
+			/*
+			 * The bit is set to b’1 if the version of the Framework
+			 * implemented by the Hypervisor is greater than v1.0
+			 */
+			resp->memory_region_attributes |= FFA_MEM_ATTR_NS_BIT;
+		} else {
+			/*
+			 * The bit is set to b’0 if the version of the Framework
+			 * implemented by the Hypervisor is v1.0
+			 */
+			resp->memory_region_attributes &= ~FFA_MEM_ATTR_NS_BIT;
+		}
+	}
 
 	spin_unlock(&spmc_shmem_obj_state.lock);
 	spin_unlock(&mbox->lock);
@@ -1659,13 +1707,6 @@ long spmc_ffa_mem_frag_rx(uint32_t smc_fid,
 	uint64_t mem_handle = handle_low | (((uint64_t)handle_high) << 32);
 	struct spmc_shmem_obj *obj;
 	uint32_t ffa_version = get_partition_ffa_version(secure_origin);
-
-	if (!secure_origin) {
-		WARN("%s: can only be called from swld.\n",
-		     __func__);
-		return spmc_ffa_error_return(handle,
-					     FFA_ERROR_INVALID_PARAMETER);
-	}
 
 	spin_lock(&spmc_shmem_obj_state.lock);
 
