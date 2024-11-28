@@ -13,6 +13,8 @@
 #include <trusty/arm_ffa.h>
 #include <trusty/ffa_helpers.h>
 
+#include "qemu_private.h"
+
 #define NS_DRAM0_BITMAP_SIZE DIV_ROUND_UP_2EVAL(NS_DRAM0_SIZE, PAGE_SIZE * 8)
 static uint8_t trusty_shmem_shared[NS_DRAM0_BITMAP_SIZE];
 static uint8_t trusty_shmem_secure[NS_DRAM0_BITMAP_SIZE];
@@ -85,17 +87,13 @@ err:
 	return -EBUSY;
 }
 
-
-int plat_mem_set_shared(struct ffa_mtd *mtd, bool shared)
+int qemu_ffa_comp_set_shared(void *compv, bool shared, bool secure)
 {
-	struct ffa_comp_mrd *comp = trusty_ffa_mtd_get_comp_mrd(mtd);
+	struct ffa_comp_mrd *comp = compv;
 	size_t count = comp->address_range_count;
 	struct ffa_cons_mrd *cons_mrd;
 	int ret = 0;
 	size_t i;
-	bool secure;
-
-	secure = trusty_ffa_should_be_secure(mtd);
 
 	for (i = 0, cons_mrd = comp->address_range_array; i < count;
 	     i++, cons_mrd++) {
@@ -106,9 +104,6 @@ int plat_mem_set_shared(struct ffa_mtd *mtd, bool shared)
 		}
 	}
 
-	if (secure) {
-		mtd->memory_region_attributes &= ~FFA_MEM_ATTR_NONSECURE;
-	}
 	return 0;
 
 err:
@@ -124,6 +119,19 @@ err:
 			/* Failed to revert change */
 			panic();
 		}
+	}
+	return ret;
+}
+
+int plat_mem_set_shared(struct ffa_mtd *mtd, bool shared)
+{
+	struct ffa_comp_mrd *comp = trusty_ffa_mtd_get_comp_mrd(mtd);
+	bool secure = trusty_ffa_should_be_secure(mtd);
+	int ret;
+
+	ret = qemu_ffa_comp_set_shared(comp, shared, secure);
+	if (!ret && secure) {
+		mtd->memory_region_attributes &= ~FFA_MEM_ATTR_NONSECURE;
 	}
 	return ret;
 }
