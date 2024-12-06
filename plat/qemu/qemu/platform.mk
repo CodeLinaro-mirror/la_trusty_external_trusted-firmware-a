@@ -50,6 +50,9 @@ endif
 ifeq (${SPD},trusty)
 PLAT_BL_COMMON_SOURCES	+=	${PLAT_QEMU_COMMON_PATH}/shared_mem.c
 endif
+ifeq (${SPMC_AT_EL3},1)
+PLAT_BL_COMMON_SOURCES	+=	${PLAT_QEMU_COMMON_PATH}/shared_mem.c
+endif
 
 ifneq (${TRUSTED_BOARD_BOOT},0)
 
@@ -171,6 +174,17 @@ BL31_SOURCES		+=	plat/common/plat_spmd_manifest.c	\
 				common/uuid.c				\
 				${LIBFDT_SRCS} 				\
 				${FDT_WRAPPERS_SOURCES}
+
+ifeq (${SPMC_AT_EL3},1)
+ifeq (${TRUSTY_SPD_WITH_GENERIC_SERVICES},1)
+# Add the Trusty SMCs from the SPDs so Trusty can get the GIC registers
+BL31_SOURCES		+=	services/spd/trusty/generic-arm64-smcall.c
+PLAT_INCLUDES		+=	-Iservices/spd/trusty/include
+# {TRUSTY_SPD_WITH_GENERIC_SERVICES},1
+endif
+# {SPMC_AT_EL3},1
+endif
+
 endif
 endif
 
@@ -208,6 +222,10 @@ endif
 BL32_RAM_LOCATION	:=	tdram
 ifeq (${BL32_RAM_LOCATION}, tsram)
   BL32_RAM_LOCATION_ID = SEC_SRAM_ID
+  ifeq (${ENABLE_RME},1)
+	# Avoid overlap between BL2 and BL32 to ease GPT partition
+	$(error "With RME, BL32 must use secure DRAM")
+  endif
 else ifeq (${BL32_RAM_LOCATION}, tdram)
   BL32_RAM_LOCATION_ID = SEC_DRAM_ID
 else

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2023, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2024, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -142,8 +142,6 @@ void bl2_el3_early_platform_setup(u_register_t arg0,
 				  u_register_t arg2 __unused,
 				  u_register_t arg3 __unused)
 {
-	stm32mp_setup_early_console();
-
 	stm32mp_save_boot_ctx_address(arg0);
 }
 
@@ -255,11 +253,6 @@ void bl2_el3_plat_arch_setup(void)
 		mmio_clrbits_32(rcc_base + RCC_BDCR, RCC_BDCR_VSWRST);
 	}
 
-#if STM32MP15
-	/* Disable MCKPROT */
-	mmio_clrbits_32(rcc_base + RCC_TZCR, RCC_TZCR_MCKPROT);
-#endif
-
 	/*
 	 * Set minimum reset pulse duration to 31ms for discrete power
 	 * supplied boards.
@@ -318,7 +311,7 @@ void bl2_el3_plat_arch_setup(void)
 
 skip_console_init:
 #if !TRUSTED_BOARD_BOOT
-	if (stm32mp_is_closed_device()) {
+	if (stm32mp_check_closed_device() == STM32MP_CHIP_SEC_CLOSED) {
 		/* Closed chip mandates authentication */
 		ERROR("Secure chip: TRUSTED_BOARD_BOOT must be enabled\n");
 		panic();
@@ -347,7 +340,7 @@ skip_console_init:
 	stm32_iwdg_refresh();
 
 	if (bsec_read_debug_conf() != 0U) {
-		if (stm32mp_is_closed_device()) {
+		if (stm32mp_check_closed_device() == STM32MP_CHIP_SEC_CLOSED) {
 #if DEBUG
 			WARN("\n%s", debug_msg);
 #else
@@ -367,7 +360,9 @@ skip_console_init:
 	print_reset_reason();
 
 #if STM32MP15
-	update_monotonic_counter();
+	if (stm32mp_check_closed_device() == STM32MP_CHIP_SEC_CLOSED) {
+		update_monotonic_counter();
+	}
 #endif
 
 	stm32mp1_syscfg_enable_io_compensation_finish();
