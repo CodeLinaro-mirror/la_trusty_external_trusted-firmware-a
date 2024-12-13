@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include <arch.h>
+#include <lib/extensions/sysreg128.h>
 
 /**********************************************************************
  * Macros which create inline functions to read or write CPU system
@@ -263,7 +264,12 @@ void disable_mpu_icache_el2(void);
 #define write_daifclr(val) SYSREG_WRITE_CONST(daifclr, val)
 #define write_daifset(val) SYSREG_WRITE_CONST(daifset, val)
 
+#if ENABLE_FEAT_D128
+DECLARE_SYSREG128_RW_FUNCS(par_el1)
+#else
 DEFINE_SYSREG_RW_FUNCS(par_el1)
+#endif
+
 DEFINE_IDREG_READ_FUNC(id_pfr1_el1)
 DEFINE_IDREG_READ_FUNC(id_aa64isar0_el1)
 DEFINE_IDREG_READ_FUNC(id_aa64isar1_el1)
@@ -443,13 +449,21 @@ DEFINE_SYSREG_RW_FUNCS(tcr_el1)
 DEFINE_SYSREG_RW_FUNCS(tcr_el2)
 DEFINE_SYSREG_RW_FUNCS(tcr_el3)
 
+#if ENABLE_FEAT_D128
+DECLARE_SYSREG128_RW_FUNCS(ttbr0_el1)
+DECLARE_SYSREG128_RW_FUNCS(ttbr1_el1)
+DECLARE_SYSREG128_RW_FUNCS(ttbr0_el2)
+DECLARE_SYSREG128_RW_FUNCS(ttbr1_el2)
+DECLARE_SYSREG128_RW_FUNCS(vttbr_el2)
+#else
 DEFINE_SYSREG_RW_FUNCS(ttbr0_el1)
-DEFINE_SYSREG_RW_FUNCS(ttbr0_el2)
-DEFINE_SYSREG_RW_FUNCS(ttbr0_el3)
-
 DEFINE_SYSREG_RW_FUNCS(ttbr1_el1)
-
+DEFINE_SYSREG_RW_FUNCS(ttbr0_el2)
+DEFINE_RENAME_SYSREG_RW_FUNCS(ttbr1_el2, TTBR1_EL2)
 DEFINE_SYSREG_RW_FUNCS(vttbr_el2)
+#endif
+
+DEFINE_SYSREG_RW_FUNCS(ttbr0_el3)
 
 DEFINE_SYSREG_RW_FUNCS(cptr_el2)
 DEFINE_SYSREG_RW_FUNCS(cptr_el3)
@@ -574,7 +588,6 @@ DEFINE_RENAME_SYSREG_RW_FUNCS(scxtnum_el0, SCXTNUM_EL0)
 
 /* Armv8.1 VHE Registers */
 DEFINE_RENAME_SYSREG_RW_FUNCS(contextidr_el2, CONTEXTIDR_EL2)
-DEFINE_RENAME_SYSREG_RW_FUNCS(ttbr1_el2, TTBR1_EL2)
 
 /* Armv8.2 ID Registers */
 DEFINE_RENAME_IDREG_READ_FUNC(id_aa64mmfr2_el1, ID_AA64MMFR2_EL1)
@@ -639,6 +652,13 @@ DEFINE_RENAME_SYSREG_RW_FUNCS(hcrx_el2, HCRX_EL2)
 /* Armv8.9 system registers */
 DEFINE_RENAME_IDREG_READ_FUNC(id_aa64mmfr3_el1, ID_AA64MMFR3_EL1)
 
+/* Armv8.9 FEAT_FGT2 Registers */
+DEFINE_RENAME_SYSREG_RW_FUNCS(hdfgrtr2_el2, HDFGRTR2_EL2)
+DEFINE_RENAME_SYSREG_RW_FUNCS(hdfgwtr2_el2, HDFGWTR2_EL2)
+DEFINE_RENAME_SYSREG_RW_FUNCS(hfgitr2_el2, HFGITR2_EL2)
+DEFINE_RENAME_SYSREG_RW_FUNCS(hfgrtr2_el2, HFGRTR2_EL2)
+DEFINE_RENAME_SYSREG_RW_FUNCS(hfgwtr2_el2, HFGWTR2_EL2)
+
 /* FEAT_TCR2 Register */
 DEFINE_RENAME_SYSREG_RW_FUNCS(tcr2_el1, TCR2_EL1)
 DEFINE_RENAME_SYSREG_RW_FUNCS(tcr2_el2, TCR2_EL2)
@@ -662,6 +682,22 @@ DEFINE_RENAME_SYSREG_RW_FUNCS(gcscr_el1, GCSCR_EL1)
 DEFINE_RENAME_SYSREG_RW_FUNCS(gcscre0_el1, GCSCRE0_EL1)
 DEFINE_RENAME_SYSREG_RW_FUNCS(gcspr_el1, GCSPR_EL1)
 DEFINE_RENAME_SYSREG_RW_FUNCS(gcspr_el0, GCSPR_EL0)
+
+/* FEAT_THE Registers */
+#if ENABLE_FEAT_D128
+DECLARE_SYSREG128_RW_FUNCS(rcwmask_el1)
+DECLARE_SYSREG128_RW_FUNCS(rcwsmask_el1)
+#else
+DEFINE_RENAME_SYSREG_RW_FUNCS(rcwmask_el1, RCWMASK_EL1)
+DEFINE_RENAME_SYSREG_RW_FUNCS(rcwsmask_el1, RCWSMASK_EL1)
+#endif
+
+/* FEAT_SCTLR2 Registers */
+DEFINE_RENAME_SYSREG_RW_FUNCS(sctlr2_el1, SCTLR2_EL1)
+DEFINE_RENAME_SYSREG_RW_FUNCS(sctlr2_el2, SCTLR2_EL2)
+
+/* FEAT_LS64_ACCDATA Registers */
+DEFINE_RENAME_SYSREG_RW_FUNCS(accdata_el1, ACCDATA_EL1)
 
 /* DynamIQ Control registers */
 DEFINE_RENAME_SYSREG_RW_FUNCS(clusterpwrdn_el1, CLUSTERPWRDN_EL1)
@@ -806,15 +842,6 @@ static inline void tlbirpalos_512m(uintptr_t addr)
 {
 	TLBIRPALOS(addr, TLBI_SZ_512M);
 }
-
-/*
- * Invalidate TLBs of GPT entries by Physical address, last level.
- *
- * @pa: the starting address for the range
- *      of invalidation
- * @size: size of the range of invalidation
- */
-void gpt_tlbi_by_pa_ll(uint64_t pa, size_t size);
 
 /* Previously defined accessor functions with incomplete register names  */
 

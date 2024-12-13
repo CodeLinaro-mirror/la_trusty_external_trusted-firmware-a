@@ -24,7 +24,7 @@ FVP_GICR_REGION_PROTECTION	:= 0
 
 FVP_DT_PREFIX			:= fvp-base-gicv3-psci
 
-# Size (in kilobytes) of the Trusted SRAM region to  utilize when building for
+# Size (in kilobytes) of the Trusted SRAM region to  utilize when building for
 # the FVP platform. This option defaults to 256.
 FVP_TRUSTED_SRAM_SIZE		:= 256
 
@@ -47,16 +47,22 @@ ifeq (${SPM_MM}, 0)
 ifeq (${CTX_INCLUDE_FPREGS}, 0)
       ENABLE_SME_FOR_NS		:= 2
       ENABLE_SME2_FOR_NS	:= 2
+else
+      ENABLE_SVE_FOR_NS		:= 0
+      ENABLE_SME_FOR_NS		:= 0
+      ENABLE_SME2_FOR_NS	:= 0
 endif
 endif
 
       ENABLE_BRBE_FOR_NS	:= 2
       ENABLE_TRBE_FOR_NS	:= 2
+      ENABLE_FEAT_D128		:= 2
 endif
 
 ENABLE_SYS_REG_TRACE_FOR_NS	:= 2
 ENABLE_FEAT_CSV2_2		:= 2
 ENABLE_FEAT_CSV2_3		:= 2
+ENABLE_FEAT_DEBUGV8P9		:= 2
 ENABLE_FEAT_DIT			:= 2
 ENABLE_FEAT_PAN			:= 2
 ENABLE_FEAT_VHE			:= 2
@@ -65,11 +71,16 @@ ENABLE_FEAT_SEL2		:= 2
 ENABLE_TRF_FOR_NS		:= 2
 ENABLE_FEAT_ECV			:= 2
 ENABLE_FEAT_FGT			:= 2
+ENABLE_FEAT_FGT2		:= 2
+ENABLE_FEAT_THE			:= 2
 ENABLE_FEAT_TCR2		:= 2
 ENABLE_FEAT_S2PIE		:= 2
 ENABLE_FEAT_S1PIE		:= 2
 ENABLE_FEAT_S2POE		:= 2
 ENABLE_FEAT_S1POE		:= 2
+ENABLE_FEAT_SCTLR2		:= 2
+ENABLE_FEAT_MTE2		:= 2
+ENABLE_FEAT_LS64_ACCDATA	:= 2
 
 # The FVP platform depends on this macro to build with correct GIC driver.
 $(eval $(call add_define,FVP_USE_GIC_DRIVER))
@@ -187,6 +198,7 @@ else
 					lib/cpus/aarch64/cortex_a710.S		\
 					lib/cpus/aarch64/cortex_a715.S		\
 					lib/cpus/aarch64/cortex_a720.S		\
+					lib/cpus/aarch64/cortex_a720_ae.S	\
 					lib/cpus/aarch64/neoverse_n_common.S	\
 					lib/cpus/aarch64/neoverse_n1.S		\
 					lib/cpus/aarch64/neoverse_n2.S		\
@@ -202,10 +214,11 @@ endif
 
 #Build AArch64-only CPUs with no FVP model yet.
 ifeq (${BUILD_CPUS_WITH_NO_FVP_MODEL},1)
-	FVP_CPU_LIBS    +=	lib/cpus/aarch64/neoverse_n3.S	\
+	FVP_CPU_LIBS    +=	lib/cpus/aarch64/neoverse_n3.S		\
 				lib/cpus/aarch64/cortex_gelas.S		\
 				lib/cpus/aarch64/nevis.S		\
-				lib/cpus/aarch64/travis.S
+				lib/cpus/aarch64/travis.S		\
+				lib/cpus/aarch64/cortex_arcadia.S
 endif
 
 else
@@ -222,6 +235,7 @@ BL1_SOURCES		+=	drivers/arm/smmu/smmu_v3.c			\
 				lib/semihosting/${ARCH}/semihosting_call.S	\
 				plat/arm/board/fvp/${ARCH}/fvp_helpers.S	\
 				plat/arm/board/fvp/fvp_bl1_setup.c		\
+				plat/arm/board/fvp/fvp_cpu_pwr.c		\
 				plat/arm/board/fvp/fvp_err.c			\
 				plat/arm/board/fvp/fvp_io_storage.c		\
 				plat/arm/board/fvp/fvp_topology.c		\
@@ -252,10 +266,12 @@ BL2_SOURCES		+=	plat/arm/common/fconf/fconf_nv_cntr_getter.c
 endif
 
 ifeq (${ENABLE_RME},1)
-BL2_SOURCES		+=	plat/arm/board/fvp/aarch64/fvp_helpers.S
+BL2_SOURCES		+=	plat/arm/board/fvp/aarch64/fvp_helpers.S	\
+				plat/arm/board/fvp/fvp_cpu_pwr.c
 
 BL31_SOURCES		+=	plat/arm/board/fvp/fvp_plat_attest_token.c	\
-				plat/arm/board/fvp/fvp_realm_attest_key.c
+				plat/arm/board/fvp/fvp_realm_attest_key.c	\
+				plat/arm/board/fvp/fvp_el3_token_sign.c
 endif
 
 ifeq (${ENABLE_FEAT_RNG_TRAP},1)
@@ -264,6 +280,7 @@ endif
 
 ifeq (${RESET_TO_BL2},1)
 BL2_SOURCES		+=	plat/arm/board/fvp/${ARCH}/fvp_helpers.S	\
+				plat/arm/board/fvp/fvp_cpu_pwr.c		\
 				plat/arm/board/fvp/fvp_bl2_el3_setup.c		\
 				${FVP_CPU_LIBS}					\
 				${FVP_INTERCONNECT_SOURCES}
@@ -290,6 +307,7 @@ BL31_SOURCES		+=	drivers/arm/fvp/fvp_pwrc.c			\
 				plat/arm/board/fvp/fvp_pm.c			\
 				plat/arm/board/fvp/fvp_topology.c		\
 				plat/arm/board/fvp/aarch64/fvp_helpers.S	\
+				plat/arm/board/fvp/fvp_cpu_pwr.c		\
 				plat/arm/common/arm_nor_psci_mem_protect.c	\
 				${FVP_CPU_LIBS}					\
 				${FVP_GIC_SOURCES}				\
@@ -315,10 +333,6 @@ ifeq (${USE_SP804_TIMER},1)
 BL31_SOURCES		+=	drivers/arm/sp804/sp804_delay_timer.c
 else
 BL31_SOURCES		+=	drivers/delay_timer/generic_delay_timer.c
-endif
-
-ifeq (${TRANSFER_LIST}, 1)
-include lib/transfer_list/transfer_list.mk
 endif
 
 # Add the FDT_SOURCES and options for Dynamic Config (only for Unix env)
@@ -378,6 +392,18 @@ endif
 $(eval $(call TOOL_ADD_PAYLOAD,${FVP_TB_FW_CONFIG},--tb-fw-config,${FVP_TB_FW_CONFIG}))
 # Add the HW_CONFIG to FIP and specify the same to certtool
 $(eval $(call TOOL_ADD_PAYLOAD,${FVP_HW_CONFIG},--hw-config,${FVP_HW_CONFIG}))
+endif
+
+ifeq (${TRANSFER_LIST}, 1)
+include lib/transfer_list/transfer_list.mk
+
+ifeq ($(RESET_TO_BL31), 1)
+HW_CONFIG			:=	${FVP_HW_CONFIG}
+FW_HANDOFF_SIZE			:=	20000
+
+TRANSFER_LIST_DTB_OFFSET	:=	0x20
+$(eval $(call add_define,TRANSFER_LIST_DTB_OFFSET))
+endif
 endif
 
 # Enable dynamic mitigation support by default
