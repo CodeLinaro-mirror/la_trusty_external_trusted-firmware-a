@@ -7,6 +7,7 @@
 #include <assert.h>
 
 #include <arch.h>
+#include <arch_features.h>
 #include <arch_helpers.h>
 #include <common/bl_common.h>
 #include <common/debug.h>
@@ -25,6 +26,8 @@
 #include <platform_def.h>
 
 static struct transfer_list_header *secure_tl __unused;
+static struct transfer_list_header *ns_tl __unused;
+
 /*
  * Placeholder variables for copying the arguments that have been passed to
  * BL31 from BL2.
@@ -95,7 +98,12 @@ struct entry_point_info *bl31_plat_get_next_image_ep_info(uint32_t type)
 
 	assert(sec_state_is_valid(type));
 	if (type == NON_SECURE) {
+#if TRANSFER_LIST && !RESET_TO_BL31
+		next_image_info = transfer_list_set_handoff_args(
+			ns_tl, &bl33_image_ep_info);
+#else
 		next_image_info = &bl33_image_ep_info;
+#endif
 	}
 #if ENABLE_RME
 	else if (type == REALM) {
@@ -128,6 +136,23 @@ struct entry_point_info *bl31_plat_get_next_image_ep_info(uint32_t type)
 void __init arm_bl31_early_platform_setup(u_register_t arg0, u_register_t arg1,
 					  u_register_t arg2, u_register_t arg3)
 {
+#if RESET_TO_BL31
+	/* Populate entry point information for BL33 */
+	SET_PARAM_HEAD(&bl33_image_ep_info, PARAM_EP, VERSION_1, 0);
+	/*
+	 * Tell BL31 where the non-trusted software image
+	 * is located and the entry state information
+	 */
+	bl33_image_ep_info.pc = plat_get_ns_image_entrypoint();
+
+	bl33_image_ep_info.spsr = arm_get_spsr_for_bl33_entry();
+	SET_SECURITY_STATE(bl33_image_ep_info.h.attr, NON_SECURE);
+
+	bl33_image_ep_info.args.arg0 = PLAT_ARM_TRANSFER_LIST_DTB_OFFSET;
+	bl33_image_ep_info.args.arg1 =
+		TRANSFER_LIST_HANDOFF_X1_VALUE(REGISTER_CONVENTION_VERSION);
+	bl33_image_ep_info.args.arg3 = FW_NS_HANDOFF_BASE;
+#else
 	struct transfer_list_entry *te = NULL;
 	struct entry_point_info *ep;
 
@@ -160,6 +185,7 @@ void __init arm_bl31_early_platform_setup(u_register_t arg0, u_register_t arg1,
 			}
 		}
 	}
+#endif /* RESET_TO_BL31 */
 }
 #else
 void __init arm_bl31_early_platform_setup(void *from_bl2, uintptr_t soc_fw_config,
@@ -338,6 +364,36 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
  ******************************************************************************/
 void arm_bl31_platform_setup(void)
 {
+	struct transfer_list_entry *te __unused;
+
+#if TRANSFER_LIST && !RESET_TO_BL31
+	ns_tl = transfer_list_init((void *)FW_NS_HANDOFF_BASE,
+				   PLAT_ARM_FW_HANDOFF_SIZE);
+
+	if (ns_tl == NULL) {
+		ERROR("Non-secure transfer list initialisation failed!");
+		panic();
+	}
+
+	te = transfer_list_find(secure_tl, TL_TAG_FDT);
+	assert(te != NULL);
+
+	/*
+	 * A pre-existing assumption is that FCONF is unsupported w/ RESET_TO_BL2 and
+	 * RESET_TO_BL31. In the case of RESET_TO_BL31 this makes sense because there
+	 * isn't a prior stage to load the device tree, but the reasoning for RESET_TO_BL2 is
+	 * less clear. For the moment hardware properties that would normally be
+	 * derived from the DT are statically defined.
+	 */
+#if !RESET_TO_BL2
+	fconf_populate("HW_CONFIG", (uintptr_t)transfer_list_entry_data(te));
+#endif
+
+	te = transfer_list_add(ns_tl, TL_TAG_FDT, te->data_size,
+			       transfer_list_entry_data(te));
+	assert(te != NULL);
+#endif /* TRANSFER_LIST */
+
 	/* Initialize the GIC driver, cpu and distributor interfaces */
 	plat_arm_gic_driver_init();
 	plat_arm_gic_init();
@@ -380,8 +436,18 @@ void arm_bl31_platform_setup(void)
  ******************************************************************************/
 void arm_bl31_plat_runtime_setup(void)
 {
+	struct transfer_list_entry *te __unused;
 	/* Initialize the runtime console */
 	arm_console_runtime_init();
+
+#if TRANSFER_LIST && !RESET_TO_BL31
+	/*
+	 * We assume BL31 has added all TE's required by BL33 at this stage, ensure
+	 * that data is visible to all observers by performing a flush operation, so
+	 * they can access the updated data even if caching is not enabled.
+	 */
+	flush_dcache_range((uintptr_t)ns_tl, ns_tl->size);
+#endif /* TRANSFER_LIST && !(RESET_TO_BL2 || RESET_TO_BL31) */
 
 #if RECLAIM_INIT_CODE
 	arm_free_init_memory();
@@ -480,6 +546,13 @@ void __init arm_bl31_plat_arch_setup(void)
 	enable_mmu_el3(0);
 
 #if ENABLE_RME
+#if RESET_TO_BL31
+	/*  initialize GPT only when RME is enabled. */
+	assert(is_feat_rme_present());
+
+	/* Initialise and enable granule protection after MMU. */
+	arm_gpt_setup();
+#endif /* RESET_TO_BL31 */
 	/*
 	 * Initialise Granule Protection library and enable GPC for the primary
 	 * processor. The tables have already been initialized by a previous BL
@@ -497,15 +570,5 @@ void __init arm_bl31_plat_arch_setup(void)
 
 void __init bl31_plat_arch_setup(void)
 {
-	struct transfer_list_entry *te __unused;
-
 	arm_bl31_plat_arch_setup();
-
-#if TRANSFER_LIST && !RESET_TO_BL2
-	te = transfer_list_find(secure_tl, TL_TAG_FDT);
-	assert(te != NULL);
-
-	/* Populate HW_CONFIG device tree with the mapped address */
-	fconf_populate("HW_CONFIG", (uintptr_t)transfer_list_entry_data(te));
-#endif
 }

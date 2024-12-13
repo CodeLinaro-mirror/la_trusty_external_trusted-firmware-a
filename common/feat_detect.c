@@ -94,6 +94,12 @@ static unsigned int read_feat_csv2_id_field(void)
 			     ID_AA64PFR0_CSV2_MASK);
 }
 
+static unsigned int read_feat_debugv8p9_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64dfr0_el1(), ID_AA64DFR0_DEBUGVER_SHIFT,
+			     ID_AA64DFR0_DEBUGVER_MASK);
+}
+
 static unsigned int read_feat_pmuv3_id_field(void)
 {
 	return ISOLATE_FIELD(read_id_aa64dfr0_el1(), ID_AA64DFR0_PMUVER_SHIFT,
@@ -186,6 +192,11 @@ static unsigned int read_feat_hcx_id_field(void)
 	return ISOLATE_FIELD(read_id_aa64mmfr1_el1(), ID_AA64MMFR1_EL1_HCX_SHIFT,
 			     ID_AA64MMFR1_EL1_HCX_MASK);
 }
+static unsigned int read_feat_ls64_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64isar1_el1(), ID_AA64ISAR1_LS64_SHIFT,
+			     ID_AA64ISAR1_LS64_MASK);
+}
 static unsigned int read_feat_tcr2_id_field(void)
 {
 	return ISOLATE_FIELD(read_id_aa64mmfr3_el1(), ID_AA64MMFR3_EL1_TCRX_SHIFT,
@@ -251,6 +262,24 @@ static unsigned int read_feat_mtpmu_id_field(void)
 
 }
 
+static unsigned int read_feat_the_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64pfr1_el1(), ID_AA64PFR1_EL1_THE_SHIFT,
+			     ID_AA64PFR1_EL1_THE_MASK);
+}
+
+static unsigned int read_feat_sctlr2_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64mmfr3_el1(), ID_AA64MMFR3_EL1_SCTLR2_SHIFT,
+			     ID_AA64MMFR3_EL1_SCTLR2_MASK);
+}
+
+static unsigned int read_feat_d128_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64mmfr3_el1(), ID_AA64MMFR3_EL1_D128_SHIFT,
+			     ID_AA64MMFR3_EL1_D128_MASK);
+}
+
 /***********************************************************************************
  * TF-A supports many Arm architectural features starting from arch version
  * (8.0 till 8.7+). These features are mostly enabled through build flags. This
@@ -289,7 +318,7 @@ void detect_arch_features(void)
 	 * revisions so that we catch them as they come along
 	 */
 	check_feature(FEAT_STATE_ALWAYS, read_feat_pmuv3_id_field(),
-		      "PMUv3", 1, ID_AA64DFR0_PMUVER_PMUV3P7);
+		      "PMUv3", 1, ID_AA64DFR0_PMUVER_PMUV3P8);
 
 	/* v8.1 features */
 	check_feature(ENABLE_FEAT_PAN, read_feat_pan_id_field(), "PAN", 1, 3);
@@ -328,7 +357,8 @@ void detect_arch_features(void)
 	/* v8.6 features */
 	check_feature(ENABLE_FEAT_AMUv1p1, read_feat_amu_id_field(),
 		      "AMUv1p1", 2, 2);
-	check_feature(ENABLE_FEAT_FGT, read_feat_fgt_id_field(), "FGT", 1, 1);
+	check_feature(ENABLE_FEAT_FGT, read_feat_fgt_id_field(), "FGT", 1, 2);
+	check_feature(ENABLE_FEAT_FGT2, read_feat_fgt_id_field(), "FGT2", 2, 2);
 	check_feature(ENABLE_FEAT_ECV, read_feat_ecv_id_field(), "ECV", 1, 2);
 	check_feature(ENABLE_FEAT_TWED, read_feat_twed_id_field(),
 		      "TWED", 1, 1);
@@ -342,6 +372,7 @@ void detect_arch_features(void)
 
 	/* v8.7 features */
 	check_feature(ENABLE_FEAT_HCX, read_feat_hcx_id_field(), "HCX", 1, 1);
+	check_feature(ENABLE_FEAT_LS64_ACCDATA, read_feat_ls64_id_field(), "LS64", 1, 3);
 
 	/* v8.9 features */
 	check_feature(ENABLE_FEAT_TCR2, read_feat_tcr2_id_field(),
@@ -356,6 +387,12 @@ void detect_arch_features(void)
 		      "S1POE", 1, 1);
 	check_feature(ENABLE_FEAT_CSV2_3, read_feat_csv2_id_field(),
 		      "CSV2_3", 3, 3);
+	check_feature(ENABLE_FEAT_DEBUGV8P9, read_feat_debugv8p9_id_field(),
+			"DEBUGV8P9", 11, 11);
+	check_feature(ENABLE_FEAT_THE, read_feat_the_id_field(),
+			"THE", 1, 1);
+	check_feature(ENABLE_FEAT_SCTLR2, read_feat_sctlr2_id_field(),
+			"SCTLR2", 1, 1);
 
 	/* v9.0 features */
 	check_feature(ENABLE_BRBE_FOR_NS, read_feat_brbe_id_field(),
@@ -368,6 +405,10 @@ void detect_arch_features(void)
 		      "SME", 1, 2);
 	check_feature(ENABLE_SME2_FOR_NS, read_feat_sme_id_field(),
 		      "SME2", 2, 2);
+
+	/* v9.3 features */
+	check_feature(ENABLE_FEAT_D128, read_feat_d128_id_field(),
+		      "D128", 1, 1);
 
 	/* v9.4 features */
 	check_feature(ENABLE_FEAT_GCS, read_feat_gcs_id_field(), "GCS", 1, 1);

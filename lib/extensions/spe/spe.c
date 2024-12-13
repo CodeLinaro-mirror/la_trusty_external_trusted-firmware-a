@@ -29,9 +29,10 @@ static inline void psb_csync(void)
 	__asm__ volatile("hint #17");
 }
 
-void spe_init_el3(void)
+void spe_enable(cpu_context_t *ctx)
 {
-	uint64_t v;
+	el3_state_t *state = get_el3state_ctx(ctx);
+	u_register_t mdcr_el3_val = read_ctx_reg(state, CTX_MDCR_EL3);
 
 	/*
 	 * MDCR_EL3.NSPB (ARM v8.2): SPE enabled in Non-secure state
@@ -46,10 +47,30 @@ void spe_init_el3(void)
 	 * Setting this bit to 1 doesn't have any effect on it when
 	 * FEAT_SPEv1p2 not implemented.
 	 */
-	v = read_mdcr_el3();
-	v |= MDCR_NSPB(MDCR_NSPB_EL1) | MDCR_EnPMSN_BIT;
-	v &= ~(MDCR_NSPBE_BIT);
-	write_mdcr_el3(v);
+	mdcr_el3_val |= MDCR_NSPB(MDCR_NSPB_EL1) | MDCR_EnPMSN_BIT;
+	mdcr_el3_val &= ~(MDCR_NSPBE_BIT);
+	write_ctx_reg(state, CTX_MDCR_EL3, mdcr_el3_val);
+}
+
+void spe_disable(cpu_context_t *ctx)
+{
+	el3_state_t *state = get_el3state_ctx(ctx);
+	u_register_t mdcr_el3_val = read_ctx_reg(state, CTX_MDCR_EL3);
+
+	/*
+	 * MDCR_EL3.NSPB: Clear these bits to disable SPE feature, as it was enabled
+	 * for Non-secure state only. After clearing these bits Secure state owns
+	 * the Profiling Buffer and accesses to Statistical Profiling and Profiling
+	 * Buffer control registers at EL2 and EL1 generate Trap exceptions to EL3
+	 *
+	 * MDCR_EL3.NSPBE: Don't care as it was cleared during spe_enable and setting
+	 * this to 1 does not make sense as NSPBE{1} and NSPB{0b0x} is RESERVED.
+	 *
+	 * MDCR_EL3.EnPMSN (ARM v8.7): Clear the bit to trap access of PMSNEVFR_EL1
+	 * from EL2/EL1 to EL3.
+	 */
+	mdcr_el3_val &= ~(MDCR_NSPB(MDCR_NSPB_EL1) | MDCR_EnPMSN_BIT);
+	write_ctx_reg(state, CTX_MDCR_EL3, mdcr_el3_val);
 }
 
 void spe_init_el2_unused(void)
@@ -70,7 +91,7 @@ void spe_init_el2_unused(void)
 	write_mdcr_el2(v);
 }
 
-void spe_disable(void)
+void spe_stop(void)
 {
 	uint64_t v;
 

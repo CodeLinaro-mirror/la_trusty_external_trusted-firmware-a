@@ -7,11 +7,26 @@
 #ifndef PLATFORM_DEF_H
 #define PLATFORM_DEF_H
 
+#include <cortex_a520.h>
 #include <lib/utils_def.h>
 #include <lib/xlat_tables/xlat_tables_defs.h>
 #include <plat/arm/board/common/board_css_def.h>
 #include <plat/arm/board/common/v2m_def.h>
+
+/*
+ * arm_def.h depends on the platform system counter macros, so must define the
+ * platform macros before including arm_def.h.
+ */
+#if TARGET_PLATFORM == 4
+#ifdef ARM_SYS_CNTCTL_BASE
+#error "error: ARM_SYS_CNTCTL_BASE is defined prior to the PLAT_ARM_SYS_CNTCTL_BASE definition"
+#endif
+#define PLAT_ARM_SYS_CNTCTL_BASE	UL(0x47000000)
+#define PLAT_ARM_SYS_CNTREAD_BASE	UL(0x47010000)
+#endif
+
 #include <plat/arm/common/arm_def.h>
+
 #include <plat/arm/common/arm_spm_def.h>
 #include <plat/arm/css/common/css_def.h>
 #include <plat/arm/soc/common/soc_css_def.h>
@@ -36,9 +51,6 @@
  *               |      (4KB)     |
  *  0x8000_9000  ------------------
  *               |       ...      |
- *  0xf8a0_0000  ------------------   TC_NS_FWU_BASE
- *               |    FWU shmem   |
- *               |      (4MB)     |
  *  0xf8e0_0000  ------------------   TC_NS_OPTEE_BASE
  *               |  OP-TEE shmem  |
  *               |      (2MB)     |
@@ -70,8 +82,6 @@
 
 #define TC_NS_OPTEE_SIZE		(2 * SZ_1M)
 #define TC_NS_OPTEE_BASE		(TC_NS_DRAM1_BASE + TC_NS_DRAM1_SIZE - TC_NS_OPTEE_SIZE)
-#define TC_NS_FWU_SIZE			(4 * SZ_1M)
-#define TC_NS_FWU_BASE			(TC_NS_OPTEE_BASE - TC_NS_FWU_SIZE)
 
 /*
  * Mappings for TC DRAM1 (non-secure) and TC TZC DRAM1 (secure)
@@ -177,7 +187,7 @@
 # if SPM_MM
 #  define PLATFORM_STACK_SIZE		0x500
 # else
-#  define PLATFORM_STACK_SIZE		0xa00
+#  define PLATFORM_STACK_SIZE		0xb00
 # endif
 #elif defined(IMAGE_BL32)
 # define PLATFORM_STACK_SIZE		0x440
@@ -212,8 +222,11 @@
 #define TC_FLASH0_RO	MAP_REGION_FLAT(V2M_FLASH0_BASE,\
 						V2M_FLASH0_SIZE,	\
 						MT_DEVICE | MT_RO | MT_SECURE)
-
-#define PLAT_ARM_NSTIMER_FRAME_ID	0
+#if TARGET_PLATFORM == 2
+#define PLAT_ARM_NSTIMER_FRAME_ID	U(0)
+#else
+#define PLAT_ARM_NSTIMER_FRAME_ID	U(1)
+#endif
 
 #define PLAT_ARM_TRUSTED_ROM_BASE	0x0
 
@@ -229,9 +242,9 @@
 
 #if TARGET_PLATFORM <= 2
 #define PLAT_ARM_DRAM2_BASE		ULL(0x8080000000)
-#elif TARGET_PLATFORM == 3
+#elif TARGET_PLATFORM >= 3
 #define PLAT_ARM_DRAM2_BASE		ULL(0x880000000)
-#endif /* TARGET_PLATFORM == 3 */
+#endif /* TARGET_PLATFORM >= 3 */
 #define PLAT_ARM_DRAM2_SIZE		ULL(0x180000000)
 #define PLAT_ARM_DRAM2_END		(PLAT_ARM_DRAM2_BASE + PLAT_ARM_DRAM2_SIZE - 1ULL)
 
@@ -293,14 +306,22 @@
 /* Message Handling Unit (MHU) base addresses */
 #if TARGET_PLATFORM <= 2
 	#define PLAT_CSS_MHU_BASE		UL(0x45400000)
-#elif TARGET_PLATFORM == 3
+#elif TARGET_PLATFORM >= 3
 	#define PLAT_CSS_MHU_BASE		UL(0x46000000)
-#endif /* TARGET_PLATFORM == 3 */
+#endif /* TARGET_PLATFORM >= 3 */
 #define PLAT_MHUV2_BASE			PLAT_CSS_MHU_BASE
 
-/* TC2: AP<->RSE MHUs */
+/* AP<->RSS MHUs */
+#if TARGET_PLATFORM <= 2
 #define PLAT_RSE_AP_SND_MHU_BASE	UL(0x2A840000)
 #define PLAT_RSE_AP_RCV_MHU_BASE	UL(0x2A850000)
+#elif TARGET_PLATFORM == 3
+#define PLAT_RSE_AP_SND_MHU_BASE	UL(0x49000000)
+#define PLAT_RSE_AP_RCV_MHU_BASE	UL(0x49100000)
+#elif TARGET_PLATFORM == 4
+#define PLAT_RSE_AP_SND_MHU_BASE	UL(0x49000000)
+#define PLAT_RSE_AP_RCV_MHU_BASE	UL(0x49010000)
+#endif
 
 #define CSS_SYSTEM_PWR_DMN_LVL		ARM_PWR_LVL2
 #define PLAT_MAX_PWR_LVL		ARM_PWR_LVL1
@@ -328,6 +349,7 @@
  */
 #define PLAT_CSS_MAX_SCP_BL2U_SIZE	0x20000
 
+#if TARGET_PLATFORM <= 2
 /* TZC Related Constants */
 #define PLAT_ARM_TZC_BASE		UL(0x25000000)
 #define PLAT_ARM_TZC_FILTERS		TZC_400_REGION_ATTR_FILTER_BIT(0)
@@ -355,6 +377,7 @@
 		PLAT_ARM_TZC_NS_DEV_ACCESS},	\
 	{PLAT_ARM_DRAM2_BASE, PLAT_ARM_DRAM2_END,	\
 		ARM_TZC_NS_DRAM_S_ACCESS, PLAT_ARM_TZC_NS_DEV_ACCESS}
+#endif
 
 /* virtual address used by dynamic mem_protect for chunk_base */
 #define PLAT_ARM_MEM_PROTEC_VA_FRAME	UL(0xc0000000)
@@ -407,5 +430,53 @@
 
 #define PLAT_ARM_BOOT_UART_CLK_IN_HZ	TC_UARTCLK
 #define PLAT_ARM_RUN_UART_CLK_IN_HZ	TC_UARTCLK
+
+#if TARGET_PLATFORM == 3
+#define NCI_BASE_ADDR			UL(0x4F000000)
+#ifdef TARGET_FLAVOUR_FPGA
+#define MCN_ADDRESS_SPACE_SIZE		0x00120000
+#else
+#define MCN_ADDRESS_SPACE_SIZE		0x00130000
+#endif	/* TARGET_FLAVOUR_FPGA */
+#define MCN_OFFSET_IN_NCI		0x00C90000
+#define MCN_BASE_ADDR			(NCI_BASE_ADDR + MCN_OFFSET_IN_NCI)
+#define MCN_PMU_OFFSET			0x000C4000
+#define MCN_MICROARCH_OFFSET		0x000E4000
+#define MCN_MICROARCH_BASE_ADDR		(MCN_BASE_ADDR + MCN_MICROARCH_OFFSET)
+#define MCN_SCR_OFFSET			0x4
+#define MCN_SCR_PMU_BIT			10
+#define MCN_INSTANCES			4
+#define MCN_PMU_ADDR(n)			(MCN_BASE_ADDR + \
+					 (n * MCN_ADDRESS_SPACE_SIZE) + \
+					 MCN_PMU_OFFSET)
+#define MCN_MPAM_NS_OFFSET		0x000D0000
+#define MCN_MPAM_NS_BASE_ADDR		(MCN_BASE_ADDR + MCN_MPAM_NS_OFFSET)
+#define MCN_MPAM_S_OFFSET		0x000D4000
+#define MCN_MPAM_S_BASE_ADDR		(MCN_BASE_ADDR + MCN_MPAM_S_OFFSET)
+#define MPAM_SLCCFG_CTL_OFFSET		0x00003018
+#define SLC_RDALLOCMODE_SHIFT		8
+#define SLC_RDALLOCMODE_MASK		(3 << SLC_RDALLOCMODE_SHIFT)
+#define SLC_WRALLOCMODE_SHIFT		12
+#define SLC_WRALLOCMODE_MASK		(3 << SLC_WRALLOCMODE_SHIFT)
+
+#define SLC_DONT_ALLOC			0
+#define SLC_ALWAYS_ALLOC		1
+#define SLC_ALLOC_BUS_SIGNAL_ATTR	2
+
+#define MCN_CONFIG_OFFSET		0x204
+#define MCN_CONFIG_ADDR			(MCN_BASE_ADDR + MCN_CONFIG_OFFSET)
+#define MCN_CONFIG_SLC_PRESENT_BIT	3
+
+/*
+ * TC3 CPUs have the same definitions for:
+ *   CORTEX_{A520|A725|X925}_CPUECTLR_EL1
+ *   CORTEX_{A520|A725|X925}_CPUECTLR_EL1_EXTLLC_BIT
+ * Define the common macros for easier using.
+ */
+#define CPUECTLR_EL1			CORTEX_A520_CPUECTLR_EL1
+#define CPUECTLR_EL1_EXTLLC_BIT		CORTEX_A520_CPUECTLR_EL1_EXTLLC_BIT
+#endif /* TARGET_PLATFORM == 3 */
+
+#define CPUACTLR_CLUSTERPMUEN		(ULL(1) << 12)
 
 #endif /* PLATFORM_DEF_H */

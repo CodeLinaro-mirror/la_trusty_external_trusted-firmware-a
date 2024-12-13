@@ -69,14 +69,16 @@ typedef struct arm_gpt_info {
 
 #if SPM_MM || (SPMC_AT_EL3 && SPMC_AT_EL3_SEL0_SP)
 #define ARM_TZC_REGIONS_DEF						\
-	{ARM_AP_TZC_DRAM1_BASE, ARM_EL3_TZC_DRAM1_END + ARM_L1_GPT_SIZE,\
-		TZC_REGION_S_RDWR, 0},					\
 	{ARM_NS_DRAM1_BASE, ARM_NS_DRAM1_END, ARM_TZC_NS_DRAM_S_ACCESS, \
 		PLAT_ARM_TZC_NS_DEV_ACCESS}, 				\
-	{ARM_DRAM2_BASE, ARM_DRAM2_END, ARM_TZC_NS_DRAM_S_ACCESS,	\
-		PLAT_ARM_TZC_NS_DEV_ACCESS},				\
+	{ARM_AP_TZC_DRAM1_BASE, (PLAT_SP_IMAGE_NS_BUF_BASE - 1),	\
+		TZC_REGION_S_RDWR, 0},					\
 	{PLAT_SP_IMAGE_NS_BUF_BASE, (PLAT_SP_IMAGE_NS_BUF_BASE +	\
-		PLAT_SP_IMAGE_NS_BUF_SIZE) - 1, TZC_REGION_S_NONE,	\
+		PLAT_SP_IMAGE_NS_BUF_SIZE - 1), TZC_REGION_S_NONE,	\
+		PLAT_ARM_TZC_NS_DEV_ACCESS},				\
+	{PLAT_SP_IMAGE_STACK_BASE, ARM_EL3_TZC_DRAM1_END,		\
+		TZC_REGION_S_RDWR, 0},					\
+	{ARM_DRAM2_BASE, ARM_DRAM2_END, ARM_TZC_NS_DRAM_S_ACCESS,	\
 		PLAT_ARM_TZC_NS_DEV_ACCESS}
 
 #elif ENABLE_RME
@@ -260,6 +262,9 @@ void arm_bl2_setup_next_ep_info(bl_mem_params_node_t *next_param_node);
 /* BL2 at EL3 functions */
 void arm_bl2_el3_early_platform_setup(void);
 void arm_bl2_el3_plat_arch_setup(void);
+#if ARM_FW_CONFIG_LOAD_ENABLE
+void arm_bl2_el3_plat_config_load(void);
+#endif /* ARM_FW_CONFIG_LOAD_ENABLE */
 
 /* BL2U utility functions */
 void arm_bl2u_early_platform_setup(struct meminfo *mem_layout,
@@ -282,10 +287,7 @@ void arm_bl31_plat_arch_setup(void);
 /* Firmware Handoff utility functions */
 void arm_transfer_list_dyn_cfg_init(struct transfer_list_header *secure_tl);
 void arm_transfer_list_populate_ep_info(bl_mem_params_node_t *next_param_node,
-					struct transfer_list_header *secure_tl,
-					struct transfer_list_header *ns_tl);
-void arm_transfer_list_copy_hw_config(struct transfer_list_header *secure_tl,
-				      struct transfer_list_header *ns_tl);
+					struct transfer_list_header *secure_tl);
 
 /* TSP utility functions */
 void arm_tsp_early_platform_setup(void);
@@ -363,6 +365,7 @@ void plat_arm_interconnect_enter_coherency(void);
 void plat_arm_interconnect_exit_coherency(void);
 void plat_arm_program_trusted_mailbox(uintptr_t address);
 bool plat_arm_bl1_fwu_needed(void);
+int plat_arm_ni_setup(uintptr_t global_cfg);
 __dead2 void plat_arm_error_handler(int err);
 __dead2 void plat_arm_system_reset(void);
 
