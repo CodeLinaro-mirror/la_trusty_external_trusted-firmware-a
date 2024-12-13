@@ -7,6 +7,7 @@ Platform Ports
    :hidden:
 
    allwinner
+   amd-versal2
    arm/index
    ast2700
    meson-axg
@@ -71,8 +72,8 @@ Deprecated platforms
 +----------------+----------------+--------------------+--------------------+
 |    Platform    |     Vendor     | Deprecated version |  Deleted version   |
 +================+================+====================+====================+
-| None at this   |                |                    |                    |
-| time.          |                |                    |                    |
+|      TC2       |      Arm       |        2.12        |         TBD        |
+|                |                |                    |                    |
 +----------------+----------------+--------------------+--------------------+
 
 --------------
