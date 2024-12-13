@@ -16,6 +16,7 @@
 	((unsigned int)(((reg) >> (feat)) & mask))
 
 #define CREATE_FEATURE_SUPPORTED(name, read_func, guard)			\
+__attribute__((always_inline))							\
 static inline bool is_ ## name ## _supported(void)				\
 {										\
 	if ((guard) == FEAT_STATE_DISABLED) {					\
@@ -28,6 +29,7 @@ static inline bool is_ ## name ## _supported(void)				\
 }
 
 #define CREATE_FEATURE_PRESENT(name, idreg, idfield, mask, idval)		\
+__attribute__((always_inline))							\
 static inline bool is_ ## name ## _present(void)				\
 {										\
 	return (ISOLATE_FIELD(read_ ## idreg(), idfield, mask) >= idval) 	\
@@ -130,8 +132,19 @@ CREATE_FEATURE_SUPPORTED(name, is_ ## name ## _present, guard)
  * +----------------------------+
  * |	FEAT_MTPMU		|
  * +----------------------------+
+ * |	FEAT_FGT2		|
+ * +----------------------------+
+ * |	FEAT_THE		|
+ * +----------------------------+
+ * |	FEAT_SCTLR2		|
+ * +----------------------------+
+ * |	FEAT_D128		|
+ * +----------------------------+
+ * |	FEAT_LS64_ACCDATA	|
+ * +----------------------------+
  */
 
+__attribute__((always_inline))
 static inline bool is_armv7_gentimer_present(void)
 {
 	/* The Generic Timer is always present in an ARMv8-A implementation */
@@ -160,6 +173,7 @@ CREATE_FEATURE_PRESENT(feat_pacqarma3, id_aa64isar2_el1, 0,
 			(ID_AA64ISAR2_APA3_MASK << ID_AA64ISAR2_APA3_SHIFT)), 1U)
 
 /* PAUTH */
+__attribute__((always_inline))
 static inline bool is_armv8_3_pauth_present(void)
 {
 	uint64_t mask_id_aa64isar1 =
@@ -216,6 +230,10 @@ CREATE_FEATURE_FUNCS(feat_twed, id_aa64mmfr1_el1, ID_AA64MMFR1_EL1_TWED_SHIFT,
 CREATE_FEATURE_FUNCS(feat_fgt, id_aa64mmfr0_el1, ID_AA64MMFR0_EL1_FGT_SHIFT,
 		     ID_AA64MMFR0_EL1_FGT_MASK, 1U, ENABLE_FEAT_FGT)
 
+/* FEAT_FGT2: Fine-grained traps extended */
+CREATE_FEATURE_FUNCS(feat_fgt2, id_aa64mmfr0_el1, ID_AA64MMFR0_EL1_FGT_SHIFT,
+		     ID_AA64MMFR0_EL1_FGT_MASK, FGT2_IMPLEMENTED, ENABLE_FEAT_FGT2)
+
 /* FEAT_ECV: Enhanced Counter Virtualization */
 CREATE_FEATURE_FUNCS(feat_ecv, id_aa64mmfr0_el1, ID_AA64MMFR0_EL1_ECV_SHIFT,
 		     ID_AA64MMFR0_EL1_ECV_MASK, 1U, ENABLE_FEAT_ECV)
@@ -238,6 +256,7 @@ CREATE_FEATURE_FUNCS(feat_s2poe, id_aa64mmfr3_el1, ID_AA64MMFR3_EL1_S2POE_SHIFT,
 CREATE_FEATURE_FUNCS(feat_s1poe, id_aa64mmfr3_el1, ID_AA64MMFR3_EL1_S1POE_SHIFT,
 		     ID_AA64MMFR3_EL1_S1POE_MASK, 1U, ENABLE_FEAT_S1POE)
 
+__attribute__((always_inline))
 static inline bool is_feat_sxpoe_supported(void)
 {
 	return is_feat_s1poe_supported() || is_feat_s2poe_supported();
@@ -251,6 +270,21 @@ CREATE_FEATURE_FUNCS(feat_s2pie, id_aa64mmfr3_el1, ID_AA64MMFR3_EL1_S2PIE_SHIFT,
 CREATE_FEATURE_FUNCS(feat_s1pie, id_aa64mmfr3_el1, ID_AA64MMFR3_EL1_S1PIE_SHIFT,
 		     ID_AA64MMFR3_EL1_S1PIE_MASK, 1U, ENABLE_FEAT_S1PIE)
 
+/* FEAT_THE: Translation Hardening Extension */
+CREATE_FEATURE_FUNCS(feat_the, id_aa64pfr1_el1, ID_AA64PFR1_EL1_THE_SHIFT,
+		     ID_AA64PFR1_EL1_THE_MASK, THE_IMPLEMENTED, ENABLE_FEAT_THE)
+
+/* FEAT_SCTLR2 */
+CREATE_FEATURE_FUNCS(feat_sctlr2, id_aa64mmfr3_el1, ID_AA64MMFR3_EL1_SCTLR2_SHIFT,
+		     ID_AA64MMFR3_EL1_SCTLR2_MASK, SCTLR2_IMPLEMENTED,
+		     ENABLE_FEAT_SCTLR2)
+
+/* FEAT_D128 */
+CREATE_FEATURE_FUNCS(feat_d128, id_aa64mmfr3_el1, ID_AA64MMFR3_EL1_D128_SHIFT,
+		     ID_AA64MMFR3_EL1_D128_MASK, D128_IMPLEMENTED,
+		     ENABLE_FEAT_D128)
+
+__attribute__((always_inline))
 static inline bool is_feat_sxpie_supported(void)
 {
 	return is_feat_s1pie_supported() || is_feat_s2pie_supported();
@@ -277,6 +311,7 @@ CREATE_FEATURE_FUNCS(feat_amuv1p1, id_aa64pfr0_el1, ID_AA64PFR0_AMU_SHIFT,
  * 0x11: v1.1 Armv8.4 or later
  *
  */
+__attribute__((always_inline))
 static inline bool is_feat_mpam_present(void)
 {
 	unsigned int ret = (unsigned int)((((read_id_aa64pfr0_el1() >>
@@ -287,6 +322,23 @@ static inline bool is_feat_mpam_present(void)
 }
 
 CREATE_FEATURE_SUPPORTED(feat_mpam, is_feat_mpam_present, ENABLE_FEAT_MPAM)
+
+/*
+ * FEAT_DebugV8P9: Debug extension. This function checks the field 3:0 of
+ * ID_AA64DFR0 Aarch64 Debug Feature Register 0 for the version of
+ * Feat_Debug supported. The value of the field determines feature presence
+ *
+ * 0b0110 - Arm v8.0 debug
+ * 0b0111 - Arm v8.0 debug architecture with Virtualization host extensions
+ * 0x1000 - FEAT_Debugv8p2 is supported
+ * 0x1001 - FEAT_Debugv8p4 is supported
+ * 0x1010 - FEAT_Debugv8p8 is supported
+ * 0x1011 - FEAT_Debugv8p9 is supported
+ *
+ */
+CREATE_FEATURE_FUNCS(feat_debugv8p9, id_aa64dfr0_el1, ID_AA64DFR0_DEBUGVER_SHIFT,
+		ID_AA64DFR0_DEBUGVER_MASK, DEBUGVER_V8P9_IMPLEMENTED,
+		ENABLE_FEAT_DEBUGV8P9)
 
 /* FEAT_HCX: Extended Hypervisor Configuration Register */
 CREATE_FEATURE_FUNCS(feat_hcx, id_aa64mmfr1_el1, ID_AA64MMFR1_EL1_HCX_SHIFT,
@@ -371,10 +423,16 @@ CREATE_FEATURE_FUNCS(feat_sme, id_aa64pfr1_el1, ID_AA64PFR1_EL1_SME_SHIFT,
 CREATE_FEATURE_FUNCS(feat_sme2, id_aa64pfr1_el1, ID_AA64PFR1_EL1_SME_SHIFT,
 		     ID_AA64PFR1_EL1_SME_MASK, SME2_IMPLEMENTED, ENABLE_SME2_FOR_NS)
 
+/* FEAT_LS64_ACCDATA: */
+CREATE_FEATURE_FUNCS(feat_ls64_accdata, id_aa64isar1_el1, ID_AA64ISAR1_LS64_SHIFT,
+		     ID_AA64ISAR1_LS64_MASK, LS64_ACCDATA_IMPLEMENTED,
+		     ENABLE_FEAT_LS64_ACCDATA)
+
 /*******************************************************************************
  * Function to get hardware granularity support
  ******************************************************************************/
 
+__attribute__((always_inline))
 static inline bool is_feat_tgran4K_present(void)
 {
 	unsigned int tgranx = ISOLATE_FIELD(read_id_aa64mmfr0_el1(),
@@ -385,6 +443,7 @@ static inline bool is_feat_tgran4K_present(void)
 CREATE_FEATURE_PRESENT(feat_tgran16K, id_aa64mmfr0_el1, ID_AA64MMFR0_EL1_TGRAN16_SHIFT,
 		       ID_AA64MMFR0_EL1_TGRAN16_MASK, TGRAN16_IMPLEMENTED)
 
+__attribute__((always_inline))
 static inline bool is_feat_tgran64K_present(void)
 {
 	unsigned int tgranx = ISOLATE_FIELD(read_id_aa64mmfr0_el1(),
@@ -397,6 +456,7 @@ CREATE_FEATURE_PRESENT(feat_pmuv3, id_aa64dfr0_el1, ID_AA64DFR0_PMUVER_SHIFT,
 		      ID_AA64DFR0_PMUVER_MASK, 1U)
 
 /* FEAT_MTPMU */
+__attribute__((always_inline))
 static inline bool is_feat_mtpmu_present(void)
 {
 	unsigned int mtpmu = ISOLATE_FIELD(read_id_aa64dfr0_el1(), ID_AA64DFR0_MTPMU_SHIFT,

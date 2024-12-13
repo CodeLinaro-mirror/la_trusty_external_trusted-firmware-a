@@ -202,18 +202,22 @@ int rmmd_setup(void)
 	int rc;
 
 	/* Make sure RME is supported. */
-	assert(is_feat_rme_present());
+	if (is_feat_rme_present() == 0U) {
+		/* Mark the RMM boot as failed for all the CPUs */
+		rmm_boot_failed = true;
+		return -ENOTSUP;
+	}
 
 	rmm_ep_info = bl31_plat_get_next_image_ep_info(REALM);
-	if (rmm_ep_info == NULL) {
+	if ((rmm_ep_info == NULL) || (rmm_ep_info->pc == 0)) {
 		WARN("No RMM image provided by BL2 boot loader, Booting "
 		     "device without RMM initialization. SMCs destined for "
 		     "RMM will return SMC_UNK\n");
+
+		/* Mark the boot as failed for all the CPUs */
+		rmm_boot_failed = true;
 		return -ENOENT;
 	}
-
-	/* Under no circumstances will this parameter be 0 */
-	assert(rmm_ep_info->pc == RMM_BASE);
 
 	/* Initialise an entrypoint to set up the CPU context */
 	ep_attr = EP_REALM;
@@ -239,6 +243,8 @@ int rmmd_setup(void)
 	rc = plat_rmmd_load_manifest(manifest);
 	if (rc != 0) {
 		ERROR("Error loading RMM Boot Manifest (%i)\n", rc);
+		/* Mark the boot as failed for all the CPUs */
+		rmm_boot_failed = true;
 		return rc;
 	}
 	flush_dcache_range((uintptr_t)shared_buf_base, shared_buf_size);
@@ -435,6 +441,21 @@ static int gpt_to_gts_error(int error, uint32_t smc_fid, uint64_t address)
 	return ret;
 }
 
+static int rmm_el3_ifc_get_feat_register(uint64_t feat_reg_idx,
+					 uint64_t *feat_reg)
+{
+	if (feat_reg_idx != RMM_EL3_FEAT_REG_0_IDX) {
+		ERROR("RMMD: Failed to get feature register %ld\n", feat_reg_idx);
+		return E_RMM_INVAL;
+	}
+
+	*feat_reg = 0UL;
+#if RMMD_ENABLE_EL3_TOKEN_SIGN
+	*feat_reg |= RMM_EL3_FEAT_REG_0_EL3_TOKEN_SIGN_MASK;
+#endif
+	return E_RMM_OK;
+}
+
 /*******************************************************************************
  * This function handles RMM-EL3 interface SMCs
  ******************************************************************************/
@@ -442,6 +463,7 @@ uint64_t rmmd_rmm_el3_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2,
 				uint64_t x3, uint64_t x4, void *cookie,
 				void *handle, uint64_t flags)
 {
+	uint64_t remaining_len = 0UL;
 	uint32_t src_sec_state;
 	int ret;
 
@@ -467,12 +489,18 @@ uint64_t rmmd_rmm_el3_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2,
 		ret = gpt_undelegate_pas(x1, PAGE_SIZE_4KB, SMC_FROM_REALM);
 		SMC_RET1(handle, gpt_to_gts_error(ret, smc_fid, x1));
 	case RMM_ATTEST_GET_PLAT_TOKEN:
-		ret = rmmd_attest_get_platform_token(x1, &x2, x3);
-		SMC_RET2(handle, ret, x2);
+		ret = rmmd_attest_get_platform_token(x1, &x2, x3, &remaining_len);
+		SMC_RET3(handle, ret, x2, remaining_len);
 	case RMM_ATTEST_GET_REALM_KEY:
 		ret = rmmd_attest_get_signing_key(x1, &x2, x3);
 		SMC_RET2(handle, ret, x2);
-
+	case RMM_EL3_FEATURES:
+		ret = rmm_el3_ifc_get_feat_register(x1, &x2);
+		SMC_RET2(handle, ret, x2);
+#if RMMD_ENABLE_EL3_TOKEN_SIGN
+	case RMM_EL3_TOKEN_SIGN:
+		return rmmd_el3_token_sign(handle, x1, x2, x3, x4);
+#endif
 	case RMM_BOOT_COMPLETE:
 		VERBOSE("RMMD: running rmmd_rmm_sync_exit\n");
 		rmmd_rmm_sync_exit(x1);
