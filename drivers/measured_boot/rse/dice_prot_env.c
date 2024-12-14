@@ -115,7 +115,7 @@ int dpe_measure_and_record(struct dpe_metadata *metadata,
 				 metadata->allow_new_context_to_derive,
 				 metadata->create_certificate,
 				 &dice_inputs,
-				 0, /* target_locality */
+				 metadata->target_locality,
 				 false, /* return_certificate */
 				 true, /* allow_new_context_to_export */
 				 false, /* export_cdi */
@@ -131,7 +131,8 @@ int dpe_measure_and_record(struct dpe_metadata *metadata,
 			 */
 			VERBOSE("Share new_context_handle with child: 0x%x\n",
 				new_context_handle);
-			plat_dpe_share_context_handle(&new_context_handle);
+			plat_dpe_share_context_handle(&new_context_handle,
+						      &new_parent_context_handle);
 		}
 	} else {
 		ERROR("dpe_derive_context failed: %d\n", ret);

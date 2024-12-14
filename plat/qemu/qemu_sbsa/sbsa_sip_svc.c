@@ -30,6 +30,7 @@ static int platform_version_minor;
 #define SIP_SVC_GET_GIC_ITS SIP_FUNCTION_ID(101)
 #define SIP_SVC_GET_CPU_COUNT SIP_FUNCTION_ID(200)
 #define SIP_SVC_GET_CPU_NODE SIP_FUNCTION_ID(201)
+#define SIP_SVC_GET_CPU_TOPOLOGY SIP_FUNCTION_ID(202)
 #define SIP_SVC_GET_MEMORY_NODE_COUNT SIP_FUNCTION_ID(300)
 #define SIP_SVC_GET_MEMORY_NODE SIP_FUNCTION_ID(301)
 
@@ -46,10 +47,24 @@ typedef struct{
 	uint64_t addr_size;
 } memory_data;
 
+/*
+ * sockets: the number of sockets on sbsa-ref platform.
+ * clusters: the number of clusters in one socket.
+ * cores: the number of cores in one cluster.
+ * threads: the number of threads in one core.
+ */
+typedef struct {
+	uint32_t sockets;
+	uint32_t clusters;
+	uint32_t cores;
+	uint32_t threads;
+} cpu_topology;
+
 static struct {
 	uint32_t num_cpus;
 	uint32_t num_memnodes;
 	cpu_data cpu[PLATFORM_CORE_COUNT];
+	cpu_topology cpu_topo;
 	memory_data memory[PLAT_MAX_MEM_NODES];
 } dynamic_platform_info;
 
@@ -71,12 +86,46 @@ uintptr_t sbsa_get_gicr(void);
  * cope.
  */
 
+static void read_cpu_topology_from_dt(void *dtb)
+{
+	int node;
+
+	/*
+	 * QEMU gives us this DeviceTree node when we config:
+	 * -smp 16,sockets=2,clusters=2,cores=2,threads=2
+	 *
+	 * topology {
+	 *	threads = <0x02>;
+	 *	cores = <0x02>;
+	 *	clusters = <0x02>;
+	 *	sockets = <0x02>;
+	 * };
+	 */
+
+	node = fdt_path_offset(dtb, "/cpus/topology");
+	if (node > 0) {
+		dynamic_platform_info.cpu_topo.sockets =
+			fdt_read_uint32_default(dtb, node, "sockets", 0);
+		dynamic_platform_info.cpu_topo.clusters =
+			fdt_read_uint32_default(dtb, node, "clusters", 0);
+		dynamic_platform_info.cpu_topo.cores =
+			fdt_read_uint32_default(dtb, node, "cores", 0);
+		dynamic_platform_info.cpu_topo.threads =
+			fdt_read_uint32_default(dtb, node, "threads", 0);
+	}
+
+	INFO("Cpu topology: sockets: %d, clusters: %d, cores: %d, threads: %d\n",
+		dynamic_platform_info.cpu_topo.sockets,
+		dynamic_platform_info.cpu_topo.clusters,
+		dynamic_platform_info.cpu_topo.cores,
+		dynamic_platform_info.cpu_topo.threads);
+}
+
 void read_cpuinfo_from_dt(void *dtb)
 {
 	int node;
 	int prev;
 	int cpu = 0;
-	uint32_t nodeid = 0;
 	uintptr_t mpidr;
 
 	/*
@@ -118,14 +167,12 @@ void read_cpuinfo_from_dt(void *dtb)
 			panic();
 		}
 
-		if (fdt_getprop(dtb, node, "numa-node-id", NULL))  {
-			fdt_read_uint32(dtb, node, "numa-node-id", &nodeid);
-		}
-
-		dynamic_platform_info.cpu[cpu].nodeid = nodeid;
 		dynamic_platform_info.cpu[cpu].mpidr = mpidr;
+		dynamic_platform_info.cpu[cpu].nodeid =
+			fdt_read_uint32_default(dtb, node, "numa-node-id", 0);
 
-		INFO("CPU %d: node-id: %d, mpidr: %ld\n", cpu, nodeid, mpidr);
+		INFO("CPU %d: node-id: %d, mpidr: %ld\n", cpu,
+				dynamic_platform_info.cpu[cpu].nodeid, mpidr);
 
 		cpu++;
 
@@ -135,6 +182,8 @@ void read_cpuinfo_from_dt(void *dtb)
 
 	dynamic_platform_info.num_cpus = cpu;
 	INFO("Found %d cpus\n", dynamic_platform_info.num_cpus);
+
+	read_cpu_topology_from_dt(dtb);
 }
 
 void read_meminfo_from_dt(void *dtb)
@@ -143,7 +192,6 @@ void read_meminfo_from_dt(void *dtb)
 	const char *type;
 	int prev, node;
 	int len;
-	uint32_t nodeid = 0;
 	uint32_t memnode = 0;
 	uint32_t higher_value, lower_value;
 	uint64_t cur_base, cur_size;
@@ -172,11 +220,8 @@ void read_meminfo_from_dt(void *dtb)
 
 		type = fdt_getprop(dtb, node, "device_type", &len);
 		if (type && strncmp(type, "memory", len) == 0) {
-			if (fdt_getprop(dtb, node, "numa-node-id", NULL)) {
-				fdt_read_uint32(dtb, node, "numa-node-id", &nodeid);
-			}
-
-			dynamic_platform_info.memory[memnode].nodeid = nodeid;
+			dynamic_platform_info.memory[memnode].nodeid =
+				fdt_read_uint32_default(dtb, node, "numa-node-id", 0);
 
 			/*
 			 * Get the 'reg' property of this node and
@@ -274,10 +319,10 @@ void read_platform_version(void *dtb)
 
 	node = fdt_path_offset(dtb, "/");
 	if (node >= 0) {
-		platform_version_major = fdt32_ld(fdt_getprop(dtb, node,
-							      "machine-version-major", NULL));
-		platform_version_minor = fdt32_ld(fdt_getprop(dtb, node,
-							      "machine-version-minor", NULL));
+		platform_version_major =
+			fdt_read_uint32_default(dtb, node, "machine-version-major", 0);
+		platform_version_minor =
+			fdt_read_uint32_default(dtb, node, "machine-version-minor", 0);
 	}
 }
 
@@ -352,6 +397,18 @@ uintptr_t sbsa_sip_smc_handler(uint32_t smc_fid,
 				dynamic_platform_info.cpu[index].mpidr);
 		} else {
 			SMC_RET1(handle, SMC_ARCH_CALL_INVAL_PARAM);
+		}
+
+	case SIP_SVC_GET_CPU_TOPOLOGY:
+		if (dynamic_platform_info.cpu_topo.cores > 0) {
+			SMC_RET5(handle, NULL,
+			dynamic_platform_info.cpu_topo.sockets,
+			dynamic_platform_info.cpu_topo.clusters,
+			dynamic_platform_info.cpu_topo.cores,
+			dynamic_platform_info.cpu_topo.threads);
+		} else {
+			/* we do not know topology so we report SMC as unknown */
+			SMC_RET1(handle, SMC_UNK);
 		}
 
 	case SIP_SVC_GET_MEMORY_NODE_COUNT:
