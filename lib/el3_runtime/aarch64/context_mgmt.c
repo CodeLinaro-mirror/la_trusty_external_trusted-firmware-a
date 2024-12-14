@@ -19,17 +19,23 @@
 #include <common/debug.h>
 #include <context.h>
 #include <drivers/arm/gicv3.h>
+#include <lib/cpus/cpu_ops.h>
+#include <lib/cpus/errata.h>
 #include <lib/el3_runtime/context_mgmt.h>
 #include <lib/el3_runtime/cpu_data.h>
 #include <lib/el3_runtime/pubsub_events.h>
 #include <lib/extensions/amu.h>
 #include <lib/extensions/brbe.h>
+#include <lib/extensions/debug_v8p9.h>
+#include <lib/extensions/fgt2.h>
 #include <lib/extensions/mpam.h>
 #include <lib/extensions/pmuv3.h>
 #include <lib/extensions/sme.h>
 #include <lib/extensions/spe.h>
 #include <lib/extensions/sve.h>
+#include <lib/extensions/sysreg128.h>
 #include <lib/extensions/sys_reg_trace.h>
+#include <lib/extensions/tcr2.h>
 #include <lib/extensions/trbe.h>
 #include <lib/extensions/trf.h>
 #include <lib/utils.h>
@@ -42,10 +48,12 @@ CASSERT(((TWED_DELAY & ~SCR_TWEDEL_MASK) == 0U), assert_twed_delay_value_check);
 per_world_context_t per_world_context[CPU_DATA_CONTEXT_NUM];
 static bool has_secure_perworld_init;
 
+static void manage_extensions_common(cpu_context_t *ctx);
 static void manage_extensions_nonsecure(cpu_context_t *ctx);
 static void manage_extensions_secure(cpu_context_t *ctx);
 static void manage_extensions_secure_per_world(void);
 
+#if ((IMAGE_BL1) || (IMAGE_BL31 && (!CTX_INCLUDE_EL2_REGS)))
 static void setup_el1_context(cpu_context_t *ctx, const struct entry_point_info *ep)
 {
 	u_register_t sctlr_elx, actlr_elx;
@@ -82,15 +90,16 @@ static void setup_el1_context(cpu_context_t *ctx, const struct entry_point_info 
 					| SCTLR_NTWI_BIT | SCTLR_NTWE_BIT;
 	}
 
-#if ERRATA_A75_764081
 	/*
 	 * If workaround of errata 764081 for Cortex-A75 is used then set
 	 * SCTLR_EL1.IESB to enable Implicit Error Synchronization Barrier.
 	 */
-	sctlr_elx |= SCTLR_IESB_BIT;
-#endif
+	if (errata_a75_764081_applies()) {
+		sctlr_elx |= SCTLR_IESB_BIT;
+	}
+
 	/* Store the initialised SCTLR_EL1 value in the cpu_context */
-	write_ctx_reg(get_el1_sysregs_ctx(ctx), CTX_SCTLR_EL1, sctlr_elx);
+	write_ctx_sctlr_el1_reg_errata(ctx, sctlr_elx);
 
 	/*
 	 * Base the context ACTLR_EL1 on the current value, as it is
@@ -100,8 +109,9 @@ static void setup_el1_context(cpu_context_t *ctx, const struct entry_point_info 
 	 * be zero.
 	 */
 	actlr_elx = read_actlr_el1();
-	write_ctx_reg((get_el1_sysregs_ctx(ctx)), (CTX_ACTLR_EL1), (actlr_elx));
+	write_el1_ctx_common(get_el1_sysregs_ctx(ctx), actlr_el1, actlr_elx);
 }
+#endif /* (IMAGE_BL1) || (IMAGE_BL31 && (!CTX_INCLUDE_EL2_REGS)) */
 
 /******************************************************************************
  * This function performs initializations that are specific to SECURE state
@@ -134,7 +144,7 @@ static void setup_secure_context(cpu_context_t *ctx, const struct entry_point_in
 	 * Initialize EL1 context registers unless SPMC is running
 	 * at S-EL2.
 	 */
-#if !SPMD_SPM_AT_SEL2
+#if (!SPMD_SPM_AT_SEL2)
 	setup_el1_context(ctx, ep);
 #endif
 
@@ -150,7 +160,6 @@ static void setup_secure_context(cpu_context_t *ctx, const struct entry_point_in
 	if (!has_secure_perworld_init) {
 		manage_extensions_secure_per_world();
 	}
-
 }
 
 #if ENABLE_RME
@@ -172,6 +181,13 @@ static void setup_realm_context(cpu_context_t *ctx, const struct entry_point_inf
 	if (is_feat_csv2_2_supported()) {
 		/* Enable access to the SCXTNUM_ELx registers. */
 		scr_el3 |= SCR_EnSCXT_BIT;
+	}
+
+	if (is_feat_sctlr2_supported()) {
+		/* Set the SCTLR2En bit in SCR_EL3 to enable access to
+		 * SCTLR2_ELx registers.
+		 */
+		scr_el3 |= SCR_SCTLR2En_BIT;
 	}
 
 	write_ctx_reg(state, CTX_SCR_EL3, scr_el3);
@@ -252,22 +268,38 @@ static void setup_ns_context(cpu_context_t *ctx, const struct entry_point_info *
 	 */
 	scr_el3 |= get_scr_el3_from_routing_model(NON_SECURE);
 #endif
+
+	if (is_feat_the_supported()) {
+		/* Set the RCWMASKEn bit in SCR_EL3 to enable access to
+		 * RCWMASK_EL1 and RCWSMASK_EL1 registers.
+		 */
+		scr_el3 |= SCR_RCWMASKEn_BIT;
+	}
+
+	if (is_feat_sctlr2_supported()) {
+		/* Set the SCTLR2En bit in SCR_EL3 to enable access to
+		 * SCTLR2_ELx registers.
+		 */
+		scr_el3 |= SCR_SCTLR2En_BIT;
+	}
+
+	if (is_feat_d128_supported()) {
+		/* Set the D128En bit in SCR_EL3 to enable access to 128-bit
+		 * versions of TTBR0_EL1, TTBR1_EL1, RCWMASK_EL1, RCWSMASK_EL1,
+		 * PAR_EL1 and TTBR1_EL2, TTBR0_EL2 and VTTBR_EL2 registers.
+		 */
+		scr_el3 |= SCR_D128En_BIT;
+	}
+
 	write_ctx_reg(state, CTX_SCR_EL3, scr_el3);
 
-	/* Initialize EL1 context registers */
-	setup_el1_context(ctx, ep);
-
 	/* Initialize EL2 context registers */
-#if CTX_INCLUDE_EL2_REGS
+#if (CTX_INCLUDE_EL2_REGS && IMAGE_BL31)
 
 	/*
-	 * Initialize SCTLR_EL2 context register using Endianness value
-	 * taken from the entrypoint attribute.
+	 * Initialize SCTLR_EL2 context register with reset value.
 	 */
-	u_register_t sctlr_el2_val = (EP_GET_EE(ep->h.attr) != 0U) ? SCTLR_EE_BIT : 0UL;
-	sctlr_el2_val |= SCTLR_EL2_RES1;
-	write_el2_ctx_common(get_el2_sysregs_ctx(ctx), sctlr_el2, sctlr_el2_val);
-
+	write_el2_ctx_common(get_el2_sysregs_ctx(ctx), sctlr_el2, SCTLR_EL2_RES1);
 
 	if (is_feat_hcx_supported()) {
 		/*
@@ -295,8 +327,10 @@ static void setup_ns_context(cpu_context_t *ctx, const struct entry_point_info *
 		write_el2_ctx_fgt(get_el2_sysregs_ctx(ctx), hfgwtr_el2,
 			HFGWTR_EL2_INIT_VAL);
 	}
-
-#endif /* CTX_INCLUDE_EL2_REGS */
+#else
+	/* Initialize EL1 context registers */
+	setup_el1_context(ctx, ep);
+#endif /* (CTX_INCLUDE_EL2_REGS && IMAGE_BL31) */
 
 	manage_extensions_nonsecure(ctx);
 }
@@ -312,6 +346,7 @@ static void setup_ns_context(cpu_context_t *ctx, const struct entry_point_info *
 static void setup_context_common(cpu_context_t *ctx, const entry_point_info_t *ep)
 {
 	u_register_t scr_el3;
+	u_register_t mdcr_el3;
 	el3_state_t *state;
 	gp_regs_t *gp_regs;
 
@@ -326,7 +361,7 @@ static void setup_context_common(cpu_context_t *ctx, const entry_point_info_t *e
 	 * to boot correctly. However, there are very few registers where this
 	 * is not true and some values need to be recreated.
 	 */
-#if CTX_INCLUDE_EL2_REGS
+#if (CTX_INCLUDE_EL2_REGS && IMAGE_BL31)
 	el2_sysregs_t *el2_ctx = get_el2_sysregs_ctx(ctx);
 
 	/*
@@ -336,7 +371,13 @@ static void setup_context_common(cpu_context_t *ctx, const entry_point_info_t *e
 	u_register_t icc_sre_el2_val = ICC_SRE_DIB_BIT | ICC_SRE_DFB_BIT |
 				   ICC_SRE_EN_BIT | ICC_SRE_SRE_BIT;
 	write_el2_ctx_common(el2_ctx, icc_sre_el2, icc_sre_el2_val);
-#endif /* CTX_INCLUDE_EL2_REGS */
+
+	/*
+	 * The actlr_el2 register can be initialized in platform's reset handler
+	 * and it may contain access control bits (e.g. CLUSTERPMUEN bit).
+	 */
+	write_el2_ctx_common(el2_ctx, actlr_el2, read_actlr_el2());
+#endif /* (CTX_INCLUDE_EL2_REGS && IMAGE_BL31) */
 
 	/* Start with a clean SCR_EL3 copy as all relevant values are set */
 	scr_el3 = SCR_RESET_VAL;
@@ -383,6 +424,15 @@ static void setup_context_common(cpu_context_t *ctx, const entry_point_info_t *e
 	 */
 	if (is_feat_hcx_supported()) {
 		scr_el3 |= SCR_HXEn_BIT;
+	}
+
+	/*
+	 * If FEAT_LS64_ACCDATA is enabled, enable access to ACCDATA_EL1 by
+	 * setting SCR_EL3.ADEn and allow the ST64BV0 instruction by setting
+	 * SCR_EL3.EnAS0.
+	 */
+	if (is_feat_ls64_accdata_supported()) {
+		scr_el3 |= SCR_ADEn_BIT | SCR_EnAS0_BIT;
 	}
 
 	/*
@@ -484,6 +534,37 @@ static void setup_context_common(cpu_context_t *ctx, const entry_point_info_t *e
 	write_ctx_reg(state, CTX_ELR_EL3, ep->pc);
 	write_ctx_reg(state, CTX_SPSR_EL3, ep->spsr);
 
+	/* Start with a clean MDCR_EL3 copy as all relevant values are set */
+	mdcr_el3 = MDCR_EL3_RESET_VAL;
+
+	/* ---------------------------------------------------------------------
+	 * Initialise MDCR_EL3, setting all fields rather than relying on hw.
+	 * Some fields are architecturally UNKNOWN on reset.
+	 *
+	 * MDCR_EL3.SDD: Set to one to disable AArch64 Secure self-hosted debug.
+	 *  Debug exceptions, other than Breakpoint Instruction exceptions, are
+	 *  disabled from all ELs in Secure state.
+	 *
+	 * MDCR_EL3.SPD32: Set to 0b10 to disable AArch32 Secure self-hosted
+	 *  privileged debug from S-EL1.
+	 *
+	 * MDCR_EL3.TDOSA: Set to zero so that EL2 and EL2 System register
+	 *  access to the powerdown debug registers do not trap to EL3.
+	 *
+	 * MDCR_EL3.TDA: Set to zero to allow EL0, EL1 and EL2 access to the
+	 *  debug registers, other than those registers that are controlled by
+	 *  MDCR_EL3.TDOSA.
+	 */
+	mdcr_el3 |= ((MDCR_SDD_BIT | MDCR_SPD32(MDCR_SPD32_DISABLE))
+			& ~(MDCR_TDA_BIT | MDCR_TDOSA_BIT)) ;
+	write_ctx_reg(state, CTX_MDCR_EL3, mdcr_el3);
+
+	/*
+	 * Configure MDCR_EL3 register as applicable for each world
+	 * (NS/Secure/Realm) context.
+	 */
+	manage_extensions_common(ctx);
+
 	/*
 	 * Store the X0-X7 value from the entrypoint into the context
 	 * Use memcpy as we are in control of the layout of the structures
@@ -560,28 +641,12 @@ void cm_setup_context(cpu_context_t *ctx, const entry_point_info_t *ep)
 #if IMAGE_BL31
 void cm_manage_extensions_el3(void)
 {
-	if (is_feat_spe_supported()) {
-		spe_init_el3();
-	}
-
 	if (is_feat_amu_supported()) {
 		amu_init_el3();
 	}
 
 	if (is_feat_sme_supported()) {
 		sme_init_el3();
-	}
-
-	if (is_feat_trbe_supported()) {
-		trbe_init_el3();
-	}
-
-	if (is_feat_brbe_supported()) {
-		brbe_init_el3();
-	}
-
-	if (is_feat_trf_supported()) {
-		trf_init_el3();
 	}
 
 	pmuv3_init_el3();
@@ -704,6 +769,41 @@ static void manage_extensions_secure_per_world(void)
 }
 
 /*******************************************************************************
+ * Enable architecture extensions on first entry to Non-secure world only
+ * and disable for secure world.
+ *
+ * NOTE: Arch features which have been provided with the capability of getting
+ * enabled only for non-secure world and being disabled for secure world are
+ * grouped here, as the MDCR_EL3 context value remains same across the worlds.
+ ******************************************************************************/
+static void manage_extensions_common(cpu_context_t *ctx)
+{
+#if IMAGE_BL31
+	if (is_feat_spe_supported()) {
+		/*
+		 * Enable FEAT_SPE for Non-Secure and prohibit for Secure state.
+		 */
+		spe_enable(ctx);
+	}
+
+	if (is_feat_trbe_supported()) {
+		/*
+		 * Enable FEAT_TRBE for Non-Secure and prohibit for Secure and
+		 * Realm state.
+		 */
+		trbe_enable(ctx);
+	}
+
+	if (is_feat_trf_supported()) {
+		/*
+		 * Enable FEAT_TRF for Non-Secure and prohibit for Secure state.
+		 */
+		trf_enable(ctx);
+	}
+#endif /* IMAGE_BL31 */
+}
+
+/*******************************************************************************
  * Enable architecture extensions on first entry to Non-secure world.
  ******************************************************************************/
 static void manage_extensions_nonsecure(cpu_context_t *ctx)
@@ -715,6 +815,18 @@ static void manage_extensions_nonsecure(cpu_context_t *ctx)
 
 	if (is_feat_sme_supported()) {
 		sme_enable(ctx);
+	}
+
+	if (is_feat_fgt2_supported()) {
+		fgt2_enable(ctx);
+	}
+
+	if (is_feat_debugv8p9_supported()) {
+		debugv8p9_extended_bp_wp_enable(ctx);
+	}
+
+	if (is_feat_brbe_supported()) {
+		brbe_enable(ctx);
 	}
 
 	pmuv3_enable(ctx);
@@ -956,7 +1068,7 @@ static void init_nonsecure_el2_unused(cpu_context_t *ctx)
  ******************************************************************************/
 void cm_prepare_el3_exit(uint32_t security_state)
 {
-	u_register_t sctlr_elx, scr_el3;
+	u_register_t sctlr_el2, scr_el3;
 	cpu_context_t *ctx = cm_get_context(security_state);
 
 	assert(ctx != NULL);
@@ -997,20 +1109,19 @@ void cm_prepare_el3_exit(uint32_t security_state)
 
 			/* Condition to ensure EL2 is being used. */
 			if ((scr_el3 & SCR_HCE_BIT) != 0U) {
-				/* Use SCTLR_EL1.EE value to initialise sctlr_el2 */
-				sctlr_elx = read_ctx_reg(get_el1_sysregs_ctx(ctx),
-								CTX_SCTLR_EL1);
-				sctlr_elx &= SCTLR_EE_BIT;
-				sctlr_elx |= SCTLR_EL2_RES1;
-#if ERRATA_A75_764081
+				/* Initialize SCTLR_EL2 register with reset value. */
+				sctlr_el2 = SCTLR_EL2_RES1;
+
 				/*
 				 * If workaround of errata 764081 for Cortex-A75
 				 * is used then set SCTLR_EL2.IESB to enable
 				 * Implicit Error Synchronization Barrier.
 				 */
-				sctlr_elx |= SCTLR_IESB_BIT;
-#endif /* ERRATA_A75_764081 */
-				write_sctlr_el2(sctlr_elx);
+				if (errata_a75_764081_applies()) {
+					sctlr_el2 |= SCTLR_IESB_BIT;
+				}
+
+				write_sctlr_el2(sctlr_el2);
 			} else {
 				/*
 				 * (scr_el3 & SCR_HCE_BIT==0)
@@ -1020,11 +1131,14 @@ void cm_prepare_el3_exit(uint32_t security_state)
 			}
 		}
 	}
+#if (!CTX_INCLUDE_EL2_REGS)
+	/* Restore EL1 system registers, only when CTX_INCLUDE_EL2_REGS=0 */
 	cm_el1_sysregs_context_restore(security_state);
+#endif
 	cm_set_next_eret_context(security_state);
 }
 
-#if CTX_INCLUDE_EL2_REGS
+#if (CTX_INCLUDE_EL2_REGS && IMAGE_BL31)
 
 static void el2_sysregs_context_save_fgt(el2_sysregs_t *ctx)
 {
@@ -1050,13 +1164,29 @@ static void el2_sysregs_context_restore_fgt(el2_sysregs_t *ctx)
 	write_hfgwtr_el2(read_el2_ctx_fgt(ctx, hfgwtr_el2));
 }
 
-#if CTX_INCLUDE_MPAM_REGS
+static void el2_sysregs_context_save_fgt2(el2_sysregs_t *ctx)
+{
+	write_el2_ctx_fgt2(ctx, hdfgrtr2_el2, read_hdfgrtr2_el2());
+	write_el2_ctx_fgt2(ctx, hdfgwtr2_el2, read_hdfgwtr2_el2());
+	write_el2_ctx_fgt2(ctx, hfgitr2_el2, read_hfgitr2_el2());
+	write_el2_ctx_fgt2(ctx, hfgrtr2_el2, read_hfgrtr2_el2());
+	write_el2_ctx_fgt2(ctx, hfgwtr2_el2, read_hfgwtr2_el2());
+}
 
-static void el2_sysregs_context_save_mpam(mpam_t *ctx)
+static void el2_sysregs_context_restore_fgt2(el2_sysregs_t *ctx)
+{
+	write_hdfgrtr2_el2(read_el2_ctx_fgt2(ctx, hdfgrtr2_el2));
+	write_hdfgwtr2_el2(read_el2_ctx_fgt2(ctx, hdfgwtr2_el2));
+	write_hfgitr2_el2(read_el2_ctx_fgt2(ctx, hfgitr2_el2));
+	write_hfgrtr2_el2(read_el2_ctx_fgt2(ctx, hfgrtr2_el2));
+	write_hfgwtr2_el2(read_el2_ctx_fgt2(ctx, hfgwtr2_el2));
+}
+
+static void el2_sysregs_context_save_mpam(el2_sysregs_t *ctx)
 {
 	u_register_t mpam_idr = read_mpamidr_el1();
 
-	write_ctx_reg(ctx, CTX_MPAM2_EL2, read_mpam2_el2());
+	write_el2_ctx_mpam(ctx, mpam2_el2, read_mpam2_el2());
 
 	/*
 	 * The context registers that we intend to save would be part of the
@@ -1070,9 +1200,9 @@ static void el2_sysregs_context_save_mpam(mpam_t *ctx)
 	 * MPAMHCR_EL2, MPAMVPMV_EL2 and MPAMVPM0_EL2 are always present if
 	 * MPAMIDR_HAS_HCR_BIT == 1.
 	 */
-	write_ctx_reg(ctx, CTX_MPAMHCR_EL2, read_mpamhcr_el2());
-	write_ctx_reg(ctx, CTX_MPAMVPM0_EL2, read_mpamvpm0_el2());
-	write_ctx_reg(ctx, CTX_MPAMVPMV_EL2, read_mpamvpmv_el2());
+	write_el2_ctx_mpam(ctx, mpamhcr_el2, read_mpamhcr_el2());
+	write_el2_ctx_mpam(ctx, mpamvpm0_el2, read_mpamvpm0_el2());
+	write_el2_ctx_mpam(ctx, mpamvpmv_el2, read_mpamvpmv_el2());
 
 	/*
 	 * The number of MPAMVPM registers is implementation defined, their
@@ -1080,71 +1210,67 @@ static void el2_sysregs_context_save_mpam(mpam_t *ctx)
 	 */
 	switch ((mpam_idr >> MPAMIDR_EL1_VPMR_MAX_SHIFT) & MPAMIDR_EL1_VPMR_MAX_MASK) {
 	case 7:
-		write_ctx_reg(ctx, CTX_MPAMVPM7_EL2, read_mpamvpm7_el2());
+		write_el2_ctx_mpam(ctx, mpamvpm7_el2, read_mpamvpm7_el2());
 		__fallthrough;
 	case 6:
-		write_ctx_reg(ctx, CTX_MPAMVPM6_EL2, read_mpamvpm6_el2());
+		write_el2_ctx_mpam(ctx, mpamvpm6_el2, read_mpamvpm6_el2());
 		__fallthrough;
 	case 5:
-		write_ctx_reg(ctx, CTX_MPAMVPM5_EL2, read_mpamvpm5_el2());
+		write_el2_ctx_mpam(ctx, mpamvpm5_el2, read_mpamvpm5_el2());
 		__fallthrough;
 	case 4:
-		write_ctx_reg(ctx, CTX_MPAMVPM4_EL2, read_mpamvpm4_el2());
+		write_el2_ctx_mpam(ctx, mpamvpm4_el2, read_mpamvpm4_el2());
 		__fallthrough;
 	case 3:
-		write_ctx_reg(ctx, CTX_MPAMVPM3_EL2, read_mpamvpm3_el2());
+		write_el2_ctx_mpam(ctx, mpamvpm3_el2, read_mpamvpm3_el2());
 		__fallthrough;
 	case 2:
-		write_ctx_reg(ctx, CTX_MPAMVPM2_EL2, read_mpamvpm2_el2());
+		write_el2_ctx_mpam(ctx, mpamvpm2_el2, read_mpamvpm2_el2());
 		__fallthrough;
 	case 1:
-		write_ctx_reg(ctx, CTX_MPAMVPM1_EL2, read_mpamvpm1_el2());
+		write_el2_ctx_mpam(ctx, mpamvpm1_el2, read_mpamvpm1_el2());
 		break;
 	}
 }
 
-#endif /* CTX_INCLUDE_MPAM_REGS */
-
-#if CTX_INCLUDE_MPAM_REGS
-static void el2_sysregs_context_restore_mpam(mpam_t *ctx)
+static void el2_sysregs_context_restore_mpam(el2_sysregs_t *ctx)
 {
 	u_register_t mpam_idr = read_mpamidr_el1();
 
-	write_mpam2_el2(read_ctx_reg(ctx, CTX_MPAM2_EL2));
+	write_mpam2_el2(read_el2_ctx_mpam(ctx, mpam2_el2));
 
 	if ((mpam_idr & MPAMIDR_HAS_HCR_BIT) == 0U) {
 		return;
 	}
 
-	write_mpamhcr_el2(read_ctx_reg(ctx, CTX_MPAMHCR_EL2));
-	write_mpamvpm0_el2(read_ctx_reg(ctx, CTX_MPAMVPM0_EL2));
-	write_mpamvpmv_el2(read_ctx_reg(ctx, CTX_MPAMVPMV_EL2));
+	write_mpamhcr_el2(read_el2_ctx_mpam(ctx, mpamhcr_el2));
+	write_mpamvpm0_el2(read_el2_ctx_mpam(ctx, mpamvpm0_el2));
+	write_mpamvpmv_el2(read_el2_ctx_mpam(ctx, mpamvpmv_el2));
 
 	switch ((mpam_idr >> MPAMIDR_EL1_VPMR_MAX_SHIFT) & MPAMIDR_EL1_VPMR_MAX_MASK) {
 	case 7:
-		write_mpamvpm7_el2(read_ctx_reg(ctx, CTX_MPAMVPM7_EL2));
+		write_mpamvpm7_el2(read_el2_ctx_mpam(ctx, mpamvpm7_el2));
 		__fallthrough;
 	case 6:
-		write_mpamvpm6_el2(read_ctx_reg(ctx, CTX_MPAMVPM6_EL2));
+		write_mpamvpm6_el2(read_el2_ctx_mpam(ctx, mpamvpm6_el2));
 		__fallthrough;
 	case 5:
-		write_mpamvpm5_el2(read_ctx_reg(ctx, CTX_MPAMVPM5_EL2));
+		write_mpamvpm5_el2(read_el2_ctx_mpam(ctx, mpamvpm5_el2));
 		__fallthrough;
 	case 4:
-		write_mpamvpm4_el2(read_ctx_reg(ctx, CTX_MPAMVPM4_EL2));
+		write_mpamvpm4_el2(read_el2_ctx_mpam(ctx, mpamvpm4_el2));
 		__fallthrough;
 	case 3:
-		write_mpamvpm3_el2(read_ctx_reg(ctx, CTX_MPAMVPM3_EL2));
+		write_mpamvpm3_el2(read_el2_ctx_mpam(ctx, mpamvpm3_el2));
 		__fallthrough;
 	case 2:
-		write_mpamvpm2_el2(read_ctx_reg(ctx, CTX_MPAMVPM2_EL2));
+		write_mpamvpm2_el2(read_el2_ctx_mpam(ctx, mpamvpm2_el2));
 		__fallthrough;
 	case 1:
-		write_mpamvpm1_el2(read_ctx_reg(ctx, CTX_MPAMVPM1_EL2));
+		write_mpamvpm1_el2(read_el2_ctx_mpam(ctx, mpamvpm1_el2));
 		break;
 	}
 }
-#endif /* CTX_INCLUDE_MPAM_REGS */
 
 /* ---------------------------------------------------------------------------
  * The following registers are not added:
@@ -1225,12 +1351,13 @@ static void el2_sysregs_context_save_common(el2_sysregs_t *ctx)
 	write_el2_ctx_common(ctx, sp_el2, read_sp_el2());
 	write_el2_ctx_common(ctx, tcr_el2, read_tcr_el2());
 	write_el2_ctx_common(ctx, tpidr_el2, read_tpidr_el2());
-	write_el2_ctx_common(ctx, ttbr0_el2, read_ttbr0_el2());
 	write_el2_ctx_common(ctx, vbar_el2, read_vbar_el2());
 	write_el2_ctx_common(ctx, vmpidr_el2, read_vmpidr_el2());
 	write_el2_ctx_common(ctx, vpidr_el2, read_vpidr_el2());
 	write_el2_ctx_common(ctx, vtcr_el2, read_vtcr_el2());
-	write_el2_ctx_common(ctx, vttbr_el2, read_vttbr_el2());
+
+	write_el2_ctx_sysreg128(ctx, ttbr0_el2, read_ttbr0_el2());
+	write_el2_ctx_sysreg128(ctx, vttbr_el2, read_vttbr_el2());
 }
 
 static void el2_sysregs_context_restore_common(el2_sysregs_t *ctx)
@@ -1287,15 +1414,16 @@ void cm_el2_sysregs_context_save(uint32_t security_state)
 		write_el2_ctx_mte2(el2_sysregs_ctx, tfsr_el2, read_tfsr_el2());
 	}
 
-#if CTX_INCLUDE_MPAM_REGS
 	if (is_feat_mpam_supported()) {
-		mpam_t *mpam_ctx = get_mpam_ctx(ctx);
-		el2_sysregs_context_save_mpam(mpam_ctx);
+		el2_sysregs_context_save_mpam(el2_sysregs_ctx);
 	}
-#endif
 
 	if (is_feat_fgt_supported()) {
 		el2_sysregs_context_save_fgt(el2_sysregs_ctx);
+	}
+
+	if (is_feat_fgt2_supported()) {
+		el2_sysregs_context_save_fgt2(el2_sysregs_ctx);
 	}
 
 	if (is_feat_ecv_v2_supported()) {
@@ -1305,7 +1433,7 @@ void cm_el2_sysregs_context_save(uint32_t security_state)
 	if (is_feat_vhe_supported()) {
 		write_el2_ctx_vhe(el2_sysregs_ctx, contextidr_el2,
 					read_contextidr_el2());
-		write_el2_ctx_vhe(el2_sysregs_ctx, ttbr1_el2, read_ttbr1_el2());
+		write_el2_ctx_vhe_sysreg128(el2_sysregs_ctx, ttbr1_el2, read_ttbr1_el2());
 	}
 
 	if (is_feat_ras_supported()) {
@@ -1351,6 +1479,10 @@ void cm_el2_sysregs_context_save(uint32_t security_state)
 		write_el2_ctx_gcs(el2_sysregs_ctx, gcscr_el2, read_gcscr_el2());
 		write_el2_ctx_gcs(el2_sysregs_ctx, gcspr_el2, read_gcspr_el2());
 	}
+
+	if (is_feat_sctlr2_supported()) {
+		write_el2_ctx_sctlr2(el2_sysregs_ctx, sctlr2_el2, read_sctlr2_el2());
+	}
 }
 
 /*******************************************************************************
@@ -1373,15 +1505,16 @@ void cm_el2_sysregs_context_restore(uint32_t security_state)
 		write_tfsr_el2(read_el2_ctx_mte2(el2_sysregs_ctx, tfsr_el2));
 	}
 
-#if CTX_INCLUDE_MPAM_REGS
 	if (is_feat_mpam_supported()) {
-		mpam_t *mpam_ctx = get_mpam_ctx(ctx);
-		el2_sysregs_context_restore_mpam(mpam_ctx);
+		el2_sysregs_context_restore_mpam(el2_sysregs_ctx);
 	}
-#endif
 
 	if (is_feat_fgt_supported()) {
 		el2_sysregs_context_restore_fgt(el2_sysregs_ctx);
+	}
+
+	if (is_feat_fgt2_supported()) {
+		el2_sysregs_context_restore_fgt2(el2_sysregs_ctx);
 	}
 
 	if (is_feat_ecv_v2_supported()) {
@@ -1437,8 +1570,60 @@ void cm_el2_sysregs_context_restore(uint32_t security_state)
 		write_gcscr_el2(read_el2_ctx_gcs(el2_sysregs_ctx, gcscr_el2));
 		write_gcspr_el2(read_el2_ctx_gcs(el2_sysregs_ctx, gcspr_el2));
 	}
+
+	if (is_feat_sctlr2_supported()) {
+		write_sctlr2_el2(read_el2_ctx_sctlr2(el2_sysregs_ctx, sctlr2_el2));
+	}
 }
-#endif /* CTX_INCLUDE_EL2_REGS */
+#endif /* (CTX_INCLUDE_EL2_REGS && IMAGE_BL31) */
+
+#if IMAGE_BL31
+/*********************************************************************************
+* This function allows Architecture features asymmetry among cores.
+* TF-A assumes that all the cores in the platform has architecture feature parity
+* and hence the context is setup on different core (e.g. primary sets up the
+* context for secondary cores).This assumption may not be true for systems where
+* cores are not conforming to same Arch version or there is CPU Erratum which
+* requires certain feature to be be disabled only on a given core.
+*
+* This function is called on secondary cores to override any disparity in context
+* setup by primary, this would be called during warmboot path.
+*********************************************************************************/
+void cm_handle_asymmetric_features(void)
+{
+	cpu_context_t *ctx __maybe_unused = cm_get_context(NON_SECURE);
+
+	assert(ctx != NULL);
+
+#if ENABLE_SPE_FOR_NS == FEAT_STATE_CHECK_ASYMMETRIC
+	if (is_feat_spe_supported()) {
+		spe_enable(ctx);
+	} else {
+		spe_disable(ctx);
+	}
+#endif
+
+#if ERRATA_A520_2938996 || ERRATA_X4_2726228
+	if (check_if_affected_core() == ERRATA_APPLIES) {
+		if (is_feat_trbe_supported()) {
+			trbe_disable(ctx);
+		}
+	}
+#endif
+
+#if ENABLE_FEAT_TCR2 == FEAT_STATE_CHECK_ASYMMETRIC
+	el3_state_t *el3_state = get_el3state_ctx(ctx);
+	u_register_t spsr = read_ctx_reg(el3_state, CTX_SPSR_EL3);
+
+	if (is_feat_tcr2_supported() && (GET_RW(spsr) == MODE_RW_64)) {
+		tcr2_enable(ctx);
+	} else {
+		tcr2_disable(ctx);
+	}
+#endif
+
+}
+#endif
 
 /*******************************************************************************
  * This function is used to exit to Non-secure world. If CTX_INCLUDE_EL2_REGS
@@ -1448,7 +1633,19 @@ void cm_el2_sysregs_context_restore(uint32_t security_state)
  ******************************************************************************/
 void cm_prepare_el3_exit_ns(void)
 {
-#if CTX_INCLUDE_EL2_REGS
+#if IMAGE_BL31
+	/*
+	 * Check and handle Architecture feature asymmetry among cores.
+	 *
+	 * In warmboot path secondary cores context is initialized on core which
+	 * did CPU_ON SMC call, if there is feature asymmetry in these cores handle
+	 * it in this function call.
+	 * For Symmetric cores this is an empty function.
+	 */
+	cm_handle_asymmetric_features();
+#endif
+
+#if (CTX_INCLUDE_EL2_REGS && IMAGE_BL31)
 #if ENABLE_ASSERTIONS
 	cpu_context_t *ctx = cm_get_context(NON_SECURE);
 	assert(ctx != NULL);
@@ -1459,237 +1656,238 @@ void cm_prepare_el3_exit_ns(void)
 			(el_implemented(2U) != EL_IMPL_NONE));
 #endif /* ENABLE_ASSERTIONS */
 
-	/* Restore EL2 and EL1 sysreg contexts */
+	/* Restore EL2 sysreg contexts */
 	cm_el2_sysregs_context_restore(NON_SECURE);
-	cm_el1_sysregs_context_restore(NON_SECURE);
 	cm_set_next_eret_context(NON_SECURE);
 #else
 	cm_prepare_el3_exit(NON_SECURE);
-#endif /* CTX_INCLUDE_EL2_REGS */
+#endif /* (CTX_INCLUDE_EL2_REGS && IMAGE_BL31) */
 }
 
+#if ((IMAGE_BL1) || (IMAGE_BL31 && (!CTX_INCLUDE_EL2_REGS)))
+/*******************************************************************************
+ * The next set of six functions are used by runtime services to save and restore
+ * EL1 context on the 'cpu_context' structure for the specified security state.
+ ******************************************************************************/
 static void el1_sysregs_context_save(el1_sysregs_t *ctx)
 {
-	write_ctx_reg(ctx, CTX_SPSR_EL1, read_spsr_el1());
-	write_ctx_reg(ctx, CTX_ELR_EL1, read_elr_el1());
+	write_el1_ctx_common(ctx, spsr_el1, read_spsr_el1());
+	write_el1_ctx_common(ctx, elr_el1, read_elr_el1());
 
-#if !ERRATA_SPECULATIVE_AT
-	write_ctx_reg(ctx, CTX_SCTLR_EL1, read_sctlr_el1());
-	write_ctx_reg(ctx, CTX_TCR_EL1, read_tcr_el1());
+#if (!ERRATA_SPECULATIVE_AT)
+	write_el1_ctx_common(ctx, sctlr_el1, read_sctlr_el1());
+	write_el1_ctx_common(ctx, tcr_el1, read_tcr_el1());
 #endif /* (!ERRATA_SPECULATIVE_AT) */
 
-	write_ctx_reg(ctx, CTX_CPACR_EL1, read_cpacr_el1());
-	write_ctx_reg(ctx, CTX_CSSELR_EL1, read_csselr_el1());
-	write_ctx_reg(ctx, CTX_SP_EL1, read_sp_el1());
-	write_ctx_reg(ctx, CTX_ESR_EL1, read_esr_el1());
-	write_ctx_reg(ctx, CTX_TTBR0_EL1, read_ttbr0_el1());
-	write_ctx_reg(ctx, CTX_TTBR1_EL1, read_ttbr1_el1());
-	write_ctx_reg(ctx, CTX_MAIR_EL1, read_mair_el1());
-	write_ctx_reg(ctx, CTX_AMAIR_EL1, read_amair_el1());
-	write_ctx_reg(ctx, CTX_ACTLR_EL1, read_actlr_el1());
-	write_ctx_reg(ctx, CTX_TPIDR_EL1, read_tpidr_el1());
-	write_ctx_reg(ctx, CTX_TPIDR_EL0, read_tpidr_el0());
-	write_ctx_reg(ctx, CTX_TPIDRRO_EL0, read_tpidrro_el0());
-	write_ctx_reg(ctx, CTX_PAR_EL1, read_par_el1());
-	write_ctx_reg(ctx, CTX_FAR_EL1, read_far_el1());
-	write_ctx_reg(ctx, CTX_AFSR0_EL1, read_afsr0_el1());
-	write_ctx_reg(ctx, CTX_AFSR1_EL1, read_afsr1_el1());
-	write_ctx_reg(ctx, CTX_CONTEXTIDR_EL1, read_contextidr_el1());
-	write_ctx_reg(ctx, CTX_VBAR_EL1, read_vbar_el1());
-	write_ctx_reg(ctx, CTX_MDCCINT_EL1, read_mdccint_el1());
-	write_ctx_reg(ctx, CTX_MDSCR_EL1, read_mdscr_el1());
+	write_el1_ctx_common(ctx, cpacr_el1, read_cpacr_el1());
+	write_el1_ctx_common(ctx, csselr_el1, read_csselr_el1());
+	write_el1_ctx_common(ctx, sp_el1, read_sp_el1());
+	write_el1_ctx_common(ctx, esr_el1, read_esr_el1());
+	write_el1_ctx_common(ctx, ttbr0_el1, read_ttbr0_el1());
+	write_el1_ctx_common(ctx, ttbr1_el1, read_ttbr1_el1());
+	write_el1_ctx_common(ctx, mair_el1, read_mair_el1());
+	write_el1_ctx_common(ctx, amair_el1, read_amair_el1());
+	write_el1_ctx_common(ctx, actlr_el1, read_actlr_el1());
+	write_el1_ctx_common(ctx, tpidr_el1, read_tpidr_el1());
+	write_el1_ctx_common(ctx, tpidr_el0, read_tpidr_el0());
+	write_el1_ctx_common(ctx, tpidrro_el0, read_tpidrro_el0());
+	write_el1_ctx_common(ctx, par_el1, read_par_el1());
+	write_el1_ctx_common(ctx, far_el1, read_far_el1());
+	write_el1_ctx_common(ctx, afsr0_el1, read_afsr0_el1());
+	write_el1_ctx_common(ctx, afsr1_el1, read_afsr1_el1());
+	write_el1_ctx_common(ctx, contextidr_el1, read_contextidr_el1());
+	write_el1_ctx_common(ctx, vbar_el1, read_vbar_el1());
+	write_el1_ctx_common(ctx, mdccint_el1, read_mdccint_el1());
+	write_el1_ctx_common(ctx, mdscr_el1, read_mdscr_el1());
 
-#if CTX_INCLUDE_AARCH32_REGS
-	write_ctx_reg(ctx, CTX_SPSR_ABT, read_spsr_abt());
-	write_ctx_reg(ctx, CTX_SPSR_UND, read_spsr_und());
-	write_ctx_reg(ctx, CTX_SPSR_IRQ, read_spsr_irq());
-	write_ctx_reg(ctx, CTX_SPSR_FIQ, read_spsr_fiq());
-	write_ctx_reg(ctx, CTX_DACR32_EL2, read_dacr32_el2());
-	write_ctx_reg(ctx, CTX_IFSR32_EL2, read_ifsr32_el2());
-#endif /* CTX_INCLUDE_AARCH32_REGS */
+	if (CTX_INCLUDE_AARCH32_REGS) {
+		/* Save Aarch32 registers */
+		write_el1_ctx_aarch32(ctx, spsr_abt, read_spsr_abt());
+		write_el1_ctx_aarch32(ctx, spsr_und, read_spsr_und());
+		write_el1_ctx_aarch32(ctx, spsr_irq, read_spsr_irq());
+		write_el1_ctx_aarch32(ctx, spsr_fiq, read_spsr_fiq());
+		write_el1_ctx_aarch32(ctx, dacr32_el2, read_dacr32_el2());
+		write_el1_ctx_aarch32(ctx, ifsr32_el2, read_ifsr32_el2());
+	}
 
-#if NS_TIMER_SWITCH
-	write_ctx_reg(ctx, CTX_CNTP_CTL_EL0, read_cntp_ctl_el0());
-	write_ctx_reg(ctx, CTX_CNTP_CVAL_EL0, read_cntp_cval_el0());
-	write_ctx_reg(ctx, CTX_CNTV_CTL_EL0, read_cntv_ctl_el0());
-	write_ctx_reg(ctx, CTX_CNTV_CVAL_EL0, read_cntv_cval_el0());
-	write_ctx_reg(ctx, CTX_CNTKCTL_EL1, read_cntkctl_el1());
-#endif /* NS_TIMER_SWITCH */
+	if (NS_TIMER_SWITCH) {
+		/* Save NS Timer registers */
+		write_el1_ctx_arch_timer(ctx, cntp_ctl_el0, read_cntp_ctl_el0());
+		write_el1_ctx_arch_timer(ctx, cntp_cval_el0, read_cntp_cval_el0());
+		write_el1_ctx_arch_timer(ctx, cntv_ctl_el0, read_cntv_ctl_el0());
+		write_el1_ctx_arch_timer(ctx, cntv_cval_el0, read_cntv_cval_el0());
+		write_el1_ctx_arch_timer(ctx, cntkctl_el1, read_cntkctl_el1());
+	}
 
-#if ENABLE_FEAT_MTE2
-	write_ctx_reg(ctx, CTX_TFSRE0_EL1, read_tfsre0_el1());
-	write_ctx_reg(ctx, CTX_TFSR_EL1, read_tfsr_el1());
-	write_ctx_reg(ctx, CTX_RGSR_EL1, read_rgsr_el1());
-	write_ctx_reg(ctx, CTX_GCR_EL1, read_gcr_el1());
-#endif /* ENABLE_FEAT_MTE2 */
+	if (is_feat_mte2_supported()) {
+		write_el1_ctx_mte2(ctx, tfsre0_el1, read_tfsre0_el1());
+		write_el1_ctx_mte2(ctx, tfsr_el1, read_tfsr_el1());
+		write_el1_ctx_mte2(ctx, rgsr_el1, read_rgsr_el1());
+		write_el1_ctx_mte2(ctx, gcr_el1, read_gcr_el1());
+	}
 
-#if ENABLE_FEAT_RAS
 	if (is_feat_ras_supported()) {
-		write_ctx_reg(ctx, CTX_DISR_EL1, read_disr_el1());
+		write_el1_ctx_ras(ctx, disr_el1, read_disr_el1());
 	}
-#endif
 
-#if ENABLE_FEAT_S1PIE
 	if (is_feat_s1pie_supported()) {
-		write_ctx_reg(ctx, CTX_PIRE0_EL1, read_pire0_el1());
-		write_ctx_reg(ctx, CTX_PIR_EL1, read_pir_el1());
+		write_el1_ctx_s1pie(ctx, pire0_el1, read_pire0_el1());
+		write_el1_ctx_s1pie(ctx, pir_el1, read_pir_el1());
 	}
-#endif
 
-#if ENABLE_FEAT_S1POE
 	if (is_feat_s1poe_supported()) {
-		write_ctx_reg(ctx, CTX_POR_EL1, read_por_el1());
+		write_el1_ctx_s1poe(ctx, por_el1, read_por_el1());
 	}
-#endif
 
-#if ENABLE_FEAT_S2POE
 	if (is_feat_s2poe_supported()) {
-		write_ctx_reg(ctx, CTX_S2POR_EL1, read_s2por_el1());
+		write_el1_ctx_s2poe(ctx, s2por_el1, read_s2por_el1());
 	}
-#endif
 
-#if ENABLE_FEAT_TCR2
 	if (is_feat_tcr2_supported()) {
-		write_ctx_reg(ctx, CTX_TCR2_EL1, read_tcr2_el1());
+		write_el1_ctx_tcr2(ctx, tcr2_el1, read_tcr2_el1());
 	}
-#endif
 
-#if ENABLE_TRF_FOR_NS
 	if (is_feat_trf_supported()) {
-		write_ctx_reg(ctx, CTX_TRFCR_EL1, read_trfcr_el1());
+		write_el1_ctx_trf(ctx, trfcr_el1, read_trfcr_el1());
 	}
-#endif
 
-#if ENABLE_FEAT_CSV2_2
 	if (is_feat_csv2_2_supported()) {
-		write_ctx_reg(ctx, CTX_SCXTNUM_EL0, read_scxtnum_el0());
-		write_ctx_reg(ctx, CTX_SCXTNUM_EL1, read_scxtnum_el1());
+		write_el1_ctx_csv2_2(ctx, scxtnum_el0, read_scxtnum_el0());
+		write_el1_ctx_csv2_2(ctx, scxtnum_el1, read_scxtnum_el1());
 	}
-#endif
 
-#if ENABLE_FEAT_GCS
 	if (is_feat_gcs_supported()) {
-		write_ctx_reg(ctx, CTX_GCSCR_EL1, read_gcscr_el1());
-		write_ctx_reg(ctx, CTX_GCSCRE0_EL1, read_gcscre0_el1());
-		write_ctx_reg(ctx, CTX_GCSPR_EL1, read_gcspr_el1());
-		write_ctx_reg(ctx, CTX_GCSPR_EL0, read_gcspr_el0());
+		write_el1_ctx_gcs(ctx, gcscr_el1, read_gcscr_el1());
+		write_el1_ctx_gcs(ctx, gcscre0_el1, read_gcscre0_el1());
+		write_el1_ctx_gcs(ctx, gcspr_el1, read_gcspr_el1());
+		write_el1_ctx_gcs(ctx, gcspr_el0, read_gcspr_el0());
 	}
-#endif
+
+	if (is_feat_the_supported()) {
+		write_el1_ctx_the(ctx, rcwmask_el1, read_rcwmask_el1());
+		write_el1_ctx_the(ctx, rcwsmask_el1, read_rcwsmask_el1());
+	}
+
+	if (is_feat_sctlr2_supported()) {
+		write_el1_ctx_sctlr2(ctx, sctlr2_el1, read_sctlr2_el1());
+	}
+
+	if (is_feat_ls64_accdata_supported()) {
+		write_el1_ctx_ls64(ctx, accdata_el1, read_accdata_el1());
+	}
 }
 
 static void el1_sysregs_context_restore(el1_sysregs_t *ctx)
 {
-	write_spsr_el1(read_ctx_reg(ctx, CTX_SPSR_EL1));
-	write_elr_el1(read_ctx_reg(ctx, CTX_ELR_EL1));
+	write_spsr_el1(read_el1_ctx_common(ctx, spsr_el1));
+	write_elr_el1(read_el1_ctx_common(ctx, elr_el1));
 
-#if !ERRATA_SPECULATIVE_AT
-	write_sctlr_el1(read_ctx_reg(ctx, CTX_SCTLR_EL1));
-	write_tcr_el1(read_ctx_reg(ctx, CTX_TCR_EL1));
+#if (!ERRATA_SPECULATIVE_AT)
+	write_sctlr_el1(read_el1_ctx_common(ctx, sctlr_el1));
+	write_tcr_el1(read_el1_ctx_common(ctx, tcr_el1));
 #endif /* (!ERRATA_SPECULATIVE_AT) */
 
-	write_cpacr_el1(read_ctx_reg(ctx, CTX_CPACR_EL1));
-	write_csselr_el1(read_ctx_reg(ctx, CTX_CSSELR_EL1));
-	write_sp_el1(read_ctx_reg(ctx, CTX_SP_EL1));
-	write_esr_el1(read_ctx_reg(ctx, CTX_ESR_EL1));
-	write_ttbr0_el1(read_ctx_reg(ctx, CTX_TTBR0_EL1));
-	write_ttbr1_el1(read_ctx_reg(ctx, CTX_TTBR1_EL1));
-	write_mair_el1(read_ctx_reg(ctx, CTX_MAIR_EL1));
-	write_amair_el1(read_ctx_reg(ctx, CTX_AMAIR_EL1));
-	write_actlr_el1(read_ctx_reg(ctx, CTX_ACTLR_EL1));
-	write_tpidr_el1(read_ctx_reg(ctx, CTX_TPIDR_EL1));
-	write_tpidr_el0(read_ctx_reg(ctx, CTX_TPIDR_EL0));
-	write_tpidrro_el0(read_ctx_reg(ctx, CTX_TPIDRRO_EL0));
-	write_par_el1(read_ctx_reg(ctx, CTX_PAR_EL1));
-	write_far_el1(read_ctx_reg(ctx, CTX_FAR_EL1));
-	write_afsr0_el1(read_ctx_reg(ctx, CTX_AFSR0_EL1));
-	write_afsr1_el1(read_ctx_reg(ctx, CTX_AFSR1_EL1));
-	write_contextidr_el1(read_ctx_reg(ctx, CTX_CONTEXTIDR_EL1));
-	write_vbar_el1(read_ctx_reg(ctx, CTX_VBAR_EL1));
-	write_mdccint_el1(read_ctx_reg(ctx, CTX_MDCCINT_EL1));
-	write_mdscr_el1(read_ctx_reg(ctx, CTX_MDSCR_EL1));
+	write_cpacr_el1(read_el1_ctx_common(ctx, cpacr_el1));
+	write_csselr_el1(read_el1_ctx_common(ctx, csselr_el1));
+	write_sp_el1(read_el1_ctx_common(ctx, sp_el1));
+	write_esr_el1(read_el1_ctx_common(ctx, esr_el1));
+	write_ttbr0_el1(read_el1_ctx_common(ctx, ttbr0_el1));
+	write_ttbr1_el1(read_el1_ctx_common(ctx, ttbr1_el1));
+	write_mair_el1(read_el1_ctx_common(ctx, mair_el1));
+	write_amair_el1(read_el1_ctx_common(ctx, amair_el1));
+	write_actlr_el1(read_el1_ctx_common(ctx, actlr_el1));
+	write_tpidr_el1(read_el1_ctx_common(ctx, tpidr_el1));
+	write_tpidr_el0(read_el1_ctx_common(ctx, tpidr_el0));
+	write_tpidrro_el0(read_el1_ctx_common(ctx, tpidrro_el0));
+	write_par_el1(read_el1_ctx_common(ctx, par_el1));
+	write_far_el1(read_el1_ctx_common(ctx, far_el1));
+	write_afsr0_el1(read_el1_ctx_common(ctx, afsr0_el1));
+	write_afsr1_el1(read_el1_ctx_common(ctx, afsr1_el1));
+	write_contextidr_el1(read_el1_ctx_common(ctx, contextidr_el1));
+	write_vbar_el1(read_el1_ctx_common(ctx, vbar_el1));
+	write_mdccint_el1(read_el1_ctx_common(ctx, mdccint_el1));
+	write_mdscr_el1(read_el1_ctx_common(ctx, mdscr_el1));
 
-#if CTX_INCLUDE_AARCH32_REGS
-	write_spsr_abt(read_ctx_reg(ctx, CTX_SPSR_ABT));
-	write_spsr_und(read_ctx_reg(ctx, CTX_SPSR_UND));
-	write_spsr_irq(read_ctx_reg(ctx, CTX_SPSR_IRQ));
-	write_spsr_fiq(read_ctx_reg(ctx, CTX_SPSR_FIQ));
-	write_dacr32_el2(read_ctx_reg(ctx, CTX_DACR32_EL2));
-	write_ifsr32_el2(read_ctx_reg(ctx, CTX_IFSR32_EL2));
-#endif /* CTX_INCLUDE_AARCH32_REGS */
+	if (CTX_INCLUDE_AARCH32_REGS) {
+		/* Restore Aarch32 registers */
+		write_spsr_abt(read_el1_ctx_aarch32(ctx, spsr_abt));
+		write_spsr_und(read_el1_ctx_aarch32(ctx, spsr_und));
+		write_spsr_irq(read_el1_ctx_aarch32(ctx, spsr_irq));
+		write_spsr_fiq(read_el1_ctx_aarch32(ctx, spsr_fiq));
+		write_dacr32_el2(read_el1_ctx_aarch32(ctx, dacr32_el2));
+		write_ifsr32_el2(read_el1_ctx_aarch32(ctx, ifsr32_el2));
+	}
 
-#if NS_TIMER_SWITCH
-	write_cntp_ctl_el0(read_ctx_reg(ctx, CTX_CNTP_CTL_EL0));
-	write_cntp_cval_el0(read_ctx_reg(ctx, CTX_CNTP_CVAL_EL0));
-	write_cntv_ctl_el0(read_ctx_reg(ctx, CTX_CNTV_CTL_EL0));
-	write_cntv_cval_el0(read_ctx_reg(ctx, CTX_CNTV_CVAL_EL0));
-	write_cntkctl_el1(read_ctx_reg(ctx, CTX_CNTKCTL_EL1));
-#endif /* NS_TIMER_SWITCH */
+	if (NS_TIMER_SWITCH) {
+		/* Restore NS Timer registers */
+		write_cntp_ctl_el0(read_el1_ctx_arch_timer(ctx, cntp_ctl_el0));
+		write_cntp_cval_el0(read_el1_ctx_arch_timer(ctx, cntp_cval_el0));
+		write_cntv_ctl_el0(read_el1_ctx_arch_timer(ctx, cntv_ctl_el0));
+		write_cntv_cval_el0(read_el1_ctx_arch_timer(ctx, cntv_cval_el0));
+		write_cntkctl_el1(read_el1_ctx_arch_timer(ctx, cntkctl_el1));
+	}
 
-#if ENABLE_FEAT_MTE2
-	write_tfsre0_el1(read_ctx_reg(ctx, CTX_TFSRE0_EL1));
-	write_tfsr_el1(read_ctx_reg(ctx, CTX_TFSR_EL1));
-	write_rgsr_el1(read_ctx_reg(ctx, CTX_RGSR_EL1));
-	write_gcr_el1(read_ctx_reg(ctx, CTX_GCR_EL1));
-#endif /* ENABLE_FEAT_MTE2 */
+	if (is_feat_mte2_supported()) {
+		write_tfsre0_el1(read_el1_ctx_mte2(ctx, tfsre0_el1));
+		write_tfsr_el1(read_el1_ctx_mte2(ctx, tfsr_el1));
+		write_rgsr_el1(read_el1_ctx_mte2(ctx, rgsr_el1));
+		write_gcr_el1(read_el1_ctx_mte2(ctx, gcr_el1));
+	}
 
-#if ENABLE_FEAT_RAS
 	if (is_feat_ras_supported()) {
-		write_disr_el1(read_ctx_reg(ctx, CTX_DISR_EL1));
+		write_disr_el1(read_el1_ctx_ras(ctx, disr_el1));
 	}
-#endif
 
-#if ENABLE_FEAT_S1PIE
 	if (is_feat_s1pie_supported()) {
-		write_pire0_el1(read_ctx_reg(ctx, CTX_PIRE0_EL1));
-		write_pir_el1(read_ctx_reg(ctx, CTX_PIR_EL1));
+		write_pire0_el1(read_el1_ctx_s1pie(ctx, pire0_el1));
+		write_pir_el1(read_el1_ctx_s1pie(ctx, pir_el1));
 	}
-#endif
 
-#if ENABLE_FEAT_S1POE
 	if (is_feat_s1poe_supported()) {
-		write_por_el1(read_ctx_reg(ctx, CTX_POR_EL1));
+		write_por_el1(read_el1_ctx_s1poe(ctx, por_el1));
 	}
-#endif
 
-#if ENABLE_FEAT_S2POE
 	if (is_feat_s2poe_supported()) {
-		write_s2por_el1(read_ctx_reg(ctx, CTX_S2POR_EL1));
+		write_s2por_el1(read_el1_ctx_s2poe(ctx, s2por_el1));
 	}
-#endif
 
-#if ENABLE_FEAT_TCR2
 	if (is_feat_tcr2_supported()) {
-		write_tcr2_el1(read_ctx_reg(ctx, CTX_TCR2_EL1));
+		write_tcr2_el1(read_el1_ctx_tcr2(ctx, tcr2_el1));
 	}
-#endif
 
-#if ENABLE_TRF_FOR_NS
 	if (is_feat_trf_supported()) {
-		write_trfcr_el1(read_ctx_reg(ctx, CTX_TRFCR_EL1));
+		write_trfcr_el1(read_el1_ctx_trf(ctx, trfcr_el1));
 	}
-#endif
 
-#if ENABLE_FEAT_CSV2_2
 	if (is_feat_csv2_2_supported()) {
-		write_scxtnum_el0(read_ctx_reg(ctx, CTX_SCXTNUM_EL0));
-		write_scxtnum_el1(read_ctx_reg(ctx, CTX_SCXTNUM_EL1));
+		write_scxtnum_el0(read_el1_ctx_csv2_2(ctx, scxtnum_el0));
+		write_scxtnum_el1(read_el1_ctx_csv2_2(ctx, scxtnum_el1));
 	}
-#endif
 
-#if ENABLE_FEAT_GCS
 	if (is_feat_gcs_supported()) {
-		write_gcscr_el1(read_ctx_reg(ctx, CTX_GCSCR_EL1));
-		write_gcscre0_el1(read_ctx_reg(ctx, CTX_GCSCRE0_EL1));
-		write_gcspr_el1(read_ctx_reg(ctx, CTX_GCSPR_EL1));
-		write_gcspr_el0(read_ctx_reg(ctx, CTX_GCSPR_EL0));
+		write_gcscr_el1(read_el1_ctx_gcs(ctx, gcscr_el1));
+		write_gcscre0_el1(read_el1_ctx_gcs(ctx, gcscre0_el1));
+		write_gcspr_el1(read_el1_ctx_gcs(ctx, gcspr_el1));
+		write_gcspr_el0(read_el1_ctx_gcs(ctx, gcspr_el0));
 	}
-#endif
+
+	if (is_feat_the_supported()) {
+		write_rcwmask_el1(read_el1_ctx_the(ctx, rcwmask_el1));
+		write_rcwsmask_el1(read_el1_ctx_the(ctx, rcwsmask_el1));
+	}
+
+	if (is_feat_sctlr2_supported()) {
+		write_sctlr2_el1(read_el1_ctx_sctlr2(ctx, sctlr2_el1));
+	}
+
+	if (is_feat_ls64_accdata_supported()) {
+		write_accdata_el1(read_el1_ctx_ls64(ctx, accdata_el1));
+	}
 }
 
 /*******************************************************************************
- * The next four functions are used by runtime services to save and restore
- * EL1 context on the 'cpu_context' structure for the specified security
- * state.
+ * The next couple of functions are used by runtime services to save and restore
+ * EL1 context on the 'cpu_context' structure for the specified security state.
  ******************************************************************************/
 void cm_el1_sysregs_context_save(uint32_t security_state)
 {
@@ -1724,6 +1922,8 @@ void cm_el1_sysregs_context_restore(uint32_t security_state)
 		PUBLISH_EVENT(cm_entering_normal_world);
 #endif
 }
+
+#endif /* ((IMAGE_BL1) || (IMAGE_BL31 && (!CTX_INCLUDE_EL2_REGS))) */
 
 /*******************************************************************************
  * This function populates ELR_EL3 member of 'cpu_context' pertaining to the

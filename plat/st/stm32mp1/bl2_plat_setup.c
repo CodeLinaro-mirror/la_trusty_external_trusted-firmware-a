@@ -331,7 +331,7 @@ skip_console_init:
 		print_pmic_info_and_debug();
 	}
 
-	stm32mp1_syscfg_init();
+	stm32mp_syscfg_init();
 
 	if (stm32_iwdg_init() < 0) {
 		panic();
@@ -365,7 +365,7 @@ skip_console_init:
 	}
 #endif
 
-	stm32mp1_syscfg_enable_io_compensation_finish();
+	stm32mp_syscfg_enable_io_compensation_finish();
 
 	fconf_populate("TB_FW", STM32MP_DTB_BASE);
 
@@ -440,8 +440,7 @@ int bl2_plat_handle_post_image_load(unsigned int image_id)
 				paged_mem_params = get_bl_mem_params_node(BL32_EXTRA2_IMAGE_ID);
 				if (paged_mem_params != NULL) {
 					paged_mem_params->image_info.image_base = STM32MP_DDR_BASE +
-						(dt_get_ddr_size() - STM32MP_DDR_S_SIZE -
-						 STM32MP_DDR_SHMEM_SIZE);
+						(dt_get_ddr_size() - STM32MP_DDR_S_SIZE);
 					paged_mem_params->image_info.image_max_size =
 						STM32MP_DDR_S_SIZE;
 				}
@@ -462,7 +461,8 @@ int bl2_plat_handle_post_image_load(unsigned int image_id)
 		break;
 
 	case BL32_IMAGE_ID:
-		if (optee_header_is_valid(bl_mem_params->image_info.image_base)) {
+		if ((bl_mem_params->image_info.image_base != 0UL) &&
+		    (optee_header_is_valid(bl_mem_params->image_info.image_base))) {
 			image_info_t *paged_image_info = NULL;
 
 			/* BL32 is OP-TEE header */
@@ -508,7 +508,7 @@ int bl2_plat_handle_post_image_load(unsigned int image_id)
 		assert(bl32_mem_params != NULL);
 		bl32_mem_params->ep_info.lr_svc = bl_mem_params->ep_info.pc;
 #if PSA_FWU_SUPPORT
-		stm32mp1_fwu_set_boot_idx();
+		stm32_fwu_set_boot_idx();
 #endif /* PSA_FWU_SUPPORT */
 		break;
 

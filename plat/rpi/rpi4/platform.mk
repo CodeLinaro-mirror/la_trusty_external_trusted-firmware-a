@@ -31,6 +31,7 @@ BL31_SOURCES		+=	lib/cpus/aarch64/cortex_a72.S		\
 				plat/common/plat_psci_common.c		\
 				plat/rpi/common/rpi3_topology.c		\
 				common/fdt_fixup.c			\
+				common/fdt_wrappers.c			\
 				${LIBFDT_SRCS}				\
 				${GICV2_SOURCES}
 
@@ -113,5 +114,5 @@ PLAT_BL_COMMON_SOURCES	+=	drivers/rpi3/rng/rpi3_rng.c		\
 endif
 
 ifeq ($(SMC_PCI_SUPPORT), 1)
-BL31_SOURCES            +=      plat/rpi/rpi4/rpi4_pci_svc.c
+BL31_SOURCES            +=      plat/rpi/common/rpi_pci_svc.c
 endif

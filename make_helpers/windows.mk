@@ -12,8 +12,6 @@
 ifndef WINDOWS_MK
     WINDOWS_MK := $(lastword $(MAKEFILE_LIST))
 
-    ECHO_BLANK_LINE := @cmd /c echo.
-    ECHO_QUIET := @rem
     DIR_DELIM := $(strip \)
     BIN_EXT   := .exe
     PATH_SEP  := ;
@@ -47,19 +45,6 @@ ifndef WINDOWS_MK
     # ${1} is a space delimited list of files to be deleted.
     define SHELL_DELETE_ALL
 	$(eval $(foreach filename,$(wildcard ${1}),$(call DELETE_IF_THERE,${filename})))
-    endef
-
-    # ${1} is the directory to be generated.
-    # ${2} is optional, and allows prerequisites to be specified.
-    # Do nothing if $1 == $2, to ignore self dependencies.
-    define MAKE_PREREQ_DIR
-        ifneq (${1},${2})
-
-${1} : ${2}
-	$(eval tmp_dir:=$(subst /,\,${1}))
-	-@if not exist "$(tmp_dir)"  mkdir "${tmp_dir}"
-
-        endif
     endef
 
     # ${1} is the directory to be removed.
