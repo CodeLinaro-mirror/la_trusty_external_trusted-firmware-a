@@ -92,6 +92,9 @@ func fpregs_context_save
 	stp	q28, q29, [x0], #32
 	stp	q30, q31, [x0], #32
 
+	# Reset x0 back to the base of simd_regs_t
+	# because the macro use CTX_SIMD_* offsets from x0
+	sub	x0, x0, #(16 * 32)
 	fpregs_state_save x0, x9
 
 	ret
@@ -129,6 +132,9 @@ func fpregs_context_restore
 	ldp	q28, q29, [x0], #32
 	ldp	q30, q31, [x0], #32
 
+	# Reset x0 back to the base of simd_regs_t
+	# because the macro use CTX_SIMD_* offsets from x0
+	sub	x0, x0, #(16 * 32)
 	fpregs_state_restore x0, x9
 
 	ret
