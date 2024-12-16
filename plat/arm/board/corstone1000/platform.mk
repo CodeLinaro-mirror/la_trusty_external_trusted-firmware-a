@@ -1,12 +1,12 @@
 #
-# Copyright (c) 2021-2023, Arm Limited and Contributors. All rights reserved.
+# Copyright (c) 2021-2024 Arm Limited and Contributors. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
 
 # Making sure the corstone1000 platform type is specified
 ifeq ($(filter ${TARGET_PLATFORM}, fpga fvp),)
-	$(error TARGET_PLATFORM must be fpga or fvp)
+        $(error TARGET_PLATFORM must be fpga or fvp)
 endif
 
 CORSTONE1000_CPU_LIBS	+=lib/cpus/aarch64/cortex_a35.S
@@ -34,6 +34,13 @@ override NEED_BL33	:=	yes
 # Add CORSTONE1000_WITH_BL32 as a preprocessor define (-D option)
 ifeq (${NEED_BL32},yes)
 $(eval $(call add_define,CORSTONE1000_WITH_BL32))
+endif
+
+ENABLE_MULTICORE       :=      0
+ifneq ($(filter ${TARGET_PLATFORM}, fvp),)
+ifeq (${ENABLE_MULTICORE},1)
+$(eval $(call add_define,CORSTONE1000_FVP_MULTICORE))
+endif
 endif
 
 # Include GICv2 driver files

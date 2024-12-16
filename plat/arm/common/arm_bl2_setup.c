@@ -42,7 +42,7 @@ static uintptr_t config_base __unused;
 #if TRANSFER_LIST
 CASSERT(BL2_BASE >= PLAT_ARM_EL3_FW_HANDOFF_BASE + PLAT_ARM_FW_HANDOFF_SIZE,
 	assert_bl2_base_overflows);
-#else
+#elif !RESET_TO_BL2
 CASSERT(BL2_BASE >= ARM_FW_CONFIG_LIMIT, assert_bl2_base_overflows);
 #endif /* TRANSFER_LIST */
 
@@ -140,6 +140,9 @@ void bl2_plat_preload_setup(void)
 
 	arm_transfer_list_dyn_cfg_init(secure_tl);
 #else
+#if ARM_FW_CONFIG_LOAD_ENABLE
+	arm_bl2_el3_plat_config_load();
+#endif /* ARM_FW_CONFIG_LOAD_ENABLE */
 	arm_bl2_dyn_cfg_init();
 #endif
 
@@ -161,16 +164,6 @@ void arm_bl2_platform_setup(void)
 
 #if defined(PLAT_ARM_MEM_PROT_ADDR)
 	arm_nor_psci_do_static_mem_protect();
-#endif
-
-#if TRANSFER_LIST
-	ns_tl = transfer_list_init((void *)FW_NS_HANDOFF_BASE,
-				   PLAT_ARM_FW_HANDOFF_SIZE);
-
-	if (ns_tl == NULL) {
-		ERROR("Non-secure transfer list initialisation failed!");
-		panic();
-	}
 #endif
 }
 
@@ -326,7 +319,8 @@ int arm_bl2_plat_handle_post_image_load(unsigned int image_id)
 
 #if TRANSFER_LIST
 	if (image_id == HW_CONFIG_ID) {
-		arm_transfer_list_copy_hw_config(secure_tl, ns_tl);
+		/* Refresh the now stale checksum following loading of HW_CONFIG into the TL. */
+		transfer_list_update_checksum(secure_tl);
 	}
 #endif /* TRANSFER_LIST */
 
@@ -335,8 +329,10 @@ int arm_bl2_plat_handle_post_image_load(unsigned int image_id)
 
 void arm_bl2_setup_next_ep_info(bl_mem_params_node_t *next_param_node)
 {
-	assert(transfer_list_set_handoff_args(
-		       secure_tl, &next_param_node->ep_info) != NULL);
+	entry_point_info_t *ep __unused;
+	ep = transfer_list_set_handoff_args(secure_tl,
+					    &next_param_node->ep_info);
+	assert(ep != NULL);
 
-	arm_transfer_list_populate_ep_info(next_param_node, secure_tl, ns_tl);
+	arm_transfer_list_populate_ep_info(next_param_node, secure_tl);
 }

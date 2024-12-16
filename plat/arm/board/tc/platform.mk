@@ -10,8 +10,6 @@ TARGET_FLAVOUR			:=	fvp
 TC_DPU_USE_SCMI_CLK		:=	1
 # SCMI power domain control enable
 TC_SCMI_PD_CTRL_EN		:=	1
-# IOMMU: Enable the use of system or individual MMUs
-TC_IOMMU_EN			:=	1
 
 # System setup
 CSS_USE_SCMI_SDS_DRIVER		:=	1
@@ -28,6 +26,9 @@ BRANCH_PROTECTION		:=	1
 ENABLE_FEAT_MPAM		:=	1 # default is 2, optimise
 ENABLE_SVE_FOR_NS		:=	2 # to show we use it
 ENABLE_SVE_FOR_SWD		:=	1
+ENABLE_SME_FOR_NS		:=	2
+ENABLE_SME2_FOR_NS		:=	2
+ENABLE_SME_FOR_SWD		:=	1
 ENABLE_TRBE_FOR_NS		:=	1
 ENABLE_SYS_REG_TRACE_FOR_NS	:=	1
 ENABLE_FEAT_AMU			:=	1
@@ -35,23 +36,41 @@ ENABLE_AMU_FCONF		:=	1
 ENABLE_AMU_AUXILIARY_COUNTERS	:=	1
 ENABLE_MPMM			:=	1
 ENABLE_MPMM_FCONF		:=	1
+ENABLE_FEAT_MTE2		:=	2
+ENABLE_SPE_FOR_NS		:=	3
+ENABLE_FEAT_TCR2		:=	3
 
 CTX_INCLUDE_AARCH32_REGS	:=	0
 
 ifeq (${SPD},spmd)
 	SPMD_SPM_AT_SEL2	:=	1
-	ENABLE_FEAT_MTE2	:=	1
 	CTX_INCLUDE_PAUTH_REGS	:=	1
 endif
 
+# TC RESOLUTION - LIST OF VALID OPTIONS (this impacts only FVP)
+TC_RESOLUTION_OPTIONS		:= 	640x480p60 \
+					1920x1080p60
+# Set default to the 640x480p60 resolution mode
+TC_RESOLUTION ?= $(firstword $(TC_RESOLUTION_OPTIONS))
+
+# Check resolution option for FVP
+ifneq ($(filter ${TARGET_FLAVOUR}, fvp),)
+ifeq ($(filter ${TC_RESOLUTION}, ${TC_RESOLUTION_OPTIONS}),)
+        $(error TC_RESOLUTION is ${TC_RESOLUTION}, it must be: ${TC_RESOLUTION_OPTIONS})
+endif
+endif
 
 ifneq ($(shell expr $(TARGET_PLATFORM) \<= 1), 0)
+        $(error Platform ${PLAT}$(TARGET_PLATFORM) is no longer available.)
+endif
+
+ifneq ($(shell expr $(TARGET_PLATFORM) = 2), 0)
         $(warning Platform ${PLAT}$(TARGET_PLATFORM) is deprecated. \
           Some of the features might not work as expected)
 endif
 
-ifeq ($(shell expr $(TARGET_PLATFORM) \<= 3), 0)
-        $(error TARGET_PLATFORM must be less than or equal to 3)
+ifeq ($(shell expr $(TARGET_PLATFORM) \<= 4), 0)
+        $(error TARGET_PLATFORM must be less than or equal to 4)
 endif
 
 ifeq ($(filter ${TARGET_FLAVOUR}, fvp fpga),)
@@ -61,15 +80,22 @@ endif
 $(eval $(call add_defines, \
 	TARGET_PLATFORM \
 	TARGET_FLAVOUR_$(call uppercase,${TARGET_FLAVOUR}) \
+	TC_RESOLUTION_$(call uppercase,${TC_RESOLUTION}) \
 	TC_DPU_USE_SCMI_CLK \
 	TC_SCMI_PD_CTRL_EN \
-	TC_IOMMU_EN \
 ))
 
 CSS_LOAD_SCP_IMAGES	:=	1
 
 # Save DSU PMU registers on cluster off and restore them on cluster on
 PRESERVE_DSU_PMU_REGS		:= 1
+
+# Specify MHU type based on platform
+ifneq ($(filter ${TARGET_PLATFORM}, 2),)
+	PLAT_MHU_VERSION	:= 2
+else
+	PLAT_MHU_VERSION	:= 3
+endif
 
 # Include GICv3 driver files
 include drivers/arm/gic/v3/gicv3.mk
@@ -92,6 +118,9 @@ endif
 
 # CPU libraries for TARGET_PLATFORM=2
 ifeq (${TARGET_PLATFORM}, 2)
+ERRATA_A520_2938996	:=	1
+ERRATA_X4_2726228	:=	1
+
 TC_CPU_SOURCES	+=	lib/cpus/aarch64/cortex_a520.S \
 			lib/cpus/aarch64/cortex_a720.S \
 			lib/cpus/aarch64/cortex_x4.S
@@ -99,12 +128,22 @@ endif
 
 # CPU libraries for TARGET_PLATFORM=3
 ifeq (${TARGET_PLATFORM}, 3)
+ERRATA_A520_2938996	:=	1
+
 TC_CPU_SOURCES	+=	lib/cpus/aarch64/cortex_a520.S \
-			lib/cpus/aarch64/cortex_chaberton.S \
-			lib/cpus/aarch64/cortex_blackhawk.S
+			lib/cpus/aarch64/cortex_a725.S \
+			lib/cpus/aarch64/cortex_x925.S
 endif
 
-INTERCONNECT_SOURCES	:=	${TC_BASE}/tc_interconnect.c
+# CPU libraries for TARGET_PLATFORM=4
+ifeq (${TARGET_PLATFORM}, 4)
+TC_CPU_SOURCES	+=	lib/cpus/aarch64/cortex_gelas.S \
+			lib/cpus/aarch64/nevis.S \
+			lib/cpus/aarch64/travis.S
+endif
+
+INTERCONNECT_SOURCES	:=	${TC_BASE}/tc_interconnect.c \
+				plat/arm/common/arm_ni.c
 
 PLAT_BL_COMMON_SOURCES	+=	${TC_BASE}/tc_plat.c	\
 				${TC_BASE}/include/tc_helpers.S
@@ -112,6 +151,7 @@ PLAT_BL_COMMON_SOURCES	+=	${TC_BASE}/tc_plat.c	\
 BL1_SOURCES		+=	${INTERCONNECT_SOURCES}	\
 				${TC_CPU_SOURCES}	\
 				${TC_BASE}/tc_trusted_boot.c	\
+				${TC_BASE}/tc_bl1_setup.c \
 				${TC_BASE}/tc_err.c	\
 				drivers/arm/sbsa/sbsa.c
 
@@ -121,8 +161,11 @@ BL2_SOURCES		+=	${TC_BASE}/tc_security.c	\
 				${TC_BASE}/tc_bl2_setup.c		\
 				lib/utils/mem_region.c			\
 				drivers/arm/tzc/tzc400.c		\
-				plat/arm/common/arm_tzc400.c		\
 				plat/arm/common/arm_nor_psci_mem_protect.c
+
+ifeq ($(shell test $(TARGET_PLATFORM) -le 2; echo $$?),0)
+BL2_SOURCES		+=	plat/arm/common/arm_tzc400.c
+endif
 
 BL31_SOURCES		+=	${INTERCONNECT_SOURCES}	\
 				${TC_CPU_SOURCES}	\
@@ -241,5 +284,4 @@ endif
 
 include plat/arm/common/arm_common.mk
 include plat/arm/css/common/css_common.mk
-include plat/arm/soc/common/soc_css.mk
 include plat/arm/board/common/board_common.mk
