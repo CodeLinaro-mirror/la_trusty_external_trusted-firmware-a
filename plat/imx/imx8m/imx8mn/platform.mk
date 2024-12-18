@@ -25,7 +25,8 @@ IMX_GIC_SOURCES		:=	${GICV3_SOURCES}			\
 				plat/common/plat_psci_common.c		\
 				plat/imx/common/plat_imx8_gic.c
 
-BL31_SOURCES		+=	plat/imx/common/imx8_helpers.S			\
+BL31_SOURCES		+=	common/desc_image_load.c			\
+				plat/imx/common/imx8_helpers.S			\
 				plat/imx/imx8m/gpc_common.c			\
 				plat/imx/imx8m/imx_hab.c			\
 				plat/imx/imx8m/imx_aipstz.c			\
@@ -41,12 +42,12 @@ BL31_SOURCES		+=	plat/imx/common/imx8_helpers.S			\
 				plat/imx/common/imx8_topology.c			\
 				plat/imx/common/imx_sip_handler.c		\
 				plat/imx/common/imx_sip_svc.c			\
+				plat/imx/common/imx_common.c			\
 				plat/imx/common/imx_uart_console.S		\
 				lib/cpus/aarch64/cortex_a53.S			\
 				drivers/arm/tzc/tzc380.c			\
 				drivers/delay_timer/delay_timer.c		\
 				drivers/delay_timer/generic_delay_timer.c	\
-				${IMX_DRAM_SOURCES}				\
 				${IMX_GIC_SOURCES}				\
 				${XLAT_TABLES_LIB_SRCS}
 
@@ -58,6 +59,14 @@ A53_DISABLE_NON_TEMPORAL_HINT := 0
 ERRATA_A53_835769	:=	1
 ERRATA_A53_843419	:=	1
 ERRATA_A53_855873	:=	1
+
+IMX_DRAM_RETENTION	?=	1
+$(eval $(call assert_boolean,IMX_DRAM_RETENTION))
+$(eval $(call add_define,IMX_DRAM_RETENTION))
+
+ifeq (${IMX_DRAM_RETENTION},1)
+BL31_SOURCES		+=	${IMX_DRAM_SOURCES}
+endif
 
 ifneq (${PRELOADED_BL33_BASE},)
 $(eval $(call add_define_val,PLAT_NS_IMAGE_OFFSET,${PRELOADED_BL33_BASE}))

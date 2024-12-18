@@ -4,12 +4,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 #
 
-ifeq ($(filter-out clean,$(or $(MAKECMDGOALS),all)),)
-        toolchains :=
-else
-        toolchains := aarch64
-endif
-
+include ../../make_helpers/build-rules.mk
+include ../../make_helpers/common.mk
 include ../../make_helpers/toolchain.mk
 
 ROMLIB_GEN  = ./romlib_generator.py
@@ -23,15 +19,10 @@ OBJS        = $(BUILD_DIR)/jmptbl.o $(BUILD_DIR)/init.o
 MAPFILE     = $(BUILD_PLAT)/romlib/romlib.map
 
 ifneq ($(PLAT_DIR),)
-  WRAPPER_SOURCES   = $(shell $(ROMLIB_GEN) genwrappers -b $(WRAPPER_DIR) --list ../../$(PLAT_DIR)/jmptbl.i)
-  WRAPPER_OBJS      = $(WRAPPER_SOURCES:.s=.o)
-endif
+        WRAPPER_SOURCES = $(sort $(shell $(ROMLIB_GEN) genwrappers -b $\
+                $(WRAPPER_DIR) --list ../../$(PLAT_DIR)/jmptbl.i))
 
-V ?= 0
-ifeq ($(V),0)
-  Q := @
-else
-  Q :=
+        WRAPPER_OBJS = $(WRAPPER_SOURCES:.s=.o)
 endif
 
 LDFLAGS := -Wl,--gc-sections -nostdlib
@@ -48,55 +39,56 @@ endif
 
 .PHONY: all clean distclean
 
-all: $(BUILD_DIR)/romlib.bin $(LIB_DIR)/libwrappers.a
+all: $(BUILD_DIR)/romlib.bin $(BUILD_DIR)/romlib.ldflags $(LIB_DIR)/libwrappers.a
 
-%.o: %.s
-	@echo "  AS      $@"
-	$(Q)$(aarch64-as) -c $(ASFLAGS) -o $@ $<
+%.o: %.s | $$(@D)/
+	$(s)echo "  AS      $@"
+	$(q)$(aarch64-as) -c $(ASFLAGS) -o $@ $<
 
-$(BUILD_DIR)/%.o: %.s
-	@echo "  AS      $@"
-	$(Q)$(aarch64-as) -c $(ASFLAGS) -o $@ $<
+$(BUILD_DIR)/%.o: %.s | $$(@D)/
+	$(s)echo "  AS      $@"
+	$(q)$(aarch64-as) -c $(ASFLAGS) -o $@ $<
 
-$(BUILD_DIR)/romlib.ld: romlib.ld.S
-	@echo "  PP      $@"
-	$(Q)$(aarch64-cpp) -E $(PPFLAGS) -o $@ romlib.ld.S
+$(BUILD_DIR)/romlib.ld: romlib.ld.S | $$(@D)/
+	$(s)echo "  PP      $@"
+	$(q)$(aarch64-cpp) -E $(PPFLAGS) -o $@ romlib.ld.S
 
-$(BUILD_DIR)/romlib.elf: $(OBJS) $(BUILD_DIR)/romlib.ld
-	@echo "  LD      $@"
-	$(Q)$(aarch64-ld) -T $(BUILD_DIR)/romlib.ld -L$(LIB_DIR) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
+$(BUILD_DIR)/romlib.elf: $(OBJS) $(BUILD_DIR)/romlib.ld | $$(@D)/
+	$(s)echo "  LD      $@"
+	$(q)$(aarch64-ld) -T $(BUILD_DIR)/romlib.ld -L$(LIB_DIR) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
 
-$(BUILD_DIR)/romlib.bin: $(BUILD_DIR)/romlib.elf
-	@echo "  BIN     $@"
-	$(Q)$(aarch64-oc) -O binary $(BUILD_DIR)/romlib.elf $@
+$(BUILD_DIR)/romlib.bin: $(BUILD_DIR)/romlib.elf | $$(@D)/
+	$(s)echo "  BIN     $@"
+	$(q)$(aarch64-oc) -O binary $(BUILD_DIR)/romlib.elf $@
 
-$(WRAPPER_DIR)/jmpvar.s: $(BUILD_DIR)/romlib.elf
-	@echo "  VAR     $@"
-	$(Q)$(ROMLIB_GEN) genvar --output $@ $<
+$(WRAPPER_DIR)/jmpvar.s: $(BUILD_DIR)/romlib.elf | $$(@D)/
+	$(s)echo "  VAR     $@"
+	$(q)$(ROMLIB_GEN) genvar --output $@ $<
 
-$(LIB_DIR)/libwrappers.a: $(WRAPPER_DIR)/jmpvar.o $(WRAPPER_OBJS)
-	@echo "  AR      $@"
-	$(Q)$(aarch64-ar) -rc $@ $(WRAPPER_DIR)/jmpvar.o $(WRAPPER_OBJS)
+$(LIB_DIR)/libwrappers.a: $(WRAPPER_DIR)/jmpvar.o $(WRAPPER_OBJS) | $$(@D)/
+	$(s)echo "  AR      $@"
+	$(q)$(aarch64-ar) -rc $@ $(WRAPPER_DIR)/jmpvar.o $(WRAPPER_OBJS)
 
-$(BUILD_DIR)/jmptbl.i: ../../$(PLAT_DIR)/jmptbl.i
-	@echo "  PRE     $@"
-	$(Q)$(ROMLIB_GEN) pre --output $@ --deps $(BUILD_DIR)/jmptbl.d $<
+$(BUILD_DIR)/jmptbl.i: ../../$(PLAT_DIR)/jmptbl.i | $$(@D)/
+	$(s)echo "  PRE     $@"
+	$(q)$(ROMLIB_GEN) pre --output $@ --deps $(BUILD_DIR)/jmptbl.d $<
 
-$(BUILD_DIR)/wrappers.stamp: $(BUILD_DIR)/jmptbl.i
-	@echo "  WRP     $<"
-	$(Q)$(ROMLIB_GEN) genwrappers --bti=$(ENABLE_BTI) -b $(WRAPPER_DIR) $<
-	@touch $@
+$(WRAPPER_SOURCES) $&: $(BUILD_DIR)/jmptbl.i | $$(@D)/
+	$(s)echo "  WRP     $<"
+	$(q)$(ROMLIB_GEN) genwrappers --bti=$(ENABLE_BTI) -b $(WRAPPER_DIR) $<
 
-$(WRAPPER_SOURCES): $(BUILD_DIR)/wrappers.stamp
+$(WRAPPER_OBJS): $(WRAPPER_DIR)/%.o: $(WRAPPER_DIR)/%.s | $$(@D)/
 
-$(WRAPPER_OBJS): $(WRAPPER_SOURCES) $(BUILD_DIR)/wrappers.stamp
+$(BUILD_DIR)/jmptbl.s: $(BUILD_DIR)/jmptbl.i | $$(@D)/
+	$(s)echo "  TBL     $@"
+	$(q)$(ROMLIB_GEN) gentbl --output $@ --bti=$(ENABLE_BTI) $<
 
-$(BUILD_DIR)/jmptbl.s: $(BUILD_DIR)/jmptbl.i
-	@echo "  TBL     $@"
-	$(Q)$(ROMLIB_GEN) gentbl --output $@ --bti=$(ENABLE_BTI) $<
+$(BUILD_DIR)/romlib.ldflags: ../../$(PLAT_DIR)/jmptbl.i | $$(@D)/
+	$(s)echo "  LDFLAGS $@"
+	$(q)$(ROMLIB_GEN) link-flags $< > $@
 
 clean:
-	@rm -f $(BUILD_DIR)/*
+	$(q)rm -f $(BUILD_DIR)/*
 
 -include $(BUILD_DIR)/romlib.d
 -include $(BUILD_DIR)/jmptbl.d
