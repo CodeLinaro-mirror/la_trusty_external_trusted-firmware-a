@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2023, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2014-2024, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -99,6 +99,20 @@
 					FVP_DTB_DRAM_MAP_SIZE,		\
 					MT_MEMORY | MT_RO | MT_NS)
 
+/*
+ * On the FVP platform when using the EL3 SPMC implementation allocate the
+ * datastore for tracking shared memory descriptors in the TZC DRAM section
+ * to ensure sufficient storage can be allocated.
+ * Provide an implementation of the accessor method to allow the datastore
+ * details to be retrieved by the SPMC.
+ * The SPMC will take care of initializing the memory region.
+ */
+
+#define PLAT_SPMC_SHMEM_DATASTORE_SIZE 512 * 1024
+
+/* Define memory configuration for device tree files. */
+#define PLAT_ARM_HW_CONFIG_SIZE			U(0x4000)
+
 #if SPMC_AT_EL3
 /*
  * Number of Secure Partitions supported.
@@ -129,8 +143,18 @@
 #define PLAT_ARM_NS_IMAGE_BASE		(ARM_DRAM1_BASE + UL(0x8000000))
 
 #if TRANSFER_LIST
-#define FW_HANDOFF_SIZE			0x4000
-#define FW_NS_HANDOFF_BASE		(PLAT_ARM_NS_IMAGE_BASE - FW_HANDOFF_SIZE)
+#define PLAT_ARM_FW_HANDOFF_SIZE	U(0x5000)
+
+#define FW_NS_HANDOFF_BASE		(PLAT_ARM_NS_IMAGE_BASE - PLAT_ARM_FW_HANDOFF_SIZE)
+#define PLAT_ARM_EL3_FW_HANDOFF_BASE	ARM_BL_RAM_BASE
+#define PLAT_ARM_EL3_FW_HANDOFF_LIMIT	PLAT_ARM_EL3_FW_HANDOFF_BASE + PLAT_ARM_FW_HANDOFF_SIZE
+
+#if RESET_TO_BL31
+#define PLAT_ARM_TRANSFER_LIST_DTB_OFFSET	FW_NS_HANDOFF_BASE + TRANSFER_LIST_DTB_OFFSET
+#endif
+
+#else
+#define PLAT_ARM_FW_HANDOFF_SIZE	U(0)
 #endif
 
 /*
@@ -234,7 +258,13 @@ defined(IMAGE_BL2) && MEASURED_BOOT
 /* When ARM_BL31_IN_DRAM is set, BL2 can use almost all of Trusted SRAM. */
 # define PLAT_ARM_MAX_BL2_SIZE	(UL(0x1F000) - FVP_BL2_ROMLIB_OPTIMIZATION)
 #else
-# define PLAT_ARM_MAX_BL2_SIZE	(UL(0x13000) - FVP_BL2_ROMLIB_OPTIMIZATION)
+/**
+ * Default to just under half of SRAM to ensure there's enough room for really
+ * large BL31 build configurations when using the default SRAM size (256 Kb).
+ */
+#define PLAT_ARM_MAX_BL2_SIZE                                               \
+	(((PLAT_ARM_TRUSTED_SRAM_SIZE / 3) & ~PAGE_SIZE_MASK) - PAGE_SIZE - \
+	 FVP_BL2_ROMLIB_OPTIMIZATION)
 #endif
 
 #if RESET_TO_BL31
@@ -249,9 +279,15 @@ defined(IMAGE_BL2) && MEASURED_BOOT
  * BL2 and BL1-RW.
  * Size of the BL31 PROGBITS increases as the SRAM size increases.
  */
+#if TRANSFER_LIST
+#define PLAT_ARM_MAX_BL31_SIZE                              \
+	(PLAT_ARM_TRUSTED_SRAM_SIZE - ARM_SHARED_RAM_SIZE - \
+	 PLAT_ARM_FW_HANDOFF_SIZE - ARM_L0_GPT_SIZE)
+#else
 #define PLAT_ARM_MAX_BL31_SIZE		(PLAT_ARM_TRUSTED_SRAM_SIZE - \
 					 ARM_SHARED_RAM_SIZE - \
 					 ARM_FW_CONFIGS_SIZE - ARM_L0_GPT_SIZE)
+#endif /* TRANSFER_LIST */
 #endif /* RESET_TO_BL31 */
 
 #ifndef __aarch64__
@@ -265,7 +301,9 @@ defined(IMAGE_BL2) && MEASURED_BOOT
  * calculated using the current SP_MIN PROGBITS debug size plus the sizes of
  * BL2 and BL1-RW
  */
-# define PLAT_ARM_MAX_BL32_SIZE		UL(0x3B000)
+# define PLAT_ARM_MAX_BL32_SIZE		(PLAT_ARM_TRUSTED_SRAM_SIZE - \
+					 ARM_SHARED_RAM_SIZE - \
+					 ARM_FW_CONFIGS_SIZE)
 #endif /* RESET_TO_SP_MIN */
 #endif
 
@@ -416,7 +454,7 @@ defined(IMAGE_BL2) && MEASURED_BOOT
 #define PLAT_SDEI_DP_EVENT_MAX_CNT	ARM_SDEI_DP_EVENT_MAX_CNT
 #define PLAT_SDEI_DS_EVENT_MAX_CNT	ARM_SDEI_DS_EVENT_MAX_CNT
 #else
-  #if PLATFORM_TEST_RAS_FFH
+  #if PLATFORM_TEST_RAS_FFH || PLATFORM_TEST_FFH_LSP_RAS_SP
   #define PLAT_ARM_PRIVATE_SDEI_EVENTS \
 	ARM_SDEI_PRIVATE_EVENTS, \
 	SDEI_EXPLICIT_EVENT(5000, SDEI_MAPF_NORMAL), \

@@ -49,12 +49,14 @@ Maintainers
 :|G|: `laurenw-arm`_
 :|M|: Madhukar Pappireddy <Madhukar.Pappireddy@arm.com>
 :|G|: `madhukar-Arm`_
-:|M|: Raghu Krishnamurthy <raghu.ncstate@icloud.com>
+:|M|: Raghu Krishnamurthy <raghuoss@raghushome.com>
 :|G|: `raghuncstate`_
 :|M|: Manish Badarkhe <manish.badarkhe@arm.com>
 :|G|: `ManishVB-Arm`_
 :|M|: Yann Gautier <yann.gautier@st.com>
 :|G|: `Yann-lms`_
+:|M|: Govindraj Raja <govindraj.raja@arm.com>
+:|G|: `govindraj-arm`_
 
 LTS Maintainers
 ---------------
@@ -63,8 +65,8 @@ LTS Maintainers
 :|G|: `bipinravi-arm`_
 :|M|: Joanna Farley <joanna.farley@arm.com>
 :|G|: `joannafarley-arm`_
-:|M|: Okash Khawaja <okash@google.com>
-:|G|: `bytefire`_
+:|M|: Jidong Sun <jidong@google.com>
+:|G|: `jidongsun`_
 :|M|: Varun Wadekar <vwadekar@nvidia.com>
 :|G|: `vwadekar`_
 :|M|: Yann Gautier <yann.gautier@st.com>
@@ -114,6 +116,8 @@ Secure Partition Manager Core (EL3 FF-A SPMC)
 :|M|: Marc Bonnici <marc.bonnici@arm.com>
 :|G|: `marcbonnici`_
 :|F|: services/std_svc/spm/el3_spmc/\*
+:|F|: include/services/el3_spmc\_\*
+:|F|: include/services/spmc_svc.h
 
 Secure Partition Manager Dispatcher (SPMD)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -121,7 +125,13 @@ Secure Partition Manager Dispatcher (SPMD)
 :|G|: `odeprez`_
 :|M|: Joao Alves <Joao.Alves@arm.com>
 :|G|: `J-Alves`_
+:|M|: Madhukar Pappireddy <Madhukar.Pappireddy@arm.com>
+:|G|: `madhukar-Arm`_
 :|F|: services/std_svc/spmd/\*
+:|F|: plat/common/plat_spmd_manifest.c
+:|F|: include/services/ffa_svc.h
+:|F|: include/services/el3_spmd_logical_sp.h
+:|F|: include/services/spmd_svc.h
 
 Exception Handling Framework (EHF)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -130,6 +140,16 @@ Exception Handling Framework (EHF)
 :|M|: Manish Pandey <manish.pandey2@arm.com>
 :|G|: `manish-pandey-arm`_
 :|F|: bl31/ehf.c
+
+Runtime Exceptions and Interrupt Management
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+:|M|: Manish Pandey <manish.pandey2@arm.com>
+:|G|: `manish-pandey-arm`_
+:|M|: Madhukar Pappireddy <Madhukar.Pappireddy@arm.com>
+:|G|: `madhukar-Arm`_
+:|F|: bl31/aarch64/
+:|F|: bl31/interrupt_mgmt.c
+:|F|: include/bl31/interrupt_mgmt.h
 
 Realm Management Monitor Dispatcher (RMMD)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -216,12 +236,14 @@ Power State Coordination Interface (PSCI)
 :|M|: Lauren Wehrmeister <Lauren.Wehrmeister@arm.com>
 :|G|: `laurenw-arm`_
 :|F|: lib/psci/
+:|F|: include/lib/psci/
 
 DebugFS
 ^^^^^^^
 :|M|: Olivier Deprez <olivier.deprez@arm.com>
 :|G|: `odeprez`_
 :|F|: lib/debugfs/
+:|F|: include/lib/debugfs.h
 
 Firmware Configuration Framework (FCONF)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -232,6 +254,10 @@ Firmware Configuration Framework (FCONF)
 :|M|: Lauren Wehrmeister <Lauren.Wehrmeister@arm.com>
 :|G|: `laurenw-arm`_
 :|F|: lib/fconf/
+:|F|: plat/arm/common/fconf/
+:|F|: include/lib/fconf/
+:|F|: include/plat/arm/common/arm_fconf\_\*
+:|F|: include/plat/arm/common/fconf\_\*
 
 Performance Measurement Framework (PMF)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -253,6 +279,7 @@ Arm CPU libraries
 :|M|: Lauren Wehrmeister <Lauren.Wehrmeister@arm.com>
 :|G|: `laurenw-arm`_
 :|F|: lib/cpus/
+:|F|: include/lib/cpus/
 
 Reliability Availability Serviceabilty (RAS) framework
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -337,12 +364,12 @@ Message Handling Unit (MHU) driver
 :|F|: include/drivers/arm/mhu.h
 :|F|: drivers/arm/mhu
 
-Runtime Security Subsystem (RSS) comms driver
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Runtime Security Engine (RSE) comms driver
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 :|M|: David Vincze <david.vincze@arm.com>
 :|G|: `davidvincze`_
-:|F|: include/drivers/arm/rss_comms.h
-:|F|: drivers/arm/rss
+:|F|: include/drivers/arm/rse_comms.h
+:|F|: drivers/arm/rse
 
 Libfdt wrappers
 ^^^^^^^^^^^^^^^
@@ -380,6 +407,8 @@ DRTM
 :|M|: Manish Pandey <manish.pandey2@arm.com>
 :|G|: `manish-pandey-arm`_
 :|F|: services/std_svc/drtm
+:|F|: include/plat/common/plat_drtm.h
+:|F|: include/services/drtm_svc.h
 
 PSA Firmware Update
 ^^^^^^^^^^^^^^^^^^^
@@ -432,6 +461,32 @@ Firmware Handoff Library (Transfer List)
 :|G|: `harrisonmutai-arm`_
 :|F|: lib/transfer_list
 :|F|: include/lib/transfer_list.h
+
+Context Management
+^^^^^^^^^^^^^^^^^^
+:|M|: Jayanth Dodderi Chidanand <jayanthdodderi.chidanand@arm.com>
+:|G|: `jayanthchidanand-arm`_
+:|M|: Manish Pandey <manish.pandey2@arm.com>
+:|G|: `manish-pandey-arm`_
+:|M|: Madhukar Pappireddy <Madhukar.Pappireddy@arm.com>
+:|G|: `madhukar-Arm`_
+:|F|: bl1/aarch32/bl1_context_mgmt.c
+:|F|: bl1/aarch64/bl1_context_mgmt.c
+:|F|: bl31/bl31_context_mgmt.c
+:|F|: lib/el3_runtime/
+:|F|: include/lib/el3_runtime/
+
+Runtime Services
+^^^^^^^^^^^^^^^^
+:|M|: Manish Pandey <manish.pandey2@arm.com>
+:|G|: `manish-pandey-arm`_
+:|M|: Madhukar Pappireddy <Madhukar.Pappireddy@arm.com>
+:|G|: `madhukar-Arm`_
+:|F|: services/std_svc/std_svc_setup.c
+:|F|: common/runtime_svc.c
+:|F|: include/common/runtime_svc.h
+:|F|: include/services/arm_arch_svc.h
+:|F|: include/services/std_svc.h
 
 Platform Ports
 ~~~~~~~~~~~~~~
@@ -512,8 +567,8 @@ Arm Rich IoT Platform ports
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 :|M|: Abdellatif El Khlifi <abdellatif.elkhlifi@arm.com>
 :|G|: `abdellatif-elkhlifi`_
-:|M|: Xueliang Zhong <xueliang.zhong@arm.com>
-:|G|: `xueliang-zhong-arm`_
+:|M|: Hugues Kamba Mpiana <hugues.kambampiana@arm.com>
+:|G|: `hugues-kambampiana-arm`_
 :|F|: plat/arm/board/corstone700
 :|F|: plat/arm/board/a5ds
 :|F|: plat/arm/board/corstone1000
@@ -524,13 +579,14 @@ Arm Reference Design platform ports
 :|G|: `thomas-arm`_
 :|M|: Vijayenthiran Subramaniam <vijayenthiran.subramaniam@arm.com>
 :|G|: `vijayenthiran-arm`_
-:|F|: plat/arm/css/sgi/
-:|F|: plat/arm/board/rde1edge/
-:|F|: plat/arm/board/rdn1edge/
-:|F|: plat/arm/board/rdn2/
-:|F|: plat/arm/board/rdv1/
-:|F|: plat/arm/board/rdv1mc/
-:|F|: plat/arm/board/sgi575/
+:|M|: Rohit Mathew <Rohit.Mathew@arm.com>
+:|G|: `rohit-arm`_
+:|F|: plat/arm/board/neoverse_rd/common
+:|F|: plat/arm/board/neoverse_rd/platform/rdn1edge/
+:|F|: plat/arm/board/neoverse_rd/platform/rdn2/
+:|F|: plat/arm/board/neoverse_rd/platform/rdv1/
+:|F|: plat/arm/board/neoverse_rd/platform/rdv1mc/
+:|F|: plat/arm/board/neoverse_rd/platform/sgi575/
 
 Arm Total Compute platform port
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -539,6 +595,16 @@ Arm Total Compute platform port
 :|M|: Rupinderjit Singh <rupinderjit.singh@arm.com>
 :|G|: `rupsin01`_
 :|F|: plat/arm/board/tc
+
+Arm Automotive RD platform port
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+:|M|: Diego Sueiro <diego.sueiro@arm.com>
+:|G|: `diego-sueiro`_
+:|M|: Peter Hoyes <peter.hoyes@arm.com>
+:|G|: `hoyes`_
+:|M|: Divin Raj <divin.raj@arm.com>
+:|G|: `divin-raj`_
+:|F|: plat/arm/board/automotive_rd
 
 Aspeed platform port
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -576,8 +642,6 @@ Intel SocFPGA platform ports
 
 MediaTek platform ports
 ^^^^^^^^^^^^^^^^^^^^^^^
-:|M|: Rex-BC Chen <rex-bc.chen@mediatek.com>
-:|G|: `mtk-rex-bc-chen`_
 :|M|: Leon Chen <leon.chen@mediatek.com>
 :|G|: `leon-chen-mtk`_
 :|M|: Jason-CH Chen <jason-ch.chen@mediatek.com>
@@ -605,7 +669,6 @@ Nuvoton npcm845x platform port
 :|M|: Avi Fishman <avi.fishman@nuvoton.com>
 :|G|: `avifishman`_
 :|F|: docs/plat/npcm845x.rst
-:|F|: drivers/nuvoton/
 :|F|: include/drivers/nuvoton/
 :|F|: include/plat/nuvoton/
 :|F|: plat/nuvoton/
@@ -645,6 +708,13 @@ NXP i.MX8M platform port
 :|G|: `JackyBai`_
 :|F|: docs/plat/imx8m.rst
 :|F|: plat/imx/imx8m/
+
+NXP i.MX8ULP platform port
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+:|M|: Jacky Bai <ping.bai@nxp.com>
+:|G|: `JackyBai`_
+:|F|: docs/plat/imx8ulp.rst
+:|F|: plat/imx/imx8ulp/
 
 NXP i.MX9 platform port
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -703,6 +773,16 @@ NXP SoC Part LS1088A and its platform port
 :|F|: plat/nxp/soc-ls1088a
 :|F|: plat/nxp/soc-ls1088a/ls1088ardb
 :|F|: plat/nxp/soc-ls1088a/ls1088aqds
+
+NXP SoC Part S32G274A and its platform port
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+:|M|: Ghennadi Procopciuc <ghennadi.procopciuc@nxp.com>
+:|G|: `gprocopciucnxp`_
+:|F|: docs/plat/s32g274a.rst
+:|F|: drivers/nxp/clk/s32cc
+:|F|: drivers/nxp/console/linflex_console.S
+:|F|: include/drivers/nxp/console/linflex.h
+:|F|: plat/nxp/s32
 
 QEMU platform port
 ^^^^^^^^^^^^^^^^^^
@@ -790,14 +870,14 @@ RockChip platform port
 :|G|: `rockchip-linux`_
 :|M|: Heiko Stuebner <heiko@sntech.de>
 :|G|: `mmind`_
-:|M|: Julius Werner <jwerner@chromium.org>
-:|G|: `jwerner-chromium`_
 :|F|: plat/rockchip/
 
-STM32MP1 platform port
-^^^^^^^^^^^^^^^^^^^^^^
+STMicroelectronics platform ports
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 :|M|: Yann Gautier <yann.gautier@st.com>
 :|G|: `Yann-lms`_
+:|M|: Maxime Méré <maxime.mere@foss.st.com>
+:|G|: `meremST`_
 :|F|: docs/plat/st/*
 :|F|: docs/plat/stm32mp1.rst
 :|F|: drivers/st/
@@ -805,12 +885,15 @@ STM32MP1 platform port
 :|F|: include/drivers/st/
 :|F|: include/dt-bindings/\*/stm32\*
 :|F|: plat/st/
+:|F|: tools/fiptool/plat_fiptool/st/
 :|F|: tools/stm32image/
 
 Synquacer platform port
 ^^^^^^^^^^^^^^^^^^^^^^^
 :|M|: Sumit Garg <sumit.garg@linaro.org>
 :|G|: `b49020`_
+:|M|: Masahisa Kojima <kojima.masahisa@socionext.com>
+:|G|: `masahisak`_
 :|F|: docs/plat/synquacer.rst
 :|F|: plat/socionext/synquacer/
 
@@ -935,7 +1018,7 @@ Threat Model
 :|G|: `sandrine-bailleux-arm`_
 :|M|: Joanna Farley <joanna.farley@arm.com>
 :|G|: `joannafarley-arm`_
-:|M|: Raghu Krishnamurthy <raghu.ncstate@icloud.com>
+:|M|: Raghu Krishnamurthy <raghuoss@raghushome.com>
 :|G|: `raghuncstate`_
 :|M|: Varun Wadekar <vwadekar@nvidia.com>
 :|G|: `vwadekar`_
@@ -947,94 +1030,105 @@ Conventional Changelog Extensions
 :|G|: `CJKay`_
 :|F|: tools/conventional-changelog-tf-a
 
+.. _abdellatif-elkhlifi: https://github.com/abdellatif-elkhlifi
+.. _Akshay-Belsare: https://github.com/Akshay-Belsare
 .. _AlexeiFedorov: https://github.com/AlexeiFedorov
+.. _amit-nagal: https://github.com/amit-nagal
 .. _andersdellien-arm: https://github.com/andersdellien-arm
 .. _Andre-ARM: https://github.com/Andre-ARM
 .. _Anson-Huang: https://github.com/Anson-Huang
-.. _bijucdas: https://github.com/bijucdas
-.. _bryanodonoghue: https://github.com/bryanodonoghue
+.. _anukou: https://github.com/anukou
+.. _arugan02: https://github.com/arugan02
+.. _arve-android: https://github.com/arve-android
+.. _avifishman: https://github.com/avifishman
 .. _b49020: https://github.com/b49020
+.. _BenjaminLimJL: https://github.com/BenjaminLimJL
+.. _bijucdas: https://github.com/bijucdas
+.. _bipinravi-arm: https://github.com/bipinravi-arm
+.. _bryanodonoghue: https://github.com/bryanodonoghue
+.. _jidongsun: https://github.com/jidongsun
 .. _carlocaione: https://github.com/carlocaione
+.. _chandnich: https://github.com/chandnich
+.. _ChiaweiW: https://github.com/chiaweiw
+.. _CJKay: https://github.com/cjkay
 .. _danh-arm: https://github.com/danh-arm
 .. _davidvincze: https://github.com/davidvincze
+.. _diego-sueiro: https://github.com/diego-sueiro
+.. _divin-raj: https://github.com/divin-raj
 .. _etienne-lms: https://github.com/etienne-lms
 .. _glneo: https://github.com/glneo
+.. _govindraj-arm: https://github.com/govindraj-arm
+.. _gprocopciucnxp: https://github.com/gprocopciucnxp
 .. _grandpaul: https://github.com/grandpaul
+.. _harrisonmutai-arm: https://github.com/harrisonmutai-arm
+.. _hilamirandakuzi1: https://github.com/hilamirandakuzi1
+.. _hoyes: https://github.com/hoyes
 .. _hzhuang1: https://github.com/hzhuang1
+.. _hugues-kambampiana-arm: https://github.com/hugueskamba
 .. _JackyBai: https://github.com/JackyBai
+.. _J-Alves: https://github.com/J-Alves
+.. _jason-ch-chen: https://github.com/jason-ch-chen
+.. _javieralso-arm: https://github.com/javieralso-arm
+.. _jayanthchidanand-arm: https://github.com/jayanthchidanand-arm
 .. _jcorbier: https://github.com/jcorbier
 .. _jenswi-linaro: https://github.com/jenswi-linaro
+.. _JiafeiPan: https://github.com/JiafeiPan
+.. _jimmy-brisson: https://github.com/theotherjimmy
+.. _joannafarley-arm: https://github.com/joannafarley-arm
 .. _jslater8: https://github.com/jslater8
 .. _jwerner-chromium: https://github.com/jwerner-chromium
 .. _kostapr: https://github.com/kostapr
 .. _lachitp: https://github.com/lachitp
+.. _laurenw-arm: https://github.com/laurenw-arm
+.. _leon-chen-mtk: https://github.com/leon-chen-mtk
+.. _linyidi: https://github.com/linyidi
+.. _madhukar-Arm: https://github.com/madhukar-Arm
+.. _manish-pandey-arm: https://github.com/manish-pandey-arm
+.. _ManishVB-Arm: https://github.com/ManishVB-Arm
+.. _marcbonnici: https://github.com/marcbonnici
+.. _marcone: https://github.com/marcone
+.. _mardyk01: https://github.com/mardyk01
 .. _marex: https://github.com/marex
 .. _masahir0y: https://github.com/masahir0y
+.. _masahisak: https://github.com/masahisak
+.. _max-shvetsov: https://github.com/max-shvetsov
+.. _meremST: https://github.com/meremST
 .. _michalsimek: https://github.com/michalsimek
 .. _mmind: https://github.com/mmind
 .. _MrVan: https://github.com/MrVan
-.. _mtk-rex-bc-chen: https://github.com/mtk-rex-bc-chen
-.. _leon-chen-mtk: https://github.com/leon-chen-mtk
-.. _jason-ch-chen: https://github.com/jason-ch-chen
-.. _linyidi: https://github.com/linyidi
+.. _Neal-liu: https://github.com/neal-liu
 .. _niej: https://github.com/niej
+.. _nmenon: https://github.com/nmenon
 .. _npoushin: https://github.com/npoushin
+.. _odeprez: https://github.com/odeprez
+.. _pangupta: https://github.com/pangupta
 .. _prabhakarlad: https://github.com/prabhakarlad
 .. _quic_mkf: https://github.com/quicmkf
+.. _raghuncstate: https://github.com/raghuncstate
+.. _raymo200915: https://github.com/raymo200915
 .. _remi-triplefault: https://github.com/repk
 .. _rockchip-linux: https://github.com/rockchip-linux
+.. _rohit-arm: https://github.com/rohit-arm
+.. _rupsin01: https://github.com/rupsin01
+.. _rutigl: https://github.com/rutigl
 .. _sandrine-bailleux-arm: https://github.com/sandrine-bailleux-arm
 .. _sgorecha: https://github.com/sgorecha
 .. _shawnguo2: https://github.com/shawnguo2
+.. _sieumunt: https://github.com/sieumunt
 .. _smaeul: https://github.com/smaeul
 .. _soby-mathew: https://github.com/soby-mathew
 .. _sreekare: https://github.com/sreekare
 .. _stefanasimion: https://github.com/stefanasimion
 .. _stephan-gh: https://github.com/stephan-gh
-.. _sieumunt: https://github.com/sieumunt
-.. _BenjaminLimJL: https://github.com/BenjaminLimJL
 .. _thomas-arm: https://github.com/thomas-arm
 .. _TonyXie06: https://github.com/TonyXie06
 .. _TravMurav: https://github.com/TravMurav
+.. _uarif1: https://github.com/uarif1
+.. _vijayenthiran-arm: https://github.com/vijayenthiran-arm
+.. _vishnu-banavath: https://github.com/vishnu-banavath
 .. _vwadekar: https://github.com/vwadekar
 .. _Yann-lms: https://github.com/Yann-lms
-.. _manish-pandey-arm: https://github.com/manish-pandey-arm
-.. _mardyk01: https://github.com/mardyk01
-.. _odeprez: https://github.com/odeprez
-.. _bipinravi-arm: https://github.com/bipinravi-arm
-.. _joannafarley-arm: https://github.com/joannafarley-arm
-.. _ManishVB-Arm: https://github.com/ManishVB-Arm
-.. _max-shvetsov: https://github.com/max-shvetsov
-.. _javieralso-arm: https://github.com/javieralso-arm
-.. _laurenw-arm: https://github.com/laurenw-arm
-.. _J-Alves: https://github.com/J-Alves
-.. _madhukar-Arm: https://github.com/madhukar-Arm
-.. _raghuncstate: https://github.com/raghuncstate
-.. _CJKay: https://github.com/cjkay
-.. _nmenon: https://github.com/nmenon
-.. _anukou: https://github.com/anukou
-.. _chandnich: https://github.com/chandnich
-.. _abdellatif-elkhlifi: https://github.com/abdellatif-elkhlifi
-.. _vishnu-banavath: https://github.com/vishnu-banavath
-.. _vijayenthiran-arm: https://github.com/vijayenthiran-arm
-.. _arugan02: https://github.com/arugan02
-.. _uarif1: https://github.com/uarif1
-.. _pangupta: https://github.com/pangupta
-.. _JiafeiPan: https://github.com/JiafeiPan
-.. _arve-android: https://github.com/arve-android
-.. _marcone: https://github.com/marcone
-.. _marcbonnici: https://github.com/marcbonnici
-.. _jayanthchidanand-arm: https://github.com/jayanthchidanand-arm
-.. _bytefire: https://github.com/bytefire
-.. _rupsin01: https://github.com/rupsin01
-.. _jimmy-brisson: https://github.com/theotherjimmy
-.. _ChiaweiW: https://github.com/chiaweiw
-.. _Neal-liu: https://github.com/neal-liu
-.. _amit-nagal: https://github.com/amit-nagal
-.. _Akshay-Belsare: https://github.com/Akshay-Belsare
-.. _hilamirandakuzi1: https://github.com/hilamirandakuzi1
-.. _rutigl: https://github.com/rutigl
-.. _avifishman: https://github.com/avifishman
-.. _xueliang-zhong-arm: https://github.com/xueliang-zhong-arm
-.. _raymo200915: https://github.com/raymo200915
-.. _harrisonmutai-arm: https://github.com/harrisonmutai-arm
+
+--------------
+
+*Copyright (c) 2019-2024, Arm Limited and Contributors. All rights reserved.*

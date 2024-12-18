@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "trusted-firmware-a"
-version = "2.10.0"
+version = "2.12.0"
 description = "Trusted Firmware-A (TF-A) Python dependencies."
 authors = ["Arm Ltd."]
 license = "BSD-3-Clause"
@@ -14,8 +14,13 @@ memory = "memory.memmap:main"
 
 [tool.poetry.dependencies]
 python = "^3.8"
+cot-dt2c = {path = "tools/cot_dt2c", develop = true}
+tlc = {path = "tools/tlc", develop = true}
 
-[tool.poetry.group.doc.dependencies]
+[tool.poetry.group.docs]
+optional = true
+
+[tool.poetry.group.docs.dependencies]
 sphinx = "^5.3.0"
 myst-parser = "^0.18.1"
 sphinxcontrib-plantuml = "^0.24.1"

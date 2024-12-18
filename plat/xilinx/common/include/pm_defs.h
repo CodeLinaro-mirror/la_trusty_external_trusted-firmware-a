@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2019-2022, Xilinx, Inc. All rights reserved.
- * Copyright (c) 2022-2023, Advanced Micro Devices, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Advanced Micro Devices, Inc. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -18,6 +18,7 @@
 
 /* State arguments of the self suspend */
 #define PM_STATE_CPU_IDLE	0x0U
+#define PM_STATE_CPU_OFF	0x1U
 #define PM_STATE_SUSPEND_TO_RAM	0xFU
 
 #define MAX_LATENCY		(~0U)
@@ -34,6 +35,7 @@
 				       (uint32_t)XPM_NODESUBCL_DEV_PERIPH, \
 				       (uint32_t)XPM_NODETYPE_DEV_PERIPH, (IDX))
 
+#define TF_A_FEATURE_CHECK		0xa00U
 #define PM_GET_CALLBACK_DATA		0xa01U
 #define PM_GET_TRUSTZONE_VERSION	0xa03U
 #define TF_A_PM_REGISTER_SGI		0xa04U
@@ -94,8 +96,8 @@ enum {
 	IOCTL_GET_LAST_RESET_REASON = 23,
 	/* AI engine NPI ISR clear */
 	IOCTL_AIE_ISR_CLEAR = 24,
-	/* Register SGI to TF-A */
-	IOCTL_SET_SGI = 25,
+	IOCTL_UFS_TXRX_CFGRDY_GET = 40,
+	IOCTL_UFS_SRAM_CSR_SEL = 41,
 };
 
 /**

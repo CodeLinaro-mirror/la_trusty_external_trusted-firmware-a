@@ -1,17 +1,15 @@
 /*
- * Copyright (c) 2013-2021, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <assert.h>
 
-#include <arch_features.h>
 #include <arch_helpers.h>
 #include <common/debug.h>
 #include <drivers/arm/gicv3.h>
 #include <drivers/arm/fvp/fvp_pwrc.h>
-#include <lib/extensions/spe.h>
 #include <lib/mmio.h>
 #include <lib/psci/psci.h>
 #include <plat/arm/common/arm_config.h>
@@ -53,14 +51,6 @@ const unsigned int arm_pm_idle_states[] = {
 static void fvp_cluster_pwrdwn_common(void)
 {
 	uint64_t mpidr = read_mpidr_el1();
-
-	/*
-	 * On power down we need to disable statistical profiling extensions
-	 * before exiting coherency.
-	 */
-	if (is_feat_spe_supported()) {
-		spe_disable();
-	}
 
 	/* Disable coherency if this cluster is to be turned off */
 	fvp_interconnect_disable();
@@ -333,13 +323,13 @@ static int fvp_node_hw_state(u_register_t target_cpu,
 			     unsigned int power_level)
 {
 	unsigned int psysr;
-	int ret;
+	int ret = 0;
 
 	/*
 	 * The format of 'power_level' is implementation-defined, but 0 must
 	 * mean a CPU. We also allow 1 to denote the cluster
 	 */
-	if ((power_level != ARM_PWR_LVL0) && (power_level != ARM_PWR_LVL1))
+	if ((power_level < ARM_PWR_LVL0) || (power_level > ARM_PWR_LVL1))
 		return PSCI_E_INVALID_PARAMS;
 
 	/*
@@ -353,9 +343,14 @@ static int fvp_node_hw_state(u_register_t target_cpu,
 
 	if (power_level == ARM_PWR_LVL0) {
 		ret = ((psysr & PSYSR_AFF_L0) != 0U) ? HW_ON : HW_OFF;
-	} else {
-		/* power_level == ARM_PWR_LVL1 */
-		ret = ((psysr & PSYSR_AFF_L1) != 0U) ? HW_ON : HW_OFF;
+	} else if (power_level == ARM_PWR_LVL1) {
+	/*
+	 * Use L1 affinity if MPIDR_EL1.MT bit is not set else use L2 affinity.
+	 */
+		if ((read_mpidr_el1() & MPIDR_MT_MASK) == 0U)
+			ret = ((psysr & PSYSR_AFF_L1) != 0U) ? HW_ON : HW_OFF;
+		else
+			ret = ((psysr & PSYSR_AFF_L2) != 0U) ? HW_ON : HW_OFF;
 	}
 
 	return ret;

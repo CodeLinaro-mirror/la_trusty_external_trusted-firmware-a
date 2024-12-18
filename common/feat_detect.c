@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2022-2024, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -70,47 +70,214 @@ static void read_feat_pauth(void)
 #endif
 }
 
-/************************************************
- * Feature : FEAT_MTE (Memory Tagging Extension)
- ***********************************************/
-static void read_feat_mte(void)
+static unsigned int read_feat_rng_trap_id_field(void)
 {
-#if (CTX_INCLUDE_MTE_REGS == FEAT_STATE_ALWAYS)
-	unsigned int mte = get_armv8_5_mte_support();
-
-	feat_detect_panic((mte != MTE_UNIMPLEMENTED), "MTE");
-#endif
+	return ISOLATE_FIELD(read_id_aa64pfr1_el1(), ID_AA64PFR1_EL1_RNDR_TRAP_SHIFT,
+			     ID_AA64PFR1_EL1_RNDR_TRAP_MASK);
 }
 
-/****************************************************
- * Feature : FEAT_BTI (Branch Target Identification)
- ***************************************************/
-static void read_feat_bti(void)
+static unsigned int read_feat_bti_id_field(void)
 {
-#if (ENABLE_BTI == FEAT_STATE_ALWAYS)
-	feat_detect_panic(is_armv8_5_bti_present(), "BTI");
-#endif
+	return ISOLATE_FIELD(read_id_aa64pfr1_el1(), ID_AA64PFR1_EL1_BT_SHIFT,
+			     ID_AA64PFR1_EL1_BT_MASK);
 }
 
-/**************************************************
- * Feature : FEAT_RME (Realm Management Extension)
- *************************************************/
-static void read_feat_rme(void)
+static unsigned int read_feat_sb_id_field(void)
 {
-#if (ENABLE_RME == FEAT_STATE_ALWAYS)
-	feat_detect_panic((get_armv9_2_feat_rme_support() !=
-			ID_AA64PFR0_FEAT_RME_NOT_SUPPORTED), "RME");
-#endif
+	return ISOLATE_FIELD(read_id_aa64isar1_el1(), ID_AA64ISAR1_SB_SHIFT,
+			     ID_AA64ISAR1_SB_MASK);
 }
 
-/******************************************************************
- * Feature : FEAT_RNG_TRAP (Trapping support for RNDR/RNDRRS)
- *****************************************************************/
-static void read_feat_rng_trap(void)
+static unsigned int read_feat_csv2_id_field(void)
 {
-#if (ENABLE_FEAT_RNG_TRAP == FEAT_STATE_ALWAYS)
-	feat_detect_panic(is_feat_rng_trap_present(), "RNG_TRAP");
-#endif
+	return ISOLATE_FIELD(read_id_aa64pfr0_el1(), ID_AA64PFR0_CSV2_SHIFT,
+			     ID_AA64PFR0_CSV2_MASK);
+}
+
+static unsigned int read_feat_debugv8p9_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64dfr0_el1(), ID_AA64DFR0_DEBUGVER_SHIFT,
+			     ID_AA64DFR0_DEBUGVER_MASK);
+}
+
+static unsigned int read_feat_pmuv3_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64dfr0_el1(), ID_AA64DFR0_PMUVER_SHIFT,
+			     ID_AA64DFR0_PMUVER_MASK);
+}
+
+static unsigned int read_feat_vhe_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64mmfr1_el1(), ID_AA64MMFR1_EL1_VHE_SHIFT,
+			     ID_AA64MMFR1_EL1_VHE_MASK);
+}
+
+static unsigned int read_feat_sve_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64pfr0_el1(), ID_AA64PFR0_SVE_SHIFT,
+			     ID_AA64PFR0_SVE_MASK);
+}
+
+static unsigned int read_feat_ras_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64pfr0_el1(), ID_AA64PFR0_RAS_SHIFT,
+			     ID_AA64PFR0_RAS_MASK);
+}
+
+static unsigned int read_feat_dit_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64pfr0_el1(), ID_AA64PFR0_DIT_SHIFT,
+			     ID_AA64PFR0_DIT_MASK);
+}
+
+static unsigned int  read_feat_amu_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64pfr0_el1(), ID_AA64PFR0_AMU_SHIFT,
+			     ID_AA64PFR0_AMU_MASK);
+}
+
+static unsigned int read_feat_mpam_version(void)
+{
+	return (unsigned int)((((read_id_aa64pfr0_el1() >>
+		ID_AA64PFR0_MPAM_SHIFT) & ID_AA64PFR0_MPAM_MASK) << 4) |
+			((read_id_aa64pfr1_el1() >>
+		ID_AA64PFR1_MPAM_FRAC_SHIFT) & ID_AA64PFR1_MPAM_FRAC_MASK));
+}
+
+static unsigned int read_feat_nv_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64mmfr2_el1(), ID_AA64MMFR2_EL1_NV_SHIFT,
+			     ID_AA64MMFR2_EL1_NV_MASK);
+}
+
+static unsigned int read_feat_sel2_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64pfr0_el1(), ID_AA64PFR0_SEL2_SHIFT,
+			     ID_AA64PFR0_SEL2_MASK);
+}
+
+static unsigned int read_feat_trf_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64dfr0_el1(), ID_AA64DFR0_TRACEFILT_SHIFT,
+			     ID_AA64DFR0_TRACEFILT_MASK);
+}
+static unsigned int get_armv8_5_mte_support(void)
+{
+	return ISOLATE_FIELD(read_id_aa64pfr1_el1(), ID_AA64PFR1_EL1_MTE_SHIFT,
+			     ID_AA64PFR1_EL1_MTE_MASK);
+}
+static unsigned int read_feat_rng_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64isar0_el1(), ID_AA64ISAR0_RNDR_SHIFT,
+			     ID_AA64ISAR0_RNDR_MASK);
+}
+static unsigned int read_feat_fgt_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64mmfr0_el1(), ID_AA64MMFR0_EL1_FGT_SHIFT,
+			     ID_AA64MMFR0_EL1_FGT_MASK);
+}
+static unsigned int read_feat_ecv_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64mmfr0_el1(), ID_AA64MMFR0_EL1_ECV_SHIFT,
+			     ID_AA64MMFR0_EL1_ECV_MASK);
+}
+static unsigned int read_feat_twed_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64mmfr1_el1(), ID_AA64MMFR1_EL1_TWED_SHIFT,
+			     ID_AA64MMFR1_EL1_TWED_MASK);
+}
+
+static unsigned int read_feat_hcx_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64mmfr1_el1(), ID_AA64MMFR1_EL1_HCX_SHIFT,
+			     ID_AA64MMFR1_EL1_HCX_MASK);
+}
+static unsigned int read_feat_ls64_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64isar1_el1(), ID_AA64ISAR1_LS64_SHIFT,
+			     ID_AA64ISAR1_LS64_MASK);
+}
+static unsigned int read_feat_tcr2_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64mmfr3_el1(), ID_AA64MMFR3_EL1_TCRX_SHIFT,
+			     ID_AA64MMFR3_EL1_TCRX_MASK);
+}
+static unsigned int read_feat_s2pie_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64mmfr3_el1(), ID_AA64MMFR3_EL1_S2PIE_SHIFT,
+			     ID_AA64MMFR3_EL1_S2PIE_MASK);
+}
+static unsigned int read_feat_s1pie_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64mmfr3_el1(), ID_AA64MMFR3_EL1_S1PIE_SHIFT,
+			     ID_AA64MMFR3_EL1_S1PIE_MASK);
+}
+static unsigned int read_feat_s2poe_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64mmfr3_el1(), ID_AA64MMFR3_EL1_S2POE_SHIFT,
+			     ID_AA64MMFR3_EL1_S2POE_MASK);
+}
+static unsigned int read_feat_s1poe_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64mmfr3_el1(), ID_AA64MMFR3_EL1_S1POE_SHIFT,
+			     ID_AA64MMFR3_EL1_S1POE_MASK);
+}
+static unsigned int read_feat_brbe_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64dfr0_el1(), ID_AA64DFR0_BRBE_SHIFT,
+			     ID_AA64DFR0_BRBE_MASK);
+}
+static unsigned int read_feat_trbe_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64dfr0_el1(), ID_AA64DFR0_TRACEBUFFER_SHIFT,
+			     ID_AA64DFR0_TRACEBUFFER_MASK);
+}
+static unsigned int read_feat_sme_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64pfr1_el1(), ID_AA64PFR1_EL1_SME_SHIFT,
+			     ID_AA64PFR1_EL1_SME_MASK);
+}
+static unsigned int read_feat_gcs_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64pfr1_el1(), ID_AA64PFR1_EL1_GCS_SHIFT,
+			     ID_AA64PFR1_EL1_GCS_MASK);
+}
+
+static unsigned int read_feat_rme_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64pfr0_el1(), ID_AA64PFR0_FEAT_RME_SHIFT,
+			     ID_AA64PFR0_FEAT_RME_MASK);
+}
+
+static unsigned int read_feat_pan_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64mmfr1_el1(), ID_AA64MMFR1_EL1_PAN_SHIFT,
+			     ID_AA64MMFR1_EL1_PAN_MASK);
+}
+
+static unsigned int read_feat_mtpmu_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64dfr0_el1(), ID_AA64DFR0_MTPMU_SHIFT,
+			     ID_AA64DFR0_MTPMU_MASK);
+
+}
+
+static unsigned int read_feat_the_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64pfr1_el1(), ID_AA64PFR1_EL1_THE_SHIFT,
+			     ID_AA64PFR1_EL1_THE_MASK);
+}
+
+static unsigned int read_feat_sctlr2_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64mmfr3_el1(), ID_AA64MMFR3_EL1_SCTLR2_SHIFT,
+			     ID_AA64MMFR3_EL1_SCTLR2_MASK);
+}
+
+static unsigned int read_feat_d128_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64mmfr3_el1(), ID_AA64MMFR3_EL1_D128_SHIFT,
+			     ID_AA64MMFR3_EL1_D128_MASK);
 }
 
 /***********************************************************************************
@@ -151,7 +318,7 @@ void detect_arch_features(void)
 	 * revisions so that we catch them as they come along
 	 */
 	check_feature(FEAT_STATE_ALWAYS, read_feat_pmuv3_id_field(),
-		      "PMUv3", 1, ID_AA64DFR0_PMUVER_PMUV3P7);
+		      "PMUv3", 1, ID_AA64DFR0_PMUVER_PMUV3P8);
 
 	/* v8.1 features */
 	check_feature(ENABLE_FEAT_PAN, read_feat_pan_id_field(), "PAN", 1, 3);
@@ -163,6 +330,7 @@ void detect_arch_features(void)
 	check_feature(ENABLE_FEAT_RAS, read_feat_ras_id_field(), "RAS", 1, 2);
 
 	/* v8.3 features */
+	/* TODO: Pauth yet to convert to tri-state feat detect logic */
 	read_feat_pauth();
 
 	/* v8.4 features */
@@ -179,15 +347,18 @@ void detect_arch_features(void)
 		      "TRF", 1, 1);
 
 	/* v8.5 features */
-	read_feat_mte();
+	check_feature(ENABLE_FEAT_MTE2, get_armv8_5_mte_support(), "MTE2",
+		      MTE_IMPLEMENTED_ELX, MTE_IMPLEMENTED_ASY);
 	check_feature(ENABLE_FEAT_RNG, read_feat_rng_id_field(), "RNG", 1, 1);
-	read_feat_bti();
-	read_feat_rng_trap();
+	check_feature(ENABLE_BTI, read_feat_bti_id_field(), "BTI", 1, 1);
+	check_feature(ENABLE_FEAT_RNG_TRAP, read_feat_rng_trap_id_field(),
+		      "RNG_TRAP", 1, 1);
 
 	/* v8.6 features */
 	check_feature(ENABLE_FEAT_AMUv1p1, read_feat_amu_id_field(),
 		      "AMUv1p1", 2, 2);
-	check_feature(ENABLE_FEAT_FGT, read_feat_fgt_id_field(), "FGT", 1, 1);
+	check_feature(ENABLE_FEAT_FGT, read_feat_fgt_id_field(), "FGT", 1, 2);
+	check_feature(ENABLE_FEAT_FGT2, read_feat_fgt_id_field(), "FGT2", 2, 2);
 	check_feature(ENABLE_FEAT_ECV, read_feat_ecv_id_field(), "ECV", 1, 2);
 	check_feature(ENABLE_FEAT_TWED, read_feat_twed_id_field(),
 		      "TWED", 1, 1);
@@ -201,6 +372,7 @@ void detect_arch_features(void)
 
 	/* v8.7 features */
 	check_feature(ENABLE_FEAT_HCX, read_feat_hcx_id_field(), "HCX", 1, 1);
+	check_feature(ENABLE_FEAT_LS64_ACCDATA, read_feat_ls64_id_field(), "LS64", 1, 3);
 
 	/* v8.9 features */
 	check_feature(ENABLE_FEAT_TCR2, read_feat_tcr2_id_field(),
@@ -213,8 +385,14 @@ void detect_arch_features(void)
 		      "S2POE", 1, 1);
 	check_feature(ENABLE_FEAT_S1POE, read_feat_s1poe_id_field(),
 		      "S1POE", 1, 1);
-	check_feature(ENABLE_FEAT_MTE_PERM, read_feat_mte_perm_id_field(),
-		      "MTE_PERM", 1, 1);
+	check_feature(ENABLE_FEAT_CSV2_3, read_feat_csv2_id_field(),
+		      "CSV2_3", 3, 3);
+	check_feature(ENABLE_FEAT_DEBUGV8P9, read_feat_debugv8p9_id_field(),
+			"DEBUGV8P9", 11, 11);
+	check_feature(ENABLE_FEAT_THE, read_feat_the_id_field(),
+			"THE", 1, 1);
+	check_feature(ENABLE_FEAT_SCTLR2, read_feat_sctlr2_id_field(),
+			"SCTLR2", 1, 1);
 
 	/* v9.0 features */
 	check_feature(ENABLE_BRBE_FOR_NS, read_feat_brbe_id_field(),
@@ -228,10 +406,13 @@ void detect_arch_features(void)
 	check_feature(ENABLE_SME2_FOR_NS, read_feat_sme_id_field(),
 		      "SME2", 2, 2);
 
+	/* v9.3 features */
+	check_feature(ENABLE_FEAT_D128, read_feat_d128_id_field(),
+		      "D128", 1, 1);
+
 	/* v9.4 features */
 	check_feature(ENABLE_FEAT_GCS, read_feat_gcs_id_field(), "GCS", 1, 1);
-
-	read_feat_rme();
+	check_feature(ENABLE_RME, read_feat_rme_id_field(), "RME", 1, 1);
 
 	if (tainted) {
 		panic();

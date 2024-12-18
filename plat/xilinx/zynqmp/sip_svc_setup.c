@@ -18,7 +18,6 @@
 #include "zynqmp_pm_svc_main.h"
 
 /* SMC function IDs for SiP Service queries */
-#define ZYNQMP_SIP_SVC_CALL_COUNT	U(0x8200ff00)
 #define ZYNQMP_SIP_SVC_UID		U(0x8200ff01)
 #define ZYNQMP_SIP_SVC_VERSION		U(0x8200ff03)
 
@@ -82,7 +81,7 @@ static uintptr_t sip_svc_smc_handler(uint32_t smc_fid,
 	VERBOSE("SMCID: 0x%08x, x1: 0x%016" PRIx64 ", x2: 0x%016" PRIx64 ", x3: 0x%016" PRIx64 ", x4: 0x%016" PRIx64 "\n",
 		smc_fid, x1, x2, x3, x4);
 
-	if (smc_fid & SIP_FID_MASK) {
+	if ((smc_fid & (uint32_t)SIP_FID_MASK) != 0U) {
 		WARN("SMC out of SiP assinged range: 0x%x\n", smc_fid);
 		SMC_RET1(handle, SMC_UNK);
 	}
@@ -100,10 +99,6 @@ static uintptr_t sip_svc_smc_handler(uint32_t smc_fid,
 	}
 
 	switch (smc_fid) {
-	case ZYNQMP_SIP_SVC_CALL_COUNT:
-		/* PM functions + default functions */
-		SMC_RET1(handle, PM_API_MAX + 2);
-
 	case ZYNQMP_SIP_SVC_UID:
 		SMC_UUID_RET(handle, zynqmp_sip_uuid);
 

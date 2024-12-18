@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2016-2023, Arm Limited and Contributors. All rights reserved.
+# Copyright (c) 2016-2024, Arm Limited and Contributors. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -12,8 +12,6 @@
 ifndef WINDOWS_MK
     WINDOWS_MK := $(lastword $(MAKEFILE_LIST))
 
-    ECHO_BLANK_LINE := @cmd /c echo.
-    ECHO_QUIET := @rem
     DIR_DELIM := $(strip \)
     BIN_EXT   := .exe
     PATH_SEP  := ;
@@ -49,25 +47,15 @@ ifndef WINDOWS_MK
 	$(eval $(foreach filename,$(wildcard ${1}),$(call DELETE_IF_THERE,${filename})))
     endef
 
-    # ${1} is the directory to be generated.
-    # ${2} is optional, and allows prerequisites to be specified.
-    # Do nothing if $1 == $2, to ignore self dependencies.
-    define MAKE_PREREQ_DIR
-        ifneq (${1},${2})
-
-${1} : ${2}
-	$(eval tmp_dir:=$(subst /,\,${1}))
-	-@if not exist "$(tmp_dir)"  mkdir "${tmp_dir}"
-
-        endif
-    endef
-
     # ${1} is the directory to be removed.
     define SHELL_REMOVE_DIR
 	$(eval tmp_dir:=$(subst /,\,${1}))
 	-@if exist "$(tmp_dir)"  rd /Q /S "$(tmp_dir)"
     endef
 
+    nul := nul
+
+    which = $(shell where "$(1)" 2>$(nul))
 endif
 
 # Because git is not available from CMD.EXE, we need to avoid
@@ -76,17 +64,4 @@ endif
 # This can be overridden from the command line or environment.
 BUILD_STRING ?= development build
 
-# The DOS echo shell command does not strip ' characters from the command
-# parameters before printing. We therefore use an alternative method invoked
-# by defining the MAKE_BUILD_STRINGS macro.
-BUILT_TIME_DATE_STRING = const char build_message[] = "Built : "${BUILD_MESSAGE_TIMESTAMP};
-VERSION_STRING_MESSAGE = const char version_string[] = "${VERSION_STRING}";
-VERSION_MESSAGE = const char version[] = "${VERSION}";
-define MAKE_BUILD_STRINGS
-	$$(file >$1.in,$$(TF_CFLAGS) $$(CFLAGS))
-	@echo $$(BUILT_TIME_DATE_STRING) $$(VERSION_STRING_MESSAGE) $$(VERSION_MESSAGE) | \
-		$$(CC) @$1.in -x c -c - -o $1
-endef
-
 MSVC_NMAKE := nmake.exe
-

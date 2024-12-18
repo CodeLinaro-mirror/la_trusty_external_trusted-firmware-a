@@ -68,6 +68,12 @@ depending on project requirement and partner feedback.
 +-----------------+---------------------------+------------------------------+
 | v2.10           | 4th week of Nov '23       | 2nd week of Nov '23          |
 +-----------------+---------------------------+------------------------------+
+| v2.11           | 4th week of May '24       | 2nd week of May '24          |
++-----------------+---------------------------+------------------------------+
+| v2.12           | 4th week of Nov '24       | 2nd week of Nov '24          |
++-----------------+---------------------------+------------------------------+
+| v2.13           | 4th week of May '25       | 2nd week of May '25          |
++-----------------+---------------------------+------------------------------+
 
 Removal of Deprecated Interfaces
 --------------------------------
@@ -81,9 +87,7 @@ after which it will be removed.
 |                                | Date        | after   |                                                         |
 |                                |             | Release |                                                         |
 +================================+=============+=========+=========================================================+
-| Mbedtls-2.x                    |     2.10    |   2.10  | Support for TF-A builds with Mbedtls-2.x will be removed|
-+--------------------------------+-------------+---------+---------------------------------------------------------+
-| STM32MP15_OPTEE_RSV_SHM        |     2.10    |   3.0   | OP-TEE manages its own memory on STM32MP15              |
+|                                |             |         |                                                         |
 +--------------------------------+-------------+---------+---------------------------------------------------------+
 
 Removal of Deprecated Drivers
@@ -101,6 +105,19 @@ after which it will be removed.
 | None at this time.             |             |         |                                                         |
 +--------------------------------+-------------+---------+---------------------------------------------------------+
 
+Build Options deprecated/removed
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Populated table provides details about build options that were removed or deprecated.
+
++-----------------------+--------------------------------+
+| Build Option          | Deprecated from TF-A Version   |
++=======================+================================+
+|                       |                                |
++-----------------------+--------------------------------+
+|                       |                                |
++-----------------------+--------------------------------+
+
 --------------
 
-*Copyright (c) 2018-2023, Arm Limited and Contributors. All rights reserved.*
+*Copyright (c) 2018-2024, Arm Limited and Contributors. All rights reserved.*

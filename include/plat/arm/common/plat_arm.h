@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2023, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2024, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -9,11 +9,14 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <common/desc_image_load.h>
 #include <drivers/arm/tzc_common.h>
 #include <lib/bakery_lock.h>
 #include <lib/cassert.h>
 #include <lib/el3_runtime/cpu_data.h>
+#include <lib/gpt_rme/gpt_rme.h>
 #include <lib/spinlock.h>
+#include <lib/transfer_list.h>
 #include <lib/utils_def.h>
 #include <lib/xlat_tables/xlat_tables_compat.h>
 
@@ -30,6 +33,17 @@ typedef struct arm_tzc_regions_info {
 	unsigned int sec_attr;
 	unsigned int nsaid_permissions;
 } arm_tzc_regions_info_t;
+
+typedef struct arm_gpt_info {
+	pas_region_t *pas_region_base;
+	unsigned int pas_region_count;
+	uintptr_t l0_base;
+	uintptr_t l1_base;
+	size_t l0_size;
+	size_t l1_size;
+	gpccr_pps_e pps;
+	gpccr_pgs_e pgs;
+} arm_gpt_info_t;
 
 /*******************************************************************************
  * Default mapping definition of the TrustZone Controller for ARM standard
@@ -55,14 +69,16 @@ typedef struct arm_tzc_regions_info {
 
 #if SPM_MM || (SPMC_AT_EL3 && SPMC_AT_EL3_SEL0_SP)
 #define ARM_TZC_REGIONS_DEF						\
-	{ARM_AP_TZC_DRAM1_BASE, ARM_EL3_TZC_DRAM1_END + ARM_L1_GPT_SIZE,\
-		TZC_REGION_S_RDWR, 0},					\
 	{ARM_NS_DRAM1_BASE, ARM_NS_DRAM1_END, ARM_TZC_NS_DRAM_S_ACCESS, \
 		PLAT_ARM_TZC_NS_DEV_ACCESS}, 				\
-	{ARM_DRAM2_BASE, ARM_DRAM2_END, ARM_TZC_NS_DRAM_S_ACCESS,	\
-		PLAT_ARM_TZC_NS_DEV_ACCESS},				\
+	{ARM_AP_TZC_DRAM1_BASE, (PLAT_SP_IMAGE_NS_BUF_BASE - 1),	\
+		TZC_REGION_S_RDWR, 0},					\
 	{PLAT_SP_IMAGE_NS_BUF_BASE, (PLAT_SP_IMAGE_NS_BUF_BASE +	\
-		PLAT_SP_IMAGE_NS_BUF_SIZE) - 1, TZC_REGION_S_NONE,	\
+		PLAT_SP_IMAGE_NS_BUF_SIZE - 1), TZC_REGION_S_NONE,	\
+		PLAT_ARM_TZC_NS_DEV_ACCESS},				\
+	{PLAT_SP_IMAGE_STACK_BASE, ARM_EL3_TZC_DRAM1_END,		\
+		TZC_REGION_S_RDWR, 0},					\
+	{ARM_DRAM2_BASE, ARM_DRAM2_END, ARM_TZC_NS_DRAM_S_ACCESS,	\
 		PLAT_ARM_TZC_NS_DEV_ACCESS}
 
 #elif ENABLE_RME
@@ -139,11 +155,10 @@ void arm_setup_romlib(void);
 #define ARM_LOCAL_PSTATE_WIDTH		4
 #define ARM_LOCAL_PSTATE_MASK		((1 << ARM_LOCAL_PSTATE_WIDTH) - 1)
 
-#if PSCI_OS_INIT_MODE
+/* Last in Level for the OS-initiated */
 #define ARM_LAST_AT_PLVL_MASK		(ARM_LOCAL_PSTATE_MASK <<	\
 					 (ARM_LOCAL_PSTATE_WIDTH *	\
 					  (PLAT_MAX_PWR_LVL + 1)))
-#endif /* __PSCI_OS_INIT_MODE__ */
 
 /* Macros to construct the composite power state */
 
@@ -242,10 +257,14 @@ uint32_t arm_get_spsr_for_bl33_entry(void);
 int arm_bl2_plat_handle_post_image_load(unsigned int image_id);
 int arm_bl2_handle_post_image_load(unsigned int image_id);
 struct bl_params *arm_get_next_bl_params(void);
+void arm_bl2_setup_next_ep_info(bl_mem_params_node_t *next_param_node);
 
 /* BL2 at EL3 functions */
 void arm_bl2_el3_early_platform_setup(void);
 void arm_bl2_el3_plat_arch_setup(void);
+#if ARM_FW_CONFIG_LOAD_ENABLE
+void arm_bl2_el3_plat_config_load(void);
+#endif /* ARM_FW_CONFIG_LOAD_ENABLE */
 
 /* BL2U utility functions */
 void arm_bl2u_early_platform_setup(struct meminfo *mem_layout,
@@ -254,11 +273,21 @@ void arm_bl2u_platform_setup(void);
 void arm_bl2u_plat_arch_setup(void);
 
 /* BL31 utility functions */
+#if TRANSFER_LIST
+void arm_bl31_early_platform_setup(u_register_t arg0, u_register_t arg1,
+				   u_register_t arg2, u_register_t arg3);
+#else
 void arm_bl31_early_platform_setup(void *from_bl2, uintptr_t soc_fw_config,
 				uintptr_t hw_config, void *plat_params_from_bl2);
+#endif
 void arm_bl31_platform_setup(void);
 void arm_bl31_plat_runtime_setup(void);
 void arm_bl31_plat_arch_setup(void);
+
+/* Firmware Handoff utility functions */
+void arm_transfer_list_dyn_cfg_init(struct transfer_list_header *secure_tl);
+void arm_transfer_list_populate_ep_info(bl_mem_params_node_t *next_param_node,
+					struct transfer_list_header *secure_tl);
 
 /* TSP utility functions */
 void arm_tsp_early_platform_setup(void);
@@ -273,11 +302,21 @@ void arm_sp_min_plat_arch_setup(void);
 bool arm_io_is_toc_valid(void);
 
 /* Utility functions for Dynamic Config */
-void arm_bl2_dyn_cfg_init(void);
+
 void arm_bl1_set_mbedtls_heap(void);
 int arm_get_mbedtls_heap(void **heap_addr, size_t *heap_size);
 
+#if IMAGE_BL2
+void arm_bl2_dyn_cfg_init(void);
+#endif /* IMAGE_BL2 */
+
 #if MEASURED_BOOT
+#if DICE_PROTECTION_ENVIRONMENT
+int arm_set_nt_fw_info(int *ctx_handle);
+int arm_set_tb_fw_info(int *ctx_handle);
+int arm_get_tb_fw_info(int *ctx_handle);
+#else
+/* Specific to event log backend */
 int arm_set_tos_fw_info(uintptr_t log_addr, size_t log_size);
 int arm_set_nt_fw_info(
 /*
@@ -292,6 +331,7 @@ int arm_set_tb_fw_info(uintptr_t log_addr, size_t log_size,
 		       size_t log_max_size);
 int arm_get_tb_fw_info(uint64_t *log_addr, size_t *log_size,
 		       size_t *log_max_size);
+#endif /* DICE_PROTECTION_ENVIRONMENT */
 #endif /* MEASURED_BOOT */
 
 /*
@@ -325,6 +365,7 @@ void plat_arm_interconnect_enter_coherency(void);
 void plat_arm_interconnect_exit_coherency(void);
 void plat_arm_program_trusted_mailbox(uintptr_t address);
 bool plat_arm_bl1_fwu_needed(void);
+int plat_arm_ni_setup(uintptr_t global_cfg);
 __dead2 void plat_arm_error_handler(int err);
 __dead2 void plat_arm_system_reset(void);
 
@@ -345,6 +386,8 @@ int arm_get_rotpk_info_dev(void **key_ptr, unsigned int *key_len,
 unsigned int plat_arm_get_cpu_pe_count(u_register_t mpidr);
 #endif
 
+unsigned int plat_cluster_id_by_mpidr(u_register_t mpidr);
+
 /*
  * This function is called after loading SCP_BL2 image and it is used to perform
  * any platform-specific actions required to handle the SCP firmware.
@@ -361,6 +404,9 @@ int plat_arm_get_alt_image_source(
 	uintptr_t *image_spec);
 unsigned int plat_arm_calc_core_pos(u_register_t mpidr);
 const mmap_region_t *plat_arm_get_mmap(void);
+
+const arm_gpt_info_t *plat_arm_get_gpt_info(void);
+void arm_gpt_setup(void);
 
 /* Allow platform to override psci_pm_ops during runtime */
 const plat_psci_ops_t *plat_arm_psci_override_pm_ops(plat_psci_ops_t *ops);

@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2020-2022, Intel Corporation. All rights reserved.
+ * Copyright (c) 2020-2023, Intel Corporation. All rights reserved.
+ * Copyright (c) 2024, Altera Corporation. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -247,14 +248,6 @@ uint32_t intel_fcs_encryption(uint32_t src_addr, uint32_t src_size,
 	int status;
 	uint32_t load_size;
 
-	fcs_encrypt_payload payload = {
-		FCS_ENCRYPTION_DATA_0,
-		src_addr,
-		src_size,
-		dst_addr,
-		dst_size };
-	load_size = sizeof(payload) / MBOX_WORD_BYTE;
-
 	if (!is_address_in_ddr_range(src_addr, src_size) ||
 		!is_address_in_ddr_range(dst_addr, dst_size)) {
 		return INTEL_SIP_SMC_STATUS_REJECTED;
@@ -263,6 +256,14 @@ uint32_t intel_fcs_encryption(uint32_t src_addr, uint32_t src_size,
 	if (!is_size_4_bytes_aligned(src_size)) {
 		return INTEL_SIP_SMC_STATUS_REJECTED;
 	}
+
+	fcs_encrypt_payload payload = {
+		FCS_ENCRYPTION_DATA_0,
+		src_addr,
+		src_size,
+		dst_addr,
+		dst_size };
+	load_size = sizeof(payload) / MBOX_WORD_BYTE;
 
 	status = mailbox_send_cmd_async(send_id, MBOX_FCS_ENCRYPT_REQ,
 				(uint32_t *) &payload, load_size,
@@ -283,6 +284,15 @@ uint32_t intel_fcs_decryption(uint32_t src_addr, uint32_t src_size,
 	uint32_t load_size;
 	uintptr_t id_offset;
 
+	if (!is_address_in_ddr_range(src_addr, src_size) ||
+		!is_address_in_ddr_range(dst_addr, dst_size)) {
+		return INTEL_SIP_SMC_STATUS_REJECTED;
+	}
+
+	if (!is_size_4_bytes_aligned(src_size)) {
+		return INTEL_SIP_SMC_STATUS_REJECTED;
+	}
+
 	inv_dcache_range(src_addr, src_size); /* flush cache before mmio read to avoid reading old values */
 	id_offset = src_addr + FCS_OWNER_ID_OFFSET;
 	fcs_decrypt_payload payload = {
@@ -294,15 +304,6 @@ uint32_t intel_fcs_decryption(uint32_t src_addr, uint32_t src_size,
 		dst_addr,
 		dst_size };
 	load_size = sizeof(payload) / MBOX_WORD_BYTE;
-
-	if (!is_address_in_ddr_range(src_addr, src_size) ||
-		!is_address_in_ddr_range(dst_addr, dst_size)) {
-		return INTEL_SIP_SMC_STATUS_REJECTED;
-	}
-
-	if (!is_size_4_bytes_aligned(src_size)) {
-		return INTEL_SIP_SMC_STATUS_REJECTED;
-	}
 
 	status = mailbox_send_cmd_async(send_id, MBOX_FCS_DECRYPT_REQ,
 				(uint32_t *) &payload, load_size,
@@ -1164,8 +1165,8 @@ int intel_fcs_mac_verify_update_finalize(uint32_t session_id,
 			return INTEL_SIP_SMC_STATUS_REJECTED;
 		}
 
-		memcpy((uint8_t *) &payload[i], (uint8_t *) mac_offset,
-		src_size - data_size);
+		memcpy_s(&payload[i], (src_size - data_size) / MBOX_WORD_BYTE,
+			(void *) mac_offset, (src_size - data_size) / MBOX_WORD_BYTE);
 
 		i += (src_size - data_size) / MBOX_WORD_BYTE;
 	}
@@ -1298,8 +1299,8 @@ int intel_fcs_mac_verify_smmu_update_finalize(uint32_t session_id,
 			return INTEL_SIP_SMC_STATUS_REJECTED;
 		}
 
-		memcpy((uint8_t *) &payload[i], (uint8_t *) mac_offset,
-		src_size - data_size);
+		memcpy_s(&payload[i], (src_size - data_size) / MBOX_WORD_BYTE,
+			(void *) mac_offset, (src_size - data_size) / MBOX_WORD_BYTE);
 
 		memset((void *) dst_addr, 0, *dst_size);
 
@@ -1401,8 +1402,8 @@ int intel_fcs_ecdsa_hash_sign_finalize(uint32_t session_id, uint32_t context_id,
 		return INTEL_SIP_SMC_STATUS_REJECTED;
 	}
 
-	memcpy((uint8_t *) &payload[i], (uint8_t *) hash_data_addr,
-			src_size);
+	memcpy_s(&payload[i], src_size / MBOX_WORD_BYTE,
+		(void *) hash_data_addr, src_size / MBOX_WORD_BYTE);
 
 	i += src_size / MBOX_WORD_BYTE;
 
@@ -1502,8 +1503,8 @@ int intel_fcs_ecdsa_hash_sig_verify_finalize(uint32_t session_id, uint32_t conte
 		return INTEL_SIP_SMC_STATUS_REJECTED;
 	}
 
-	memcpy((uint8_t *) &payload[i],
-			(uint8_t *) hash_sig_pubkey_addr, src_size);
+	memcpy_s(&payload[i], src_size / MBOX_WORD_BYTE,
+		(void *) hash_sig_pubkey_addr, src_size / MBOX_WORD_BYTE);
 
 	i += (src_size / MBOX_WORD_BYTE);
 
@@ -1839,8 +1840,8 @@ int intel_fcs_ecdsa_sha2_data_sig_verify_update_finalize(uint32_t session_id,
 			return INTEL_SIP_SMC_STATUS_REJECTED;
 		}
 
-		memcpy((uint8_t *) &payload[i], (uint8_t *) sig_pubkey_offset,
-			src_size - data_size);
+		memcpy_s(&payload[i], (src_size - data_size) / MBOX_WORD_BYTE,
+			(void *) sig_pubkey_offset, (src_size - data_size) / MBOX_WORD_BYTE);
 
 		i += (src_size - data_size) / MBOX_WORD_BYTE;
 	}
@@ -1971,8 +1972,8 @@ int intel_fcs_ecdsa_sha2_data_sig_verify_smmu_update_finalize(uint32_t session_i
 			return INTEL_SIP_SMC_STATUS_REJECTED;
 		}
 
-		memcpy((uint8_t *) &payload[i], (uint8_t *) sig_pubkey_offset,
-			src_size - data_size);
+		memcpy_s(&payload[i], (src_size - data_size) / MBOX_WORD_BYTE,
+			(void *) sig_pubkey_offset, (src_size - data_size) / MBOX_WORD_BYTE);
 
 		memset((void *) dst_addr, 0, *dst_size);
 
@@ -2020,6 +2021,10 @@ int intel_fcs_ecdsa_get_pubkey_finalize(uint32_t session_id, uint32_t context_id
 	uint32_t payload[FCS_ECDSA_GET_PUBKEY_MAX_WORD_SIZE] = {0U};
 
 	if ((dst_size == NULL) || (mbox_error == NULL)) {
+		return INTEL_SIP_SMC_STATUS_REJECTED;
+	}
+
+	if (!is_address_in_ddr_range(dst_addr, *dst_size)) {
 		return INTEL_SIP_SMC_STATUS_REJECTED;
 	}
 
@@ -2141,7 +2146,8 @@ int intel_fcs_ecdh_request_finalize(uint32_t session_id, uint32_t context_id,
 		return INTEL_SIP_SMC_STATUS_REJECTED;
 	}
 
-	memcpy((uint8_t *) &payload[i], (uint8_t *) pubkey, src_size);
+	memcpy_s(&payload[i], src_size / MBOX_WORD_BYTE,
+		(void *) pubkey, src_size / MBOX_WORD_BYTE);
 	i += src_size / MBOX_WORD_BYTE;
 
 	status = mailbox_send_cmd(MBOX_JOB_ID, MBOX_FCS_ECDH_REQUEST,
@@ -2171,14 +2177,28 @@ int intel_fcs_aes_crypt_init(uint32_t session_id, uint32_t context_id,
 
 	param_addr_ptr = (uint64_t *) param_addr;
 
-	/*
-	 * Since crypto param size vary between mode.
-	 * Check ECB here and limit to size 12 bytes
-	 */
-	if (((*param_addr_ptr & FCS_CRYPTO_BLOCK_MODE_MASK) == FCS_CRYPTO_ECB_MODE) &&
-		(param_size > FCS_CRYPTO_ECB_BUFFER_SIZE)) {
+	/* Check if mbox_error is not NULL or 0xF or 0x3FF */
+	if (mbox_error == NULL || *mbox_error > 0xF ||
+		(*mbox_error != 0 && *mbox_error != 0x3FF)) {
 		return INTEL_SIP_SMC_STATUS_REJECTED;
 	}
+
+	/* Check if param_addr is not 0 or larger that 0xFFFFFFFFFF */
+	if (param_addr == 0 || param_addr > 0xFFFFFFFFFF) {
+		return INTEL_SIP_SMC_STATUS_REJECTED;
+	}
+
+	/*
+	 * Check if not ECB, CBC and CTR mode, addr ptr is NULL.
+	 * Return "Reject" status
+	 */
+	if ((param_addr_ptr == NULL) ||
+		(((*param_addr_ptr & FCS_CRYPTO_BLOCK_MODE_MASK) != FCS_CRYPTO_ECB_MODE) &&
+		((*param_addr_ptr & FCS_CRYPTO_BLOCK_MODE_MASK) != FCS_CRYPTO_CBC_MODE) &&
+		((*param_addr_ptr & FCS_CRYPTO_BLOCK_MODE_MASK) != FCS_CRYPTO_CTR_MODE))) {
+		return INTEL_SIP_SMC_STATUS_REJECTED;
+	}
+
 	/*
 	 * Since crypto param size vary between mode.
 	 * Check CBC/CTR here and limit to size 28 bytes
@@ -2189,7 +2209,12 @@ int intel_fcs_aes_crypt_init(uint32_t session_id, uint32_t context_id,
 		return INTEL_SIP_SMC_STATUS_REJECTED;
 	}
 
-	if (mbox_error == NULL) {
+	/*
+	 * Since crypto param size vary between mode.
+	 * Check ECB here and limit to size 12 bytes
+	 */
+	if (((*param_addr_ptr & FCS_CRYPTO_BLOCK_MODE_MASK) == FCS_CRYPTO_ECB_MODE) &&
+		(param_size > FCS_CRYPTO_ECB_BUFFER_SIZE)) {
 		return INTEL_SIP_SMC_STATUS_REJECTED;
 	}
 
@@ -2200,8 +2225,8 @@ int intel_fcs_aes_crypt_init(uint32_t session_id, uint32_t context_id,
 	fcs_aes_init_payload.param_size = param_size;
 	fcs_aes_init_payload.key_id	= key_id;
 
-	memcpy((uint8_t *) fcs_aes_init_payload.crypto_param,
-		(uint8_t *) param_addr, param_size);
+	memcpy_s(fcs_aes_init_payload.crypto_param, param_size / MBOX_WORD_BYTE,
+		(void *) param_addr, param_size / MBOX_WORD_BYTE);
 
 	fcs_aes_init_payload.is_updated = 0;
 
@@ -2234,7 +2259,8 @@ int intel_fcs_aes_crypt_update_finalize(uint32_t session_id,
 	}
 
 	if ((!is_8_bytes_aligned(dst_addr)) ||
-		(!is_32_bytes_aligned(dst_size))) {
+		(!is_32_bytes_aligned(dst_size)) ||
+		(!is_address_in_ddr_range(dst_addr, dst_size))) {
 		return INTEL_SIP_SMC_STATUS_REJECTED;
 	}
 
@@ -2280,9 +2306,10 @@ int intel_fcs_aes_crypt_update_finalize(uint32_t session_id,
 			return INTEL_SIP_SMC_STATUS_REJECTED;
 		}
 
-		memcpy((uint8_t *) &fcs_aes_crypt_payload[i],
-			(uint8_t *) fcs_aes_init_payload.crypto_param,
-			fcs_aes_init_payload.param_size);
+		memcpy_s(&fcs_aes_crypt_payload[i],
+			fcs_aes_init_payload.param_size / MBOX_WORD_BYTE,
+			(void *) fcs_aes_init_payload.crypto_param,
+			fcs_aes_init_payload.param_size / MBOX_WORD_BYTE);
 
 		i += fcs_aes_init_payload.param_size / MBOX_WORD_BYTE;
 	}

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2018-2024, Arm Limited and Contributors. All rights reserved.
  * Copyright (c) 2018-2022, Xilinx, Inc. All rights reserved.
  * Copyright (c) 2022-2023, Advanced Micro Devices, Inc. All rights reserved.
  *
@@ -17,6 +17,7 @@
 #include <plat/common/platform.h>
 #include <plat_arm.h>
 #include <plat_console.h>
+#include <plat_clkfunc.h>
 
 #include <plat_fdt.h>
 #include <plat_private.h>
@@ -58,6 +59,20 @@ static inline void bl31_set_default_config(void)
 					DISABLE_ALL_EXCEPTIONS);
 }
 
+/* Define read and write function for clusterbusqos register */
+DEFINE_RENAME_SYSREG_RW_FUNCS(cluster_bus_qos, S3_0_C15_C4_4)
+
+static void versal_net_setup_qos(void)
+{
+	int ret;
+
+	ret = read_cluster_bus_qos();
+	INFO("BL31: default cluster bus qos: 0x%x\n", ret);
+	write_cluster_bus_qos(0);
+	ret = read_cluster_bus_qos();
+	INFO("BL31: cluster bus qos written: 0x%x\n", ret);
+}
+
 /*
  * Perform any BL31 specific platform actions. Here is an opportunity to copy
  * parameters passed by the calling EL (S-EL1 in BL2 & S-EL3 in BL1) before they
@@ -67,6 +82,11 @@ static inline void bl31_set_default_config(void)
 void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 				u_register_t arg2, u_register_t arg3)
 {
+	(void)arg0;
+	(void)arg1;
+	(void)arg2;
+	(void)arg3;
+
 #if !(TFA_NO_PM)
 	uint64_t tfa_handoff_addr, buff[HANDOFF_PARAMS_MAX_SIZE] = {0};
 	uint32_t payload[PAYLOAD_ARG_CNT], max_size = HANDOFF_PARAMS_MAX_SIZE;
@@ -93,10 +113,16 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 		panic();
 	}
 
+	syscnt_freq_config_setup();
+
+	set_cnt_freq();
+
 	setup_console();
 
 	NOTICE("TF-A running on %s %d.%d\n", board_name_decode(),
 	       platform_version / 10U, platform_version % 10U);
+
+	versal_net_setup_qos();
 
 	/* Initialize the platform config for future decision making */
 	versal_net_config_setup();
@@ -132,18 +158,6 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 
 		INFO("BL31: PLM to TF-A handover success\n");
 
-		/*
-		 * The BL32 load address is indicated as 0x0 in the handoff
-		 * parameters, which is different from the default/user-provided
-		 * load address of 0x60000000 but the flags are correctly
-		 * configured. Consequently, in this scenario, set the PC
-		 * to the requested BL32_BASE address.
-		 */
-
-		/* TODO: Remove the following check once this is fixed from PLM */
-		if (bl32_image_ep_info.pc == 0 && bl32_image_ep_info.spsr != 0) {
-			bl32_image_ep_info.pc = (uintptr_t)BL32_BASE;
-		}
 	} else {
 		INFO("BL31: setting up default configs\n");
 
@@ -165,7 +179,7 @@ int request_intr_type_el3(uint32_t id, interrupt_type_handler_t handler)
 	uint32_t i;
 
 	/* Validate 'handler' and 'id' parameters */
-	if (handler == NULL || index >= MAX_INTR_EL3) {
+	if ((handler == NULL) || (index >= MAX_INTR_EL3)) {
 		return -EINVAL;
 	}
 
@@ -200,7 +214,7 @@ static uint64_t rdo_el3_interrupt_handler(uint32_t id, uint32_t flags,
 	}
 
 	if (handler != NULL) {
-		handler(intr_id, flags, handle, cookie);
+		(void)handler(intr_id, flags, handle, cookie);
 	}
 
 	return 0;
@@ -211,8 +225,8 @@ void bl31_platform_setup(void)
 	prepare_dtb();
 
 	/* Initialize the gic cpu and distributor interfaces */
-	plat_versal_net_gic_driver_init();
-	plat_versal_net_gic_init();
+	plat_arm_gic_driver_init();
+	plat_arm_gic_init();
 }
 
 void bl31_plat_runtime_setup(void)
@@ -226,8 +240,6 @@ void bl31_plat_runtime_setup(void)
 	if (rc != 0) {
 		panic();
 	}
-
-	console_switch_state(CONSOLE_FLAG_RUNTIME);
 }
 
 /*

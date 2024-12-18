@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2023, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -229,7 +229,6 @@ vector_entry sync_exception_aarch64
 	save_x30
 	apply_at_speculative_wa
 	sync_and_handle_pending_serror
-	unmask_async_ea
 	handle_sync_exception
 end_vector_entry sync_exception_aarch64
 
@@ -237,7 +236,6 @@ vector_entry irq_aarch64
 	save_x30
 	apply_at_speculative_wa
 	sync_and_handle_pending_serror
-	unmask_async_ea
 	b	handle_interrupt_exception
 end_vector_entry irq_aarch64
 
@@ -245,7 +243,6 @@ vector_entry fiq_aarch64
 	save_x30
 	apply_at_speculative_wa
 	sync_and_handle_pending_serror
-	unmask_async_ea
 	b 	handle_interrupt_exception
 end_vector_entry fiq_aarch64
 
@@ -258,7 +255,6 @@ vector_entry serror_aarch64
 	save_x30
 	apply_at_speculative_wa
 	sync_and_handle_pending_serror
-	unmask_async_ea
 	b	handle_lower_el_async_ea
 #else
 	b	report_unhandled_exception
@@ -279,7 +275,6 @@ vector_entry sync_exception_aarch32
 	save_x30
 	apply_at_speculative_wa
 	sync_and_handle_pending_serror
-	unmask_async_ea
 	handle_sync_exception
 end_vector_entry sync_exception_aarch32
 
@@ -287,7 +282,6 @@ vector_entry irq_aarch32
 	save_x30
 	apply_at_speculative_wa
 	sync_and_handle_pending_serror
-	unmask_async_ea
 	b	handle_interrupt_exception
 end_vector_entry irq_aarch32
 
@@ -295,7 +289,6 @@ vector_entry fiq_aarch32
 	save_x30
 	apply_at_speculative_wa
 	sync_and_handle_pending_serror
-	unmask_async_ea
 	b	handle_interrupt_exception
 end_vector_entry fiq_aarch32
 
@@ -308,7 +301,6 @@ vector_entry serror_aarch32
 	save_x30
 	apply_at_speculative_wa
 	sync_and_handle_pending_serror
-	unmask_async_ea
 	b	handle_lower_el_async_ea
 #else
 	b	report_unhandled_exception
@@ -450,7 +442,7 @@ sync_handler64:
 	 *
 	 * handler = (base + off) + (index << log2(size))
 	 */
-	adr	x11, (__RT_SVC_DESCS_START__ + RT_SVC_DESC_HANDLE)
+	adr_l	x11, (__RT_SVC_DESCS_START__ + RT_SVC_DESC_HANDLE)
 	lsl	w10, w15, #RT_SVC_SIZE_LOG2
 	ldr	x15, [x11, w10, uxtw]
 
@@ -476,20 +468,32 @@ sysreg_handler64:
 	bl	handle_sysreg_trap
 	/*
 	 * returns:
-	 *   -1: unhandled trap, panic
+	 *   -1: unhandled trap, UNDEF injection into lower EL
 	 *    0: handled trap, return to the trapping instruction (repeating it)
 	 *    1: handled trap, return to the next instruction
 	 */
 
 	tst	w0, w0
-	b.mi	elx_panic	/* negative return value: panic */
-	b.eq	1f		/* zero: do not change ELR_EL3 */
+	b.mi	2f	/* negative: undefined exception injection */
 
-	/* advance the PC to continue after the instruction */
+	b.eq	1f	/* zero: do not change ELR_EL3 */
+	/* positive: advance the PC to continue after the instruction */
 	ldr	x1, [x19, #CTX_EL3STATE_OFFSET + CTX_ELR_EL3]
 	add	x1, x1, #4
 	str	x1, [x19, #CTX_EL3STATE_OFFSET + CTX_ELR_EL3]
 1:
+	b	el3_exit
+2:
+	/*
+	 * UNDEF injection to lower EL, the support is only provided for lower
+	 * EL in AArch64 mode, for AArch32 mode it will do elx_panic as before.
+	 */
+	mrs	x0, spsr_el3
+	tst	x0, #(SPSR_M_MASK << SPSR_M_SHIFT)
+	b.ne	elx_panic
+	/* Pass context pointer as an argument to inject_undef64 */
+	mov	x0, x19
+	bl	inject_undef64
 	b	el3_exit
 
 smc_unknown:

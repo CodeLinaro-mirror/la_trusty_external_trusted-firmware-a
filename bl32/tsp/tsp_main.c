@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2022, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -11,7 +11,9 @@
 #include <arch_features.h>
 #include <arch_helpers.h>
 #include <bl32/tsp/tsp.h>
+#include <bl32/tsp/tsp_el1_context.h>
 #include <common/bl_common.h>
+#include <common/build_message.h>
 #include <common/debug.h>
 #include <lib/spinlock.h>
 #include <plat/common/platform.h>
@@ -27,7 +29,7 @@
  ******************************************************************************/
 uint64_t tsp_main(void)
 {
-	NOTICE("TSP: %s\n", version_string);
+	NOTICE("TSP: %s\n", build_version_string);
 	NOTICE("TSP: %s\n", build_message);
 	INFO("TSP: Total memory base : 0x%lx\n", (unsigned long) BL32_BASE);
 	INFO("TSP: Total memory size : 0x%lx bytes\n", BL32_TOTAL_SIZE);
@@ -238,13 +240,13 @@ smc_args_t *tsp_smc_handler(uint64_t func,
 	service_arg0 = (uint64_t)service_args;
 	service_arg1 = (uint64_t)(service_args >> 64U);
 
-#if CTX_INCLUDE_MTE_REGS
 	/*
-	 * Write a dummy value to an MTE register, to simulate usage in the
+	 * Write a dummy value to an MTE2 register, to simulate usage in the
 	 * secure world
 	 */
-	write_gcr_el1(0x99);
-#endif
+	if (is_feat_mte2_supported()) {
+		write_gcr_el1(0x99);
+	}
 
 	/* Determine the function to perform based on the function ID */
 	switch (TSP_BARE_FID(func)) {
@@ -276,6 +278,17 @@ smc_args_t *tsp_smc_handler(uint64_t func,
 		results[1] = dit;
 		/* Toggle the dit bit */
 		write_dit(service_arg0 != 0U ? 0 : DIT_BIT);
+		break;
+	case TSP_MODIFY_EL1_CTX:
+		/*
+		 * Write dummy values to EL1 context registers, to simulate
+		 * their usage in the secure world.
+		 */
+		if (arg1 == TSP_CORRUPT_EL1_REGS) {
+			modify_el1_ctx_regs(TSP_CORRUPT_EL1_REGS);
+		} else {
+			modify_el1_ctx_regs(TSP_RESTORE_EL1_REGS);
+		}
 		break;
 	default:
 		break;

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2019-2023, ARM Limited and Contributors. All rights reserved.
+# Copyright (c) 2019-2024, Arm Limited and Contributors. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -30,7 +30,8 @@ IMX_GIC_SOURCES		:=	${GICV3_SOURCES}			\
 				plat/common/plat_psci_common.c		\
 				plat/imx/common/plat_imx8_gic.c
 
-BL31_SOURCES		+=	plat/imx/common/imx8_helpers.S			\
+BL31_SOURCES		+=	common/desc_image_load.c			\
+				plat/imx/common/imx8_helpers.S			\
 				plat/imx/imx8m/gpc_common.c			\
 				plat/imx/imx8m/imx_hab.c			\
 				plat/imx/imx8m/imx_aipstz.c			\
@@ -46,13 +47,13 @@ BL31_SOURCES		+=	plat/imx/common/imx8_helpers.S			\
 				plat/imx/common/imx8_topology.c			\
 				plat/imx/common/imx_sip_handler.c		\
 				plat/imx/common/imx_sip_svc.c			\
+				plat/imx/common/imx_common.c			\
 				plat/imx/common/imx_uart_console.S		\
 				lib/cpus/aarch64/cortex_a53.S			\
 				drivers/arm/tzc/tzc380.c			\
 				drivers/delay_timer/delay_timer.c		\
 				drivers/delay_timer/generic_delay_timer.c	\
 				${XLAT_TABLES_LIB_SRCS}				\
-				${IMX_DRAM_SOURCES}				\
 				${IMX_GIC_SOURCES}
 
 ifeq (${NEED_BL2},yes)
@@ -126,21 +127,20 @@ ROT_KEY             = $(BUILD_PLAT)/rot_key.pem
 ROTPK_HASH          = $(BUILD_PLAT)/rotpk_sha256.bin
 
 $(eval $(call add_define_val,ROTPK_HASH,'"$(ROTPK_HASH)"'))
-$(eval $(call MAKE_LIB_DIRS))
 
 $(BUILD_PLAT)/bl2/imx8mm_rotpk.o: $(ROTPK_HASH)
 
 certificates: $(ROT_KEY)
 
-$(ROT_KEY): | $(BUILD_PLAT)
-	@echo "  OPENSSL $@"
-	@if [ ! -f $(ROT_KEY) ]; then \
+$(ROT_KEY): | $$(@D)/
+	$(s)echo "  OPENSSL $@"
+	$(q)if [ ! -f $(ROT_KEY) ]; then \
 		${OPENSSL_BIN_PATH}/openssl genrsa 2048 > $@ 2>/dev/null; \
 	fi
 
-$(ROTPK_HASH): $(ROT_KEY)
-	@echo "  OPENSSL $@"
-	$(Q)${OPENSSL_BIN_PATH}/openssl rsa -in $< -pubout -outform DER 2>/dev/null |\
+$(ROTPK_HASH): $(ROT_KEY) | $$(@D)/
+	$(s)echo "  OPENSSL $@"
+	$(q)${OPENSSL_BIN_PATH}/openssl rsa -in $< -pubout -outform DER 2>/dev/null |\
 	${OPENSSL_BIN_PATH}/openssl dgst -sha256 -binary > $@ 2>/dev/null
 endif
 
@@ -152,6 +152,18 @@ A53_DISABLE_NON_TEMPORAL_HINT := 0
 ERRATA_A53_835769	:=	1
 ERRATA_A53_843419	:=	1
 ERRATA_A53_855873	:=	1
+
+IMX_DRAM_RETENTION	?=	1
+$(eval $(call assert_boolean,IMX_DRAM_RETENTION))
+$(eval $(call add_define,IMX_DRAM_RETENTION))
+
+ifeq (${IMX_DRAM_RETENTION},1)
+BL31_SOURCES		+=	${IMX_DRAM_SOURCES}
+endif
+
+ifneq (${PRELOADED_BL33_BASE},)
+$(eval $(call add_define_val,PLAT_NS_IMAGE_OFFSET,${PRELOADED_BL33_BASE}))
+endif
 
 BL32_BASE		?=	0xbe000000
 $(eval $(call add_define,BL32_BASE))
@@ -175,10 +187,6 @@ ifeq (${MEASURED_BOOT},1)
     MEASURED_BOOT_MK := drivers/measured_boot/event_log/event_log.mk
     $(info Including ${MEASURED_BOOT_MK})
     include ${MEASURED_BOOT_MK}
-
-ifneq (${MBOOT_EL_HASH_ALG}, sha256)
-    $(eval $(call add_define,TF_MBEDTLS_MBOOT_USE_SHA512))
-endif
 
 BL2_SOURCES		+=	plat/imx/imx8m/imx8m_measured_boot.c	\
 				plat/imx/imx8m/imx8m_dyn_cfg_helpers.c	\

@@ -20,6 +20,7 @@
 #include <plat/common/platform.h>
 
 #include <imx8_lpuart.h>
+#include <plat_common.h>
 #include <plat_imx8.h>
 #include <platform_def.h>
 
@@ -90,6 +91,9 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 	bl33_image_ep_info.args.arg3 = BL32_FDT_OVERLAY_ADDR;
 	bl32_image_ep_info.args.arg3 = BL32_FDT_OVERLAY_ADDR;
 #endif
+
+	imx_bl31_params_parse(arg0, OCRAM_BASE, OCRAM_SIZE,
+				    &bl32_image_ep_info, &bl33_image_ep_info);
 }
 
 void bl31_plat_arch_setup(void)
@@ -134,11 +138,6 @@ void bl31_platform_setup(void)
 
 	plat_gic_driver_init();
 	plat_gic_init();
-}
-
-void bl31_plat_runtime_setup(void)
-{
-	console_switch_state(CONSOLE_FLAG_RUNTIME);
 }
 
 entry_point_info_t *bl31_plat_get_next_image_ep_info(unsigned int type)

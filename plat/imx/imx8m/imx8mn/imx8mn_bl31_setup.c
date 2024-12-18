@@ -29,6 +29,7 @@
 #include <imx8m_csu.h>
 #include <imx8m_snvs.h>
 #include <platform_def.h>
+#include <plat_common.h>
 #include <plat_imx8.h>
 
 #define TRUSTY_PARAMS_LEN_BYTES      (4096*2)
@@ -47,7 +48,7 @@ static const struct aipstz_cfg aipstz[] = {
 	{0},
 };
 
-static const struct imx_rdc_cfg rdc[] = {
+static struct imx_rdc_cfg rdc[] = {
 	/* Master domain assignment */
 	RDC_MDAn(RDC_MDA_M7, DID1),
 
@@ -126,7 +127,7 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 	unsigned int console_base = IMX_BOOT_UART_BASE;
 	static console_t console;
 	unsigned int val;
-	int i;
+	int i, ret;
 
 	/* Enable CSU NS access permission */
 	for (i = 0; i < 64; i++) {
@@ -135,7 +136,11 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 
 	imx_aipstz_init(aipstz);
 
-	imx_rdc_init(rdc);
+	if (console_base == 0U) {
+		console_base = imx8m_uart_get_base();
+	}
+
+	imx_rdc_init(rdc, console_base);
 
 	imx_csu_init(csu_cfg);
 
@@ -150,10 +155,6 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 	mmio_write_32(IMX_IOMUX_GPR_BASE + 0x2c, 0x4c1);
 	val = mmio_read_32(IMX_IOMUX_GPR_BASE + 0x2c);
 	mmio_write_32(IMX_IOMUX_GPR_BASE + 0x2c, val | 0x3DFF0000);
-
-	if (console_base == 0U) {
-		console_base = imx8m_uart_get_base();
-	}
 
 	console_imx_uart_register(console_base, IMX_BOOT_UART_CLK_IN_HZ,
 		IMX_CONSOLE_BAUDRATE, &console);
@@ -191,6 +192,13 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 	bl32_image_ep_info.args.arg3 = BL32_FDT_OVERLAY_ADDR;
 #endif
 #endif
+
+	ret = imx_bl31_params_parse(arg0, IMX_NS_OCRAM_SIZE, IMX_NS_OCRAM_BASE,
+				    &bl32_image_ep_info, &bl33_image_ep_info);
+	if (ret != 0) {
+		imx_bl31_params_parse(arg0, IMX_TCM_BASE, IMX_TCM_SIZE,
+				      &bl32_image_ep_info, &bl33_image_ep_info);
+	}
 
 #if !defined(SPD_opteed) && !defined(SPD_trusty)
 	enable_snvs_privileged_access();

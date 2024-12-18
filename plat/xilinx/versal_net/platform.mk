@@ -21,6 +21,8 @@ IPI_CRC_CHECK := 0
 GIC_ENABLE_V4_EXTN :=  0
 GICV3_SUPPORT_GIC600 := 1
 TFA_NO_PM := 0
+CPU_PWRDWN_SGI ?= 6
+$(eval $(call add_define_val,CPU_PWR_DOWN_REQ_INTR,ARM_IRQ_SEC_SGI_${CPU_PWRDWN_SGI}))
 
 override CTX_INCLUDE_AARCH32_REGS    := 0
 
@@ -32,7 +34,7 @@ ifdef VERSAL_NET_ATF_MEM_BASE
     $(eval $(call add_define,VERSAL_NET_ATF_MEM_BASE))
 
     ifndef VERSAL_NET_ATF_MEM_SIZE
-        $(error "VERSAL_NET_ATF_BASE defined without VERSAL_NET_ATF_SIZE")
+        $(error "VERSAL_NET_ATF_MEM_BASE defined without VERSAL_NET_ATF_MEM_SIZE")
     endif
     $(eval $(call add_define,VERSAL_NET_ATF_MEM_SIZE))
 
@@ -45,7 +47,7 @@ ifdef VERSAL_NET_BL32_MEM_BASE
     $(eval $(call add_define,VERSAL_NET_BL32_MEM_BASE))
 
     ifndef VERSAL_NET_BL32_MEM_SIZE
-        $(error "VERSAL_NET_BL32_BASE defined without VERSAL_NET_BL32_SIZE")
+        $(error "VERSAL_NET_BL32_MEM_BASE defined without VERSAL_NET_BL32_MEM_SIZE")
     endif
     $(eval $(call add_define,VERSAL_NET_BL32_MEM_SIZE))
 endif
@@ -58,7 +60,7 @@ USE_COHERENT_MEM := 0
 HW_ASSISTED_COHERENCY := 1
 
 VERSAL_NET_CONSOLE	?=	pl011
-ifeq (${VERSAL_NET_CONSOLE}, $(filter ${VERSAL_NET_CONSOLE},pl011 pl011_0 pl011_1 dcc))
+ifeq (${VERSAL_NET_CONSOLE}, $(filter ${VERSAL_NET_CONSOLE},pl011 pl011_0 pl011_1 dcc dtb none))
 else
   $(error Please define VERSAL_NET_CONSOLE)
 endif
@@ -67,6 +69,20 @@ $(eval $(call add_define_val,VERSAL_NET_CONSOLE,VERSAL_NET_CONSOLE_ID_${VERSAL_N
 
 ifdef XILINX_OF_BOARD_DTB_ADDR
 $(eval $(call add_define,XILINX_OF_BOARD_DTB_ADDR))
+endif
+
+# Runtime console in default console in DEBUG build
+ifeq ($(DEBUG), 1)
+CONSOLE_RUNTIME ?= pl011
+endif
+
+# Runtime console
+ifdef CONSOLE_RUNTIME
+ifeq (${CONSOLE_RUNTIME}, $(filter ${CONSOLE_RUNTIME},pl011 pl011_0 pl011_1 dcc dtb))
+$(eval $(call add_define_val,CONSOLE_RUNTIME,RT_CONSOLE_ID_${CONSOLE_RUNTIME}))
+else
+$(error "Please define CONSOLE_RUNTIME")
+endif
 endif
 
 # enable assert() for release/debug builds
@@ -93,7 +109,9 @@ PLAT_BL_COMMON_SOURCES	:=	\
 				plat/arm/common/arm_common.c			\
 				plat/common/plat_gicv3.c			\
 				${PLAT_PATH}/aarch64/versal_net_helpers.S	\
-				${PLAT_PATH}/aarch64/versal_net_common.c
+				${PLAT_PATH}/aarch64/versal_net_common.c	\
+				${PLAT_PATH}/plat_topology.c                    \
+				${XLAT_TABLES_LIB_SRCS}
 
 BL31_SOURCES		+=	drivers/arm/cci/cci.c				\
 				lib/cpus/aarch64/cortex_a78_ae.S		\
@@ -112,14 +130,14 @@ endif
 BL31_SOURCES		+=	plat/xilinx/common/plat_fdt.c			\
 				plat/xilinx/common/plat_startup.c		\
 				plat/xilinx/common/plat_console.c		\
+				plat/xilinx/common/plat_clkfunc.c		\
 				plat/xilinx/common/ipi.c			\
 				plat/xilinx/common/ipi_mailbox_service/ipi_mailbox_svc.c \
 				plat/xilinx/common/versal.c			\
 				${PLAT_PATH}/bl31_versal_net_setup.c		\
-				${PLAT_PATH}/plat_topology.c			\
 				common/fdt_fixup.c				\
 				common/fdt_wrappers.c				\
+				plat/arm/common/arm_gicv3.c 			\
 				${LIBFDT_SRCS}					\
 				${PLAT_PATH}/sip_svc_setup.c			\
-				${PLAT_PATH}/versal_net_gicv3.c			\
 				${XLAT_TABLES_LIB_SRCS}

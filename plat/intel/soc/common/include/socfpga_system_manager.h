@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2019-2023, Intel Corporation. All rights reserved.
+ * Copyright (c) 2024, Altera Corporation. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -14,7 +15,6 @@
 #define SOCFPGA_SYSMGR_SDMMC				0x28
 
 /* Field Masking */
-
 #define SYSMGR_SDMMC_DRVSEL(x)			(((x) & 0x7) << 0)
 #define SYSMGR_SDMMC_SMPLSEL(x)			(((x) & 0x7) << 4)
 
@@ -32,5 +32,9 @@
 
 #define SOCFPGA_SYSMGR(_reg)		(SOCFPGA_SYSMGR_REG_BASE \
 						+ (SOCFPGA_SYSMGR_##_reg))
+
+/* Function Prototype */
+uint32_t intel_hps_get_jtag_id(void);
+bool is_agilex5_A5F0(void);
 
 #endif /* SOCFPGA_SYSTEMMANAGER_H */

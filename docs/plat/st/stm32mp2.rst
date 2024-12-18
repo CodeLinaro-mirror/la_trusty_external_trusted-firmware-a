@@ -4,6 +4,8 @@ STM32MP2
 STM32MP2 is a microprocessor designed by STMicroelectronics
 based on Arm Cortex-A35.
 
+More information can be found on `STM32MP2 Series`_ page.
+
 For TF-A common configuration of STM32 MPUs, please check
 :ref:`STM32 MPUs` page.
 
@@ -19,10 +21,12 @@ The STM32MP25 series is available in 4 different lines which are pin-to-pin comp
 
 Each line comes with a security option (cryptography & secure boot) and a Cortex-A frequency option:
 
-- A      Basic + Cortex-A35 @ 1GHz
-- C      Secure Boot + HW Crypto + Cortex-A35 @ 1GHz
+- A      Basic + Cortex-A35 @ 1.2GHz
+- C      Secure Boot + HW Crypto + Cortex-A35 @ 1.2GHz
 - D      Basic + Cortex-A35 @ 1.5GHz
 - F      Secure Boot + HW Crypto + Cortex-A35 @ 1.5GHz
+
+The `STM32MP2 part number codification`_ page gives more information about part numbers.
 
 Memory mapping
 --------------
@@ -81,7 +85,8 @@ To compile the correct DDR driver, one flag must be set among:
 
 Boot with FIP
 ~~~~~~~~~~~~~
-You need to build BL2, BL31, BL32 (OP-TEE) and BL33 (U-Boot) before building FIP binary.
+You need to build BL2, BL31, BL32 (OP-TEE) and BL33 (U-Boot) and retrieve
+DDR PHY firmware before building FIP binary.
 
 U-Boot
 ______
@@ -102,9 +107,24 @@ ______
         ARCH=arm PLATFORM=stm32mp2 \
         CFG_EMBED_DTB_SOURCE_FILE=stm32mp257f-ev1.dts
 
-TF-A BL2 & BL31
-_______________
-To build TF-A BL2 with its STM32 header and BL31 for SD-card boot:
+DDR PHY firmware
+________________
+DDR PHY firmware files may not be delivered inside TF-A repository, especially
+if you build directly from trustedfirmware.org repository. It then needs to be
+retrieved from `STMicroelectronics DDR PHY github`_.
+
+You can either clone the repository to the default directory:
+
+.. code:: bash
+
+    git clone https://github.com/STMicroelectronics/stm32-ddr-phy-binary.git drivers/st/ddr/phy/firmware/bin
+
+Or clone it somewhere else, and add ``STM32MP_DDR_FW_PATH=`` in your make command
+line when building FIP.
+
+TF-A BL2
+________
+To build TF-A BL2 with its STM32 header for SD-card boot:
 
 .. code:: bash
 
@@ -130,4 +150,8 @@ ___
         BL32_EXTRA1=<optee_directory>/tee-pager_v2.bin
         fip
 
-*Copyright (c) 2023, STMicroelectronics - All Rights Reserved*
+.. _STM32MP2 Series: https://www.st.com/en/microcontrollers-microprocessors/stm32mp2-series.html
+.. _STM32MP2 part number codification: https://wiki.st.com/stm32mpu/wiki/STM32MP25_microprocessor#Part_number_codification
+.. _STMicroelectronics DDR PHY github: https://github.com/STMicroelectronics/stm32-ddr-phy-binary
+
+*Copyright (c) 2023-2024, STMicroelectronics - All Rights Reserved*

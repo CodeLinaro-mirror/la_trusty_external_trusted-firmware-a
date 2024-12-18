@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Arm Limited. All rights reserved.
+ * Copyright (c) 2023-2024, Arm Limited. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -38,7 +38,7 @@ func travis_core_pwr_dwn
 	mrs     x0, ID_AA64PFR1_EL1
 	ubfx	x0, x0, #ID_AA64PFR1_EL1_SME_SHIFT, \
 		#ID_AA64PFR1_EL1_SME_WIDTH
-        cmp     x0, #ID_AA64PFR1_EL1_SME_NOT_SUPPORTED
+        cmp     x0, #SME_NOT_IMPLEMENTED
 	b.eq	1f
 	msr	TRAVIS_SVCRSM, xzr
 	msr	TRAVIS_SVCRZA, xzr
@@ -53,8 +53,6 @@ func travis_core_pwr_dwn
 	isb
 	ret
 endfunc travis_core_pwr_dwn
-
-errata_report_shim travis
 
 .section .rodata.travis_regs, "aS"
 travis_regs: /* The ASCII list of register names to be reported */

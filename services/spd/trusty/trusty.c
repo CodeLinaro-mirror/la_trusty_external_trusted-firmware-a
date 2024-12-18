@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2019, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2016-2024, Arm Limited and Contributors. All rights reserved.
  * Copyright (c) 2020, NVIDIA Corporation. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
@@ -76,8 +76,6 @@ static struct trusty_cpu_ctx trusty_cpu_ctx[PLATFORM_CORE_COUNT];
 struct smc_args trusty_init_context_stack(void **sp, void *new_stack);
 struct smc_args trusty_context_switch_helper(void **sp, void *smc_params);
 
-static uint32_t current_vmid;
-
 static bool trusty_ctx_valid(struct trusty_cpu_ctx *ctx) {
 	return !!ctx->saved_sp;
 }
@@ -139,8 +137,10 @@ static struct smc_args trusty_context_switch(uint32_t security_state, uint64_t r
 	 * when it's needed the PSCI caller has preserved FP context before
 	 * going here.
 	 */
-	if (r0 != SMC_FC_CPU_SUSPEND && r0 != SMC_FC_CPU_RESUME)
-		fpregs_context_save(get_fpregs_ctx(cm_get_context(security_state)));
+	if (r0 != SMC_FC_CPU_SUSPEND && r0 != SMC_FC_CPU_RESUME) {
+		simd_ctx_save(security_state, false);
+	}
+
 	cm_el1_sysregs_context_save(security_state);
 
 	ctx->saved_security_state = security_state;
@@ -149,8 +149,9 @@ static struct smc_args trusty_context_switch(uint32_t security_state, uint64_t r
 	assert(ctx->saved_security_state == ((security_state == 0U) ? 1U : 0U));
 
 	cm_el1_sysregs_context_restore(security_state);
-	if (r0 != SMC_FC_CPU_SUSPEND && r0 != SMC_FC_CPU_RESUME)
-		fpregs_context_restore(get_fpregs_ctx(cm_get_context(security_state)));
+	if (r0 != SMC_FC_CPU_SUSPEND && r0 != SMC_FC_CPU_RESUME) {
+		simd_ctx_restore(security_state);
+	}
 
 	cm_set_next_eret_context(security_state);
 
@@ -181,9 +182,9 @@ static uint64_t trusty_fiq_handler(uint32_t id,
 	(void)memcpy(&ctx->fiq_gpregs, get_gpregs_ctx(handle), sizeof(ctx->fiq_gpregs));
 	ctx->fiq_pc = SMC_GET_EL3(handle, CTX_ELR_EL3);
 	ctx->fiq_cpsr = SMC_GET_EL3(handle, CTX_SPSR_EL3);
-	ctx->fiq_sp_el1 = read_ctx_reg(get_el1_sysregs_ctx(handle), CTX_SP_EL1);
+	ctx->fiq_sp_el1 = read_el1_ctx_common(get_el1_sysregs_ctx(handle), sp_el1);
 
-	write_ctx_reg(get_el1_sysregs_ctx(handle), CTX_SP_EL1, ctx->fiq_handler_sp);
+	write_el1_ctx_common(get_el1_sysregs_ctx(handle), sp_el1, ctx->fiq_handler_sp);
 	cm_set_elr_spsr_el3(NON_SECURE, ctx->fiq_handler_pc, (uint32_t)ctx->fiq_handler_cpsr);
 
 	SMC_RET0(handle);
@@ -242,7 +243,7 @@ static uint64_t trusty_fiq_exit(void *handle, uint64_t x1, uint64_t x2, uint64_t
 	 */
 	(void)memcpy(get_gpregs_ctx(handle), &ctx->fiq_gpregs, sizeof(ctx->fiq_gpregs));
 	ctx->fiq_handler_active = 0;
-	write_ctx_reg(get_el1_sysregs_ctx(handle), CTX_SP_EL1, ctx->fiq_sp_el1);
+	write_el1_ctx_common(get_el1_sysregs_ctx(handle), sp_el1, ctx->fiq_sp_el1);
 	cm_set_elr_spsr_el3(NON_SECURE, ctx->fiq_pc, (uint32_t)ctx->fiq_cpsr);
 
 	SMC_RET0(handle);
@@ -258,7 +259,6 @@ static uintptr_t trusty_smc_handler(uint32_t smc_fid,
 			 u_register_t flags)
 {
 	struct smc_args ret;
-	uint32_t vmid = 0U;
 	entry_point_info_t *ep_info = bl31_plat_get_next_image_ep_info(SECURE);
 
 	/*
@@ -305,21 +305,8 @@ static uintptr_t trusty_smc_handler(uint32_t smc_fid,
 				SMC_RET1(handle, SMC_UNK);
 			}
 
-			if (is_hypervisor_mode())
-				vmid = SMC_GET_GP(handle, CTX_GPREG_X7);
-
-			if ((current_vmid != 0) && (current_vmid != vmid)) {
-				/* This message will cause SMC mechanism
-				 * abnormal in multi-guest environment.
-				 * Change it to WARN in case you need it.
-				 */
-				VERBOSE("Previous SMC not finished.\n");
-				SMC_RET1(handle, SM_ERR_BUSY);
-			}
-			current_vmid = vmid;
 			ret = trusty_context_switch(NON_SECURE, smc_fid, x1,
 				x2, x3);
-			current_vmid = 0;
 			SMC_RET1(handle, ret.r0);
 		}
 	}
@@ -390,7 +377,7 @@ static int32_t trusty_cpu_init(void)
 	 * We can touch fp registers now, restore them to avoid leaking
 	 * TEE fp registers to non-secure world.
 	 */
-	fpregs_context_restore(get_fpregs_ctx(cm_get_context(NON_SECURE)));
+	simd_ctx_restore(NON_SECURE);
 	cm_set_next_eret_context(NON_SECURE);
 
 	return 1;
