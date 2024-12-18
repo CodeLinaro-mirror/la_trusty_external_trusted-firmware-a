@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2013-2023, Arm Limited and Contributors. All rights reserved.
+# Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -7,89 +7,80 @@
 include common/fdt_wrappers.mk
 
 # Use the GICv3 driver on the FVP by default
-FVP_USE_GIC_DRIVER	:= FVP_GICV3
+FVP_USE_GIC_DRIVER		:= FVP_GICV3
 
 # Default cluster count for FVP
-FVP_CLUSTER_COUNT	:= 2
+FVP_CLUSTER_COUNT		:= 2
 
 # Default number of CPUs per cluster on FVP
 FVP_MAX_CPUS_PER_CLUSTER	:= 4
 
 # Default number of threads per CPU on FVP
-FVP_MAX_PE_PER_CPU	:= 1
+FVP_MAX_PE_PER_CPU		:= 1
 
 # Disable redistributor frame of inactive/fused CPU cores by marking it as read
 # only; enable redistributor frames of all CPU cores by default.
-FVP_GICR_REGION_PROTECTION		:= 0
+FVP_GICR_REGION_PROTECTION	:= 0
 
-FVP_DT_PREFIX		:= fvp-base-gicv3-psci
+FVP_DT_PREFIX			:= fvp-base-gicv3-psci
 
-# Size (in kilobytes) of the Trusted SRAM region to  utilize when building for
+# Size (in kilobytes) of the Trusted SRAM region to  utilize when building for
 # the FVP platform. This option defaults to 256.
-FVP_TRUSTED_SRAM_SIZE	:= 256
+FVP_TRUSTED_SRAM_SIZE		:= 256
 
 # Macro to enable helpers for running SPM tests. Disabled by default.
 PLAT_TEST_SPM	:= 0
 
-# This is a very trickly TEMPORARY fix. Enabling ALL features exceeds BL31's
-# progbits limit. We need a way to build all useful configurations while waiting
-# on the fvp to increase its SRAM size. The problem is twofild:
-#  1. the cleanup that introduced these enables cleaned up tf-a a little too
-#     well and things that previously (incorrectly) were enabled, no longer are.
-#     A bunch of CI configs build subtly incorrectly and this combo makes it
-#     necessary to forcefully and unconditionally enable them here.
-#  2. the progbits limit is exceeded only when the tsp is involved. However,
-#     there are tsp CI configs that run on very high architecture revisions so
-#     disabling everything isn't an option.
-# The fix is to enable everything, as before. When the tsp is included, though,
-# we need to slim the size down. In that case, disable all optional features,
-# that will not be present in CI when the tsp is.
-# Similarly, DRTM support is only tested on v8.0 models. Disable everything just
-# for it.
-# TODO: make all of this unconditional (or only base the condition on
-# ARM_ARCH_* when the makefile supports it).
-ifneq (${DRTM_SUPPORT}, 1)
-ifneq (${SPD}, tspd)
-	ENABLE_FEAT_AMU			:= 2
-	ENABLE_FEAT_AMUv1p1		:= 2
-	ENABLE_FEAT_HCX			:= 2
-	ENABLE_FEAT_RNG			:= 2
-	ENABLE_FEAT_TWED		:= 2
-	ENABLE_FEAT_GCS			:= 2
+# By default dont build CPUs with no FVP model.
+BUILD_CPUS_WITH_NO_FVP_MODEL	?= 0
+
+ENABLE_FEAT_AMU			:= 2
+ENABLE_FEAT_AMUv1p1		:= 2
+ENABLE_FEAT_HCX			:= 2
+ENABLE_FEAT_RNG			:= 2
+ENABLE_FEAT_TWED		:= 2
+ENABLE_FEAT_GCS			:= 2
+
 ifeq (${ARCH}, aarch64)
-ifneq (${SPD}, spmd)
+
 ifeq (${SPM_MM}, 0)
 ifeq (${CTX_INCLUDE_FPREGS}, 0)
-	ENABLE_SME_FOR_NS		:= 2
-	ENABLE_SME2_FOR_NS		:= 2
-endif
-endif
-endif
+      ENABLE_SME_FOR_NS		:= 2
+      ENABLE_SME2_FOR_NS	:= 2
+else
+      ENABLE_SVE_FOR_NS		:= 0
+      ENABLE_SME_FOR_NS		:= 0
+      ENABLE_SME2_FOR_NS	:= 0
 endif
 endif
 
-# enable unconditionally for all builds
-ifeq (${ARCH}, aarch64)
-    ENABLE_BRBE_FOR_NS		:= 2
-    ENABLE_TRBE_FOR_NS		:= 2
+      ENABLE_BRBE_FOR_NS	:= 2
+      ENABLE_TRBE_FOR_NS	:= 2
+      ENABLE_FEAT_D128		:= 2
 endif
+
 ENABLE_SYS_REG_TRACE_FOR_NS	:= 2
 ENABLE_FEAT_CSV2_2		:= 2
+ENABLE_FEAT_CSV2_3		:= 2
+ENABLE_FEAT_DEBUGV8P9		:= 2
 ENABLE_FEAT_DIT			:= 2
 ENABLE_FEAT_PAN			:= 2
-ENABLE_FEAT_MTE_PERM		:= 2
 ENABLE_FEAT_VHE			:= 2
 CTX_INCLUDE_NEVE_REGS		:= 2
 ENABLE_FEAT_SEL2		:= 2
 ENABLE_TRF_FOR_NS		:= 2
 ENABLE_FEAT_ECV			:= 2
 ENABLE_FEAT_FGT			:= 2
+ENABLE_FEAT_FGT2		:= 2
+ENABLE_FEAT_THE			:= 2
 ENABLE_FEAT_TCR2		:= 2
 ENABLE_FEAT_S2PIE		:= 2
 ENABLE_FEAT_S1PIE		:= 2
 ENABLE_FEAT_S2POE		:= 2
 ENABLE_FEAT_S1POE		:= 2
-endif
+ENABLE_FEAT_SCTLR2		:= 2
+ENABLE_FEAT_MTE2		:= 2
+ENABLE_FEAT_LS64_ACCDATA	:= 2
 
 # The FVP platform depends on this macro to build with correct GIC driver.
 $(eval $(call add_define,FVP_USE_GIC_DRIVER))
@@ -205,19 +196,29 @@ else
 					lib/cpus/aarch64/cortex_a78_ae.S	\
 					lib/cpus/aarch64/cortex_a78c.S		\
 					lib/cpus/aarch64/cortex_a710.S		\
+					lib/cpus/aarch64/cortex_a715.S		\
+					lib/cpus/aarch64/cortex_a720.S		\
+					lib/cpus/aarch64/cortex_a720_ae.S	\
 					lib/cpus/aarch64/neoverse_n_common.S	\
 					lib/cpus/aarch64/neoverse_n1.S		\
 					lib/cpus/aarch64/neoverse_n2.S		\
 					lib/cpus/aarch64/neoverse_v1.S		\
 					lib/cpus/aarch64/neoverse_e1.S		\
 					lib/cpus/aarch64/cortex_x2.S		\
-					lib/cpus/aarch64/cortex_gelas.S		\
-					lib/cpus/aarch64/nevis.S		\
-					lib/cpus/aarch64/travis.S
+					lib/cpus/aarch64/cortex_x4.S
 	endif
 	# AArch64/AArch32 cores
 	FVP_CPU_LIBS	+=	lib/cpus/aarch64/cortex_a55.S		\
 				lib/cpus/aarch64/cortex_a75.S
+endif
+
+#Build AArch64-only CPUs with no FVP model yet.
+ifeq (${BUILD_CPUS_WITH_NO_FVP_MODEL},1)
+	FVP_CPU_LIBS    +=	lib/cpus/aarch64/neoverse_n3.S		\
+				lib/cpus/aarch64/cortex_gelas.S		\
+				lib/cpus/aarch64/nevis.S		\
+				lib/cpus/aarch64/travis.S		\
+				lib/cpus/aarch64/cortex_arcadia.S
 endif
 
 else
@@ -234,8 +235,10 @@ BL1_SOURCES		+=	drivers/arm/smmu/smmu_v3.c			\
 				lib/semihosting/${ARCH}/semihosting_call.S	\
 				plat/arm/board/fvp/${ARCH}/fvp_helpers.S	\
 				plat/arm/board/fvp/fvp_bl1_setup.c		\
+				plat/arm/board/fvp/fvp_cpu_pwr.c		\
 				plat/arm/board/fvp/fvp_err.c			\
 				plat/arm/board/fvp/fvp_io_storage.c		\
+				plat/arm/board/fvp/fvp_topology.c		\
 				${FVP_CPU_LIBS}					\
 				${FVP_INTERCONNECT_SOURCES}
 
@@ -263,10 +266,12 @@ BL2_SOURCES		+=	plat/arm/common/fconf/fconf_nv_cntr_getter.c
 endif
 
 ifeq (${ENABLE_RME},1)
-BL2_SOURCES		+=	plat/arm/board/fvp/aarch64/fvp_helpers.S
+BL2_SOURCES		+=	plat/arm/board/fvp/aarch64/fvp_helpers.S	\
+				plat/arm/board/fvp/fvp_cpu_pwr.c
 
 BL31_SOURCES		+=	plat/arm/board/fvp/fvp_plat_attest_token.c	\
-				plat/arm/board/fvp/fvp_realm_attest_key.c
+				plat/arm/board/fvp/fvp_realm_attest_key.c	\
+				plat/arm/board/fvp/fvp_el3_token_sign.c
 endif
 
 ifeq (${ENABLE_FEAT_RNG_TRAP},1)
@@ -275,6 +280,7 @@ endif
 
 ifeq (${RESET_TO_BL2},1)
 BL2_SOURCES		+=	plat/arm/board/fvp/${ARCH}/fvp_helpers.S	\
+				plat/arm/board/fvp/fvp_cpu_pwr.c		\
 				plat/arm/board/fvp/fvp_bl2_el3_setup.c		\
 				${FVP_CPU_LIBS}					\
 				${FVP_INTERCONNECT_SOURCES}
@@ -301,6 +307,7 @@ BL31_SOURCES		+=	drivers/arm/fvp/fvp_pwrc.c			\
 				plat/arm/board/fvp/fvp_pm.c			\
 				plat/arm/board/fvp/fvp_topology.c		\
 				plat/arm/board/fvp/aarch64/fvp_helpers.S	\
+				plat/arm/board/fvp/fvp_cpu_pwr.c		\
 				plat/arm/common/arm_nor_psci_mem_protect.c	\
 				${FVP_CPU_LIBS}					\
 				${FVP_GIC_SOURCES}				\
@@ -330,7 +337,17 @@ endif
 
 # Add the FDT_SOURCES and options for Dynamic Config (only for Unix env)
 ifdef UNIX_MK
+FVP_TB_FW_CONFIG	:=	${BUILD_PLAT}/fdts/${PLAT}_tb_fw_config.dtb
 FVP_HW_CONFIG_DTS	:=	fdts/${FVP_DT_PREFIX}.dts
+
+FDT_SOURCES		+=	${FVP_HW_CONFIG_DTS}
+$(eval FVP_HW_CONFIG	:=	${BUILD_PLAT}/$(patsubst %.dts,%.dtb,$(FVP_HW_CONFIG_DTS)))
+
+ifeq (${TRANSFER_LIST}, 1)
+FDT_SOURCES		+=	$(addprefix plat/arm/board/fvp/fdts/,	\
+					${PLAT}_tb_fw_config.dts	\
+				)
+else
 FDT_SOURCES		+=	$(addprefix plat/arm/board/fvp/fdts/,	\
 					${PLAT}_fw_config.dts		\
 					${PLAT}_tb_fw_config.dts	\
@@ -339,7 +356,6 @@ FDT_SOURCES		+=	$(addprefix plat/arm/board/fvp/fdts/,	\
 				)
 
 FVP_FW_CONFIG		:=	${BUILD_PLAT}/fdts/${PLAT}_fw_config.dtb
-FVP_TB_FW_CONFIG	:=	${BUILD_PLAT}/fdts/${PLAT}_tb_fw_config.dtb
 FVP_SOC_FW_CONFIG	:=	${BUILD_PLAT}/fdts/${PLAT}_soc_fw_config.dtb
 FVP_NT_FW_CONFIG	:=	${BUILD_PLAT}/fdts/${PLAT}_nt_fw_config.dtb
 
@@ -349,10 +365,6 @@ FVP_TOS_FW_CONFIG	:=	${BUILD_PLAT}/fdts/${PLAT}_tsp_fw_config.dtb
 
 # Add the TOS_FW_CONFIG to FIP and specify the same to certtool
 $(eval $(call TOOL_ADD_PAYLOAD,${FVP_TOS_FW_CONFIG},--tos-fw-config,${FVP_TOS_FW_CONFIG}))
-endif
-
-ifeq (${TRANSFER_LIST}, 1)
-include lib/transfer_list/transfer_list.mk
 endif
 
 ifeq (${SPD},spmd)
@@ -370,18 +382,28 @@ endif
 
 # Add the FW_CONFIG to FIP and specify the same to certtool
 $(eval $(call TOOL_ADD_PAYLOAD,${FVP_FW_CONFIG},--fw-config,${FVP_FW_CONFIG}))
-# Add the TB_FW_CONFIG to FIP and specify the same to certtool
-$(eval $(call TOOL_ADD_PAYLOAD,${FVP_TB_FW_CONFIG},--tb-fw-config,${FVP_TB_FW_CONFIG}))
 # Add the SOC_FW_CONFIG to FIP and specify the same to certtool
 $(eval $(call TOOL_ADD_PAYLOAD,${FVP_SOC_FW_CONFIG},--soc-fw-config,${FVP_SOC_FW_CONFIG}))
 # Add the NT_FW_CONFIG to FIP and specify the same to certtool
 $(eval $(call TOOL_ADD_PAYLOAD,${FVP_NT_FW_CONFIG},--nt-fw-config,${FVP_NT_FW_CONFIG}))
+endif
 
-FDT_SOURCES		+=	${FVP_HW_CONFIG_DTS}
-$(eval FVP_HW_CONFIG	:=	${BUILD_PLAT}/$(patsubst %.dts,%.dtb,$(FVP_HW_CONFIG_DTS)))
-
+# Add the TB_FW_CONFIG to FIP and specify the same to certtool
+$(eval $(call TOOL_ADD_PAYLOAD,${FVP_TB_FW_CONFIG},--tb-fw-config,${FVP_TB_FW_CONFIG}))
 # Add the HW_CONFIG to FIP and specify the same to certtool
 $(eval $(call TOOL_ADD_PAYLOAD,${FVP_HW_CONFIG},--hw-config,${FVP_HW_CONFIG}))
+endif
+
+ifeq (${TRANSFER_LIST}, 1)
+include lib/transfer_list/transfer_list.mk
+
+ifeq ($(RESET_TO_BL31), 1)
+HW_CONFIG			:=	${FVP_HW_CONFIG}
+FW_HANDOFF_SIZE			:=	20000
+
+TRANSFER_LIST_DTB_OFFSET	:=	0x20
+$(eval $(call add_define,TRANSFER_LIST_DTB_OFFSET))
+endif
 endif
 
 # Enable dynamic mitigation support by default
@@ -398,11 +420,15 @@ endif
 endif
 
 ifeq (${HANDLE_EA_EL3_FIRST_NS},1)
-ifeq (${ENABLE_FEAT_RAS},1)
-BL31_SOURCES		+=	plat/arm/board/fvp/aarch64/fvp_ras.c
-else
-BL31_SOURCES		+= 	plat/arm/board/fvp/aarch64/fvp_ea.c
-endif
+    ifeq (${ENABLE_FEAT_RAS},1)
+    	ifeq (${PLATFORM_TEST_FFH_LSP_RAS_SP},1)
+            BL31_SOURCES		+=	plat/arm/board/fvp/aarch64/fvp_lsp_ras_sp.c
+	else
+            BL31_SOURCES		+=	plat/arm/board/fvp/aarch64/fvp_ras.c
+	endif
+    else
+        BL31_SOURCES		+= 	plat/arm/board/fvp/aarch64/fvp_ea.c
+    endif
 endif
 
 ifneq (${ENABLE_STACK_PROTECTOR},0)
@@ -440,26 +466,6 @@ ifneq (${RESET_TO_BL2}, 0)
     override BL1_SOURCES =
 endif
 
-# RSS is not supported on FVP right now. Thus, we use the mocked version
-# of the provided PSA APIs. They return with success and hard-coded token/key.
-PLAT_RSS_NOT_SUPPORTED	:= 1
-
-# Include Measured Boot makefile before any Crypto library makefile.
-# Crypto library makefile may need default definitions of Measured Boot build
-# flags present in Measured Boot makefile.
-ifeq (${MEASURED_BOOT},1)
-    RSS_MEASURED_BOOT_MK := drivers/measured_boot/rss/rss_measured_boot.mk
-    $(info Including ${RSS_MEASURED_BOOT_MK})
-    include ${RSS_MEASURED_BOOT_MK}
-
-    ifneq (${MBOOT_RSS_HASH_ALG}, sha256)
-        $(eval $(call add_define,TF_MBEDTLS_MBOOT_USE_SHA512))
-    endif
-
-    BL1_SOURCES		+=	${MEASURED_BOOT_SOURCES}
-    BL2_SOURCES		+=	${MEASURED_BOOT_SOURCES}
-endif
-
 include plat/arm/board/common/board_common.mk
 include plat/arm/common/arm_common.mk
 
@@ -471,23 +477,6 @@ BL1_SOURCES		+=	plat/arm/board/fvp/fvp_common_measured_boot.c	\
 BL2_SOURCES		+=	plat/arm/board/fvp/fvp_common_measured_boot.c	\
 				plat/arm/board/fvp/fvp_bl2_measured_boot.c	\
 				lib/psa/measured_boot.c
-
-# Even though RSS is not supported on FVP (see above), we support overriding
-# PLAT_RSS_NOT_SUPPORTED from the command line, just for the purpose of building
-# the code to detect any build regressions. The resulting firmware will not be
-# functional.
-ifneq (${PLAT_RSS_NOT_SUPPORTED},1)
-    $(warning "RSS is not supported on FVP. The firmware will not be functional.")
-    include drivers/arm/rss/rss_comms.mk
-    BL1_SOURCES		+=	${RSS_COMMS_SOURCES}
-    BL2_SOURCES		+=	${RSS_COMMS_SOURCES}
-    BL31_SOURCES	+=	${RSS_COMMS_SOURCES}
-
-    BL1_CFLAGS		+=	-DPLAT_RSS_COMMS_PAYLOAD_MAX_SIZE=0
-    BL2_CFLAGS		+=	-DPLAT_RSS_COMMS_PAYLOAD_MAX_SIZE=0
-    BL31_CFLAGS		+=	-DPLAT_RSS_COMMS_PAYLOAD_MAX_SIZE=0
-endif
-
 endif
 
 ifeq (${DRTM_SUPPORT}, 1)
@@ -535,6 +524,22 @@ ifeq (${PLATFORM_TEST_RAS_FFH}, 1)
     endif
     ifeq (${HANDLE_EA_EL3_FIRST_NS}, 0)
          $(error "PLATFORM_TEST_RAS_FFH expects HANDLE_EA_EL3_FIRST_NS to be 1")
+    endif
+endif
+
+$(eval $(call add_define,PLATFORM_TEST_FFH_LSP_RAS_SP))
+ifeq (${PLATFORM_TEST_FFH_LSP_RAS_SP}, 1)
+    ifeq (${PLATFORM_TEST_RAS_FFH}, 1)
+         $(error "PLATFORM_TEST_RAS_FFH is incompatible with PLATFORM_TEST_FFH_LSP_RAS_SP")
+    endif
+    ifeq (${ENABLE_SPMD_LP}, 0)
+         $(error "PLATFORM_TEST_FFH_LSP_RAS_SP expects ENABLE_SPMD_LP to be 1")
+    endif
+    ifeq (${ENABLE_FEAT_RAS}, 0)
+         $(error "PLATFORM_TEST_FFH_LSP_RAS_SP expects ENABLE_FEAT_RAS to be 1")
+    endif
+    ifeq (${HANDLE_EA_EL3_FIRST_NS}, 0)
+         $(error "PLATFORM_TEST_FFH_LSP_RAS_SP expects HANDLE_EA_EL3_FIRST_NS to be 1")
     endif
 endif
 

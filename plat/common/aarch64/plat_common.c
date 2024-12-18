@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2023, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2014-2024, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -16,6 +16,14 @@
 #endif
 #include <lib/xlat_tables/xlat_mmu_helpers.h>
 #include <plat/common/platform.h>
+
+/* Pointer and function to register platform function to load alernate images */
+const struct plat_try_images_ops *plat_try_img_ops;
+
+void plat_setup_try_img_ops(const struct plat_try_images_ops *plat_try_ops)
+{
+	plat_try_img_ops = plat_try_ops;
+}
 
 /*
  * The following platform setup functions are weakly defined. They
@@ -35,7 +43,6 @@
 
 void bl31_plat_runtime_setup(void)
 {
-	console_switch_state(CONSOLE_FLAG_RUNTIME);
 }
 
 /*
@@ -71,12 +78,19 @@ int plat_sdei_validate_entry_point(uintptr_t ep, unsigned int client_mode)
 
 const char *get_el_str(unsigned int el)
 {
-	if (el == MODE_EL3) {
+	switch (el) {
+	case MODE_EL3:
 		return "EL3";
-	} else if (el == MODE_EL2) {
+	case MODE_EL2:
 		return "EL2";
+	case MODE_EL1:
+		return "EL1";
+	case MODE_EL0:
+		return "EL0";
+	default:
+		assert(false);
+		return NULL;
 	}
-	return "EL1";
 }
 
 #if FFH_SUPPORT

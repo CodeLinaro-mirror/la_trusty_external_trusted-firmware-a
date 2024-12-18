@@ -40,6 +40,9 @@ You can find additional definitions in the `Arm Glossary`_.
       Common Vulnerabilities and Exposures. A CVE document is commonly used to
       describe a publicly-known security vulnerability.
 
+   DICE
+      Device Identifier Composition Engine
+
    DCE
       DRTM Configuration Environment
 
@@ -51,6 +54,9 @@ You can find additional definitions in the `Arm Glossary`_.
 
    DRTM
       Dynamic Root of Trust for Measurement
+
+   DPE
+      DICE Protection Environment
 
    DS-5
       Arm Development Studio 5
@@ -94,6 +100,9 @@ You can find additional definitions in the `Arm Glossary`_.
    GIC
       Generic Interrupt Controller
 
+   HES
+      Arm CCA Hardware Enforced Security
+
    ISA
       Instruction Set Architecture
 
@@ -130,6 +139,9 @@ You can find additional definitions in the `Arm Glossary`_.
    OTE
       Open-source Trusted Execution Environment
 
+   PCR
+      Platform Configuration Register
+
    PDD
       Platform Design Document
 
@@ -142,6 +154,9 @@ You can find additional definitions in the `Arm Glossary`_.
    PSA
       Platform Security Architecture
 
+   PSR
+     Platform Security Requirements
+
    PSCI
       Power State Coordination Interface
 
@@ -152,6 +167,9 @@ You can find additional definitions in the `Arm Glossary`_.
 
    ROT
       Root of Trust
+
+   RSE
+      Runtime Security Engine
 
    SCMI
       System Control and Management Interface

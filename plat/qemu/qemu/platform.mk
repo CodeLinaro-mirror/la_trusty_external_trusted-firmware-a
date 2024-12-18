@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2013-2023, Arm Limited and Contributors. All rights reserved.
+# Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -50,6 +50,9 @@ endif
 ifeq (${SPD},trusty)
 PLAT_BL_COMMON_SOURCES	+=	${PLAT_QEMU_COMMON_PATH}/shared_mem.c
 endif
+ifeq (${SPMC_AT_EL3},1)
+PLAT_BL_COMMON_SOURCES	+=	${PLAT_QEMU_COMMON_PATH}/shared_mem.c
+endif
 
 ifneq (${TRUSTED_BOARD_BOOT},0)
 
@@ -82,13 +85,13 @@ ifneq (${TRUSTED_BOARD_BOOT},0)
 
     certificates: $(ROT_KEY)
 
-    $(ROT_KEY): | $(BUILD_PLAT)
-	@echo "  OPENSSL $@"
-	$(Q)${OPENSSL_BIN_PATH}/openssl genrsa 2048 > $@ 2>/dev/null
+    $(ROT_KEY): | $$(@D)/
+	$(s)echo "  OPENSSL $@"
+	$(q)${OPENSSL_BIN_PATH}/openssl genrsa 2048 > $@ 2>/dev/null
 
-    $(ROTPK_HASH): $(ROT_KEY)
-	@echo "  OPENSSL $@"
-	$(Q)${OPENSSL_BIN_PATH}/openssl rsa -in $< -pubout -outform DER 2>/dev/null |\
+    $(ROTPK_HASH): $(ROT_KEY) | $$(@D)/
+	$(s)echo "  OPENSSL $@"
+	$(q)${OPENSSL_BIN_PATH}/openssl rsa -in $< -pubout -outform DER 2>/dev/null |\
 	${OPENSSL_BIN_PATH}/openssl dgst -sha256 -binary > $@ 2>/dev/null
 endif
 
@@ -99,10 +102,6 @@ ifeq (${MEASURED_BOOT},1)
     MEASURED_BOOT_MK := drivers/measured_boot/event_log/event_log.mk
     $(info Including ${MEASURED_BOOT_MK})
     include ${MEASURED_BOOT_MK}
-
-    ifneq (${MBOOT_EL_HASH_ALG}, sha256)
-        $(eval $(call add_define,TF_MBEDTLS_MBOOT_USE_SHA512))
-    endif
 
     BL2_SOURCES		+=	plat/qemu/qemu/qemu_measured_boot.c	\
 				plat/qemu/qemu/qemu_helpers.c		\
@@ -171,6 +170,17 @@ BL31_SOURCES		+=	plat/common/plat_spmd_manifest.c	\
 				common/uuid.c				\
 				${LIBFDT_SRCS} 				\
 				${FDT_WRAPPERS_SOURCES}
+
+ifeq (${SPMC_AT_EL3},1)
+ifeq (${TRUSTY_SPD_WITH_GENERIC_SERVICES},1)
+# Add the Trusty SMCs from the SPDs so Trusty can get the GIC registers
+BL31_SOURCES		+=	services/spd/trusty/generic-arm64-smcall.c
+PLAT_INCLUDES		+=	-Iservices/spd/trusty/include
+# {TRUSTY_SPD_WITH_GENERIC_SERVICES},1
+endif
+# {SPMC_AT_EL3},1
+endif
+
 endif
 endif
 
@@ -208,6 +218,10 @@ endif
 BL32_RAM_LOCATION	:=	tdram
 ifeq (${BL32_RAM_LOCATION}, tsram)
   BL32_RAM_LOCATION_ID = SEC_SRAM_ID
+  ifeq (${ENABLE_RME},1)
+	# Avoid overlap between BL2 and BL32 to ease GPT partition
+	$(error "With RME, BL32 must use secure DRAM")
+  endif
 else ifeq (${BL32_RAM_LOCATION}, tdram)
   BL32_RAM_LOCATION_ID = SEC_DRAM_ID
 else
@@ -226,14 +240,14 @@ ARM_PRELOADED_DTB_BASE := PLAT_QEMU_DT_BASE
 $(eval $(call add_define,ARM_PRELOADED_DTB_BASE))
 
 qemu_fw.bios: bl1 fip
-	$(ECHO) "  DD      $@"
-	$(Q)cp ${BUILD_PLAT}/bl1.bin ${BUILD_PLAT}/$@
-	$(Q)dd if=${BUILD_PLAT}/fip.bin of=${BUILD_PLAT}/$@ bs=64k seek=4 status=none
+	$(s)echo "  DD      $@"
+	$(q)cp ${BUILD_PLAT}/bl1.bin ${BUILD_PLAT}/$@
+	$(q)dd if=${BUILD_PLAT}/fip.bin of=${BUILD_PLAT}/$@ bs=64k seek=4 status=none
 
 qemu_fw.rom: qemu_fw.bios
-	$(ECHO) "  DD      $@"
-	$(Q)cp ${BUILD_PLAT}/$^ ${BUILD_PLAT}/$@
-	$(Q)dd if=/dev/zero of=${BUILD_PLAT}/$@ bs=1M seek=64 count=0 status=none
+	$(s)echo "  DD      $@"
+	$(q)cp ${BUILD_PLAT}/$^ ${BUILD_PLAT}/$@
+	$(q)dd if=/dev/zero of=${BUILD_PLAT}/$@ bs=1M seek=64 count=0 status=none
 
 ifneq (${BL33},)
 all: qemu_fw.bios qemu_fw.rom

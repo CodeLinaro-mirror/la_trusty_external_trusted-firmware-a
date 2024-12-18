@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2013-2023, Arm Limited and Contributors. All rights reserved.
+# Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -17,11 +17,13 @@ PLAT_BL_COMMON_SOURCES	:=	drivers/ti/uart/aarch64/16550_console.S	\
 				drivers/rpi3/gpio/rpi3_gpio.c		\
 				plat/rpi/common/aarch64/plat_helpers.S	\
 				plat/rpi/common/rpi3_common.c		\
+				plat/rpi/common/rpi3_console_dual.c	\
 				${XLAT_TABLES_LIB_SRCS}
 
 BL1_SOURCES		+=	drivers/io/io_fip.c			\
 				drivers/io/io_memmap.c			\
 				drivers/io/io_storage.c			\
+				drivers/delay_timer/generic_delay_timer.c \
 				lib/cpus/aarch64/cortex_a53.S		\
 				plat/common/aarch64/platform_mp_stack.S	\
 				plat/rpi/rpi3/rpi3_bl1_setup.c		\
@@ -52,9 +54,9 @@ BL31_SOURCES		+=	lib/cpus/aarch64/cortex_a53.S		\
 				${LIBFDT_SRCS}
 
 # Tune compiler for Cortex-A53
-ifeq ($(notdir $(CC)),armclang)
+ifeq ($($(ARCH)-cc-id),arm-clang)
     TF_CFLAGS_aarch64	+=	-mcpu=cortex-a53
-else ifneq ($(findstring clang,$(notdir $(CC))),)
+else ifneq ($(filter %-clang,$($(ARCH)-cc-id)),)
     TF_CFLAGS_aarch64	+=	-mcpu=cortex-a53
 else
     TF_CFLAGS_aarch64	+=	-mtune=cortex-a53
@@ -72,13 +74,13 @@ all: armstub
 # This target concatenates BL1 and the FIP so that the base addresses match the
 # ones defined in the memory map
 armstub: bl1 fip
-	@echo "  CAT     $@"
-	${Q}cp ${BUILD_PLAT}/bl1.bin ${RPI3_BL1_PAD_BIN}
-	${Q}truncate --size=131072 ${RPI3_BL1_PAD_BIN}
-	${Q}cat ${RPI3_BL1_PAD_BIN} ${BUILD_PLAT}/fip.bin > ${RPI3_ARMSTUB8_BIN}
-	@${ECHO_BLANK_LINE}
-	@echo "Built $@ successfully"
-	@${ECHO_BLANK_LINE}
+	$(s)echo "  CAT     $@"
+	$(q)cp ${BUILD_PLAT}/bl1.bin ${RPI3_BL1_PAD_BIN}
+	$(q)truncate --size=131072 ${RPI3_BL1_PAD_BIN}
+	$(q)cat ${RPI3_BL1_PAD_BIN} ${BUILD_PLAT}/fip.bin > ${RPI3_ARMSTUB8_BIN}
+	$(s)echo
+	$(s)echo "Built $@ successfully"
+	$(s)echo
 
 # Build config flags
 # ------------------
@@ -211,12 +213,12 @@ ifneq (${TRUSTED_BOARD_BOOT},0)
 
     certificates: $(ROT_KEY)
 
-    $(ROT_KEY): | $(BUILD_PLAT)
-	@echo "  OPENSSL $@"
-	$(Q)${OPENSSL_BIN_PATH}/openssl genrsa 2048 > $@ 2>/dev/null
+    $(ROT_KEY): | $$(@D)/
+	$(s)echo "  OPENSSL $@"
+	$(q)${OPENSSL_BIN_PATH}/openssl genrsa 2048 > $@ 2>/dev/null
 
-    $(ROTPK_HASH): $(ROT_KEY)
-	@echo "  OPENSSL $@"
-	$(Q)${OPENSSL_BIN_PATH}/openssl rsa -in $< -pubout -outform DER 2>/dev/null |\
+    $(ROTPK_HASH): $(ROT_KEY) | $$(@D)/
+	$(s)echo "  OPENSSL $@"
+	$(q)${OPENSSL_BIN_PATH}/openssl rsa -in $< -pubout -outform DER 2>/dev/null |\
 	${OPENSSL_BIN_PATH}/openssl dgst -sha256 -binary > $@ 2>/dev/null
 endif

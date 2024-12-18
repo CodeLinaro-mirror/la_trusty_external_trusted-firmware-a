@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2023, Arm Limited. All rights reserved.
+ * Copyright (c) 2019-2024, Arm Limited. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -196,6 +196,13 @@ workaround_reset_end neoverse_v1, ERRATUM(2294912)
 
 check_erratum_ls neoverse_v1, ERRATUM(2294912), CPU_REV(1, 2)
 
+workaround_runtime_start neoverse_v1, ERRATUM(2348377), ERRATA_V1_2348377
+	/* Set bit 61 in CPUACTLR5_EL1 */
+	sysreg_bit_set NEOVERSE_V1_ACTLR5_EL1, NEOVERSE_V1_ACTLR5_EL1_BIT_61
+workaround_runtime_end neoverse_v1, ERRATUM(2348377)
+
+check_erratum_ls neoverse_v1, ERRATUM(2348377), CPU_REV(1, 1)
+
 workaround_reset_start neoverse_v1, ERRATUM(2372203), ERRATA_V1_2372203
 	/* Set bit 40 in ACTLR2_EL1 */
 	sysreg_bit_set NEOVERSE_V1_ACTLR2_EL1, NEOVERSE_V1_ACTLR2_EL1_BIT_40
@@ -246,13 +253,11 @@ func neoverse_v1_core_pwr_dwn
 	 * ---------------------------------------------
 	 */
 	sysreg_bit_set NEOVERSE_V1_CPUPWRCTLR_EL1, NEOVERSE_V1_CPUPWRCTLR_EL1_CORE_PWRDN_BIT
-	apply_erratum neoverse_v1, ERRATUM(2743093), ERRATA_V1_2743093
+	apply_erratum neoverse_v1, ERRATUM(2743093), ERRATA_V1_2743093, NO_GET_CPU_REV
 
 	isb
 	ret
 endfunc neoverse_v1_core_pwr_dwn
-
-errata_report_shim neoverse_v1
 
 cpu_reset_func_start neoverse_v1
 	/* Disable speculative loads */

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2013-2018, Arm Limited and Contributors. All rights reserved.
- * Copyright (c) 2022-2023, Advanced Micro Devices, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Advanced Micro Devices, Inc. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -204,7 +204,7 @@ static void pm_client_set_wakeup_sources(void)
 			continue;
 		}
 
-		while (reg) {
+		while (reg != 0U) {
 			enum pm_node_id node;
 			uint32_t idx, ret, irq, lowest_set = reg & (-reg);
 
@@ -218,7 +218,7 @@ static void pm_client_set_wakeup_sources(void)
 			node = irq_to_pm_node(irq);
 			reg &= ~lowest_set;
 
-			if (node > NODE_UNKNOWN && node < NODE_MAX) {
+			if ((node > NODE_UNKNOWN) && (node < NODE_MAX)) {
 				if (pm_wakeup_nodes_set[node] == 0U) {
 					ret = pm_set_wakeup_source(NODE_APU, node, 1U);
 					pm_wakeup_nodes_set[node] = (ret == PM_RET_SUCCESS) ? 1U : 0U;
@@ -241,23 +241,6 @@ const struct pm_proc *pm_get_proc(uint32_t cpuid)
 		return &pm_procs_all[cpuid];
 	}
 
-	return NULL;
-}
-
-/**
- * pm_get_proc_by_node() - returns pointer to the proc structure.
- * @nid: node id of the processor.
- *
- * Return: pointer to a proc structure if proc is found, otherwise NULL.
- *
- */
-const struct pm_proc *pm_get_proc_by_node(enum pm_node_id nid)
-{
-	for (size_t i = 0; i < ARRAY_SIZE(pm_procs_all); i++) {
-		if (nid == pm_procs_all[i].node_id) {
-			return &pm_procs_all[i];
-		}
-	}
 	return NULL;
 }
 

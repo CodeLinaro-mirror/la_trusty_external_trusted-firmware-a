@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2023, Arm Limited. All rights reserved.
+ * Copyright (c) 2020-2024, Arm Limited. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -252,9 +252,9 @@ cpu_reset_func_start neoverse_n2
 
 #if ENABLE_FEAT_AMU
 	/* Make sure accesses from EL0/EL1 and EL2 are not trapped to EL3 */
-	sysreg_bit_set cptr_el3, TAM_BIT
+	sysreg_bit_clear cptr_el3, TAM_BIT
 	/* Make sure accesses from EL0/EL1 are not trapped to EL2 */
-	sysreg_bit_set cptr_el2, TAM_BIT
+	sysreg_bit_clear cptr_el2, TAM_BIT
 	/* No need to enable the counters as this would be done at el3 exit */
 #endif
 
@@ -265,8 +265,7 @@ cpu_reset_func_start neoverse_n2
 cpu_reset_func_end neoverse_n2
 
 func neoverse_n2_core_pwr_dwn
-
-	apply_erratum neoverse_n2, ERRATUM(2009478), ERRATA_N2_2009478
+	apply_erratum neoverse_n2, ERRATUM(2009478), ERRATA_N2_2009478, NO_GET_CPU_REV
 	apply_erratum neoverse_n2, ERRATUM(2326639), ERRATA_N2_2326639, NO_GET_CPU_REV
 
 	/* ---------------------------------------------------
@@ -276,13 +275,11 @@ func neoverse_n2_core_pwr_dwn
 	 */
 	sysreg_bit_set NEOVERSE_N2_CPUPWRCTLR_EL1, NEOVERSE_N2_CORE_PWRDN_EN_BIT
 
-	apply_erratum neoverse_n2, ERRATUM(2743089), ERRATA_N2_2743089
+	apply_erratum neoverse_n2, ERRATUM(2743089), ERRATA_N2_2743089, NO_GET_CPU_REV
 
 	isb
 	ret
 endfunc neoverse_n2_core_pwr_dwn
-
-errata_report_shim neoverse_n2
 
 	/* ---------------------------------------------
 	 * This function provides Neoverse N2 specific

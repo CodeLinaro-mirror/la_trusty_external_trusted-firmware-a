@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2023, Arm Limited. All rights reserved.
+ * Copyright (c) 2021-2024, Arm Limited. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -193,6 +193,12 @@ workaround_runtime_end cortex_a710, ERRATUM(2768515), NO_ISB
 
 check_erratum_ls cortex_a710, ERRATUM(2768515), CPU_REV(2, 1)
 
+workaround_reset_start cortex_a710, ERRATUM(2778471), ERRATA_A710_2778471
+	sysreg_bit_set CORTEX_A710_CPUACTLR3_EL1, BIT(47)
+workaround_reset_end cortex_a710, ERRATUM(2778471)
+
+check_erratum_ls cortex_a710, ERRATUM(2778471), CPU_REV(2, 1)
+
 workaround_reset_start cortex_a710, CVE(2022, 23960), WORKAROUND_CVE_2022_23960
 #if IMAGE_BL31
 	/*
@@ -210,7 +216,7 @@ check_erratum_chosen cortex_a710, CVE(2022, 23960), WORKAROUND_CVE_2022_23960
 	 * ----------------------------------------------------
 	 */
 func cortex_a710_core_pwr_dwn
-	apply_erratum cortex_a710, ERRATUM(2008768), ERRATA_A710_2008768
+	apply_erratum cortex_a710, ERRATUM(2008768), ERRATA_A710_2008768, NO_GET_CPU_REV
 	apply_erratum cortex_a710, ERRATUM(2291219), ERRATA_A710_2291219, NO_GET_CPU_REV
 
 	/* ---------------------------------------------------
@@ -222,8 +228,6 @@ func cortex_a710_core_pwr_dwn
 	isb
 	ret
 endfunc cortex_a710_core_pwr_dwn
-
-errata_report_shim cortex_a710
 
 cpu_reset_func_start cortex_a710
 	/* Disable speculative loads */

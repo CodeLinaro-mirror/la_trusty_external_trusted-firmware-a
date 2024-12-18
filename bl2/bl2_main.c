@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2023, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -11,6 +11,7 @@
 #include <bl1/bl1.h>
 #include <bl2/bl2.h>
 #include <common/bl_common.h>
+#include <common/build_message.h>
 #include <common/debug.h>
 #include <drivers/auth/auth_mod.h>
 #include <drivers/auth/crypto_mod.h>
@@ -41,6 +42,9 @@
 void bl2_el3_setup(u_register_t arg0, u_register_t arg1, u_register_t arg2,
 		   u_register_t arg3)
 {
+	/* Enable early console if EARLY_CONSOLE flag is enabled */
+	plat_setup_early_console();
+
 	/* Perform early platform-specific setup */
 	bl2_el3_early_platform_setup(arg0, arg1, arg2, arg3);
 
@@ -63,6 +67,9 @@ void bl2_el3_setup(u_register_t arg0, u_register_t arg1, u_register_t arg2,
 void bl2_setup(u_register_t arg0, u_register_t arg1, u_register_t arg2,
 	       u_register_t arg3)
 {
+	/* Enable early console if EARLY_CONSOLE flag is enabled */
+	plat_setup_early_console();
+
 	/* Perform early platform-specific setup */
 	bl2_early_platform_setup2(arg0, arg1, arg2, arg3);
 
@@ -92,7 +99,7 @@ void bl2_main(void)
 	PMF_CAPTURE_TIMESTAMP(bl_svc, BL2_ENTRY, PMF_CACHE_MAINT);
 #endif
 
-	NOTICE("BL2: %s\n", version_string);
+	NOTICE("BL2: %s\n", build_version_string);
 	NOTICE("BL2: %s\n", build_message);
 
 	/* Perform remaining generic architectural setup in S-EL1 */

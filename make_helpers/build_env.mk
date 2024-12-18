@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2016, ARM Limited and Contributors. All rights reserved.
+# Copyright (c) 2016-2024, Arm Limited and Contributors. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -15,8 +15,6 @@ ifndef BUILD_ENV_MK
     COPY                :=      $$(error "Replace COPY with call to SHELL_COPY or SHELL_COPY_TREE.")
     CP                  :=      $$(error "Replace CP with call to SHELL_COPY or SHELL_COPY_TREE.")
     DEL                 :=      $$(error "Replace DEL with call to SHELL_DELETE.")
-    MD                  :=      $$(error "Replace MD with call to MAKE_PREREQ_DIR.")
-    MKDIR               :=      $$(error "Replace MKDIR with call to MAKE_PREREQ_DIR.")
     RD                  :=      $$(error "Replace RD with call to SHELL_REMOVE_DIR.")
     RM                  :=      $$(error "Replace RM with call to SHELL_DELETE.")
     RMDIR               :=      $$(error "Replace RMDIR with call to SHELL_REMOVE_DIR.")
@@ -47,7 +45,7 @@ ifndef BUILD_ENV_MK
             endif
         endif
     endif
-    include ${MAKE_HELPERS_DIRECTORY}${ENV_FILE_TO_INCLUDE}
+    include $(dir $(lastword $(MAKEFILE_LIST)))${ENV_FILE_TO_INCLUDE}
     ENV_FILE_TO_INCLUDE :=
 
     ifndef SHELL_COPY
@@ -61,9 +59,6 @@ ifndef BUILD_ENV_MK
     endif
     ifndef SHELL_DELETE
         $(error "SHELL_DELETE not defined for build environment.")
-    endif
-    ifndef MAKE_PREREQ_DIR
-        $(error "MAKE_PREREQ_DIR not defined for build environment.")
     endif
     ifndef SHELL_REMOVE_DIR
         $(error "SHELL_REMOVE_DIR not defined for build environment.")

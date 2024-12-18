@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2020-2022, Intel Corporation. All rights reserved.
+ * Copyright (c) 2020-2023, Intel Corporation. All rights reserved.
+ * Copyright (c) 2024, Altera Corporation. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -167,7 +168,7 @@ int mailbox_read_response(unsigned int *job_id, uint32_t *response,
 		}
 
 		if (MBOX_RESP_ERR(resp_data) > 0U) {
-			INFO("Error in response: %x\n", resp_data);
+			INFO("SDM response: Return Code: 0x%x\n", MBOX_RESP_ERR(resp_data));
 			return -MBOX_RESP_ERR(resp_data);
 		}
 
@@ -251,7 +252,7 @@ int mailbox_read_response_async(unsigned int *job_id, uint32_t *header,
 				return MBOX_RET_ERROR;
 			}
 
-			memcpy((uint8_t *) response,
+			memcpy_s((uint8_t *) response, *resp_len * MBOX_WORD_BYTE,
 				(uint8_t *) mailbox_resp_ctr.payload->data,
 				*resp_len * MBOX_WORD_BYTE);
 		}
@@ -336,7 +337,7 @@ int mailbox_poll_response(uint32_t job_id, uint32_t urgent, uint32_t *response,
 			}
 
 			if (MBOX_RESP_ERR(resp_data) > 0U) {
-				INFO("Error in response: %x\n", resp_data);
+				INFO("SDM response: Return Code: 0x%x\n", MBOX_RESP_ERR(resp_data));
 				return -MBOX_RESP_ERR(resp_data);
 			}
 
@@ -578,6 +579,13 @@ int mailbox_rsu_status(uint32_t *resp_buf, unsigned int resp_buf_len)
 	return ret;
 }
 
+int mailbox_rsu_get_device_info(uint32_t *resp_buf, unsigned int resp_buf_len)
+{
+	return mailbox_send_cmd(MBOX_JOB_ID, MBOX_RSU_GET_DEVICE_INFO, NULL, 0U,
+				CMD_CASUAL, resp_buf,
+				&resp_buf_len);
+}
+
 int mailbox_rsu_update(uint32_t *flash_offset)
 {
 	return mailbox_send_cmd(MBOX_JOB_ID, MBOX_RSU_UPDATE,
@@ -644,7 +652,7 @@ int intel_mailbox_get_config_status(uint32_t cmd, bool init_done)
 
 	res = response[RECONFIG_STATUS_SOFTFUNC_STATUS];
 	if ((res & SOFTFUNC_STATUS_SEU_ERROR) != 0U) {
-		ERROR("SoftFunction Status SEU ERROR\n");
+		return MBOX_CFGSTAT_STATE_ERROR_HARDWARE;
 	}
 
 	if ((res & SOFTFUNC_STATUS_CONF_DONE) == 0U) {
@@ -695,4 +703,10 @@ int mailbox_seu_err_status(uint32_t *resp_buf, unsigned int resp_buf_len)
 	return mailbox_send_cmd(MBOX_JOB_ID, MBOX_CMD_SEU_ERR_READ, NULL, 0U,
 				CMD_CASUAL, resp_buf,
 				&resp_buf_len);
+}
+
+int mailbox_safe_inject_seu_err(uint32_t *arg, unsigned int len)
+{
+	return mailbox_send_cmd(MBOX_JOB_ID, MBOX_CMD_SAFE_INJECT_SEU_ERR, arg, len,
+			CMD_CASUAL, NULL, NULL);
 }

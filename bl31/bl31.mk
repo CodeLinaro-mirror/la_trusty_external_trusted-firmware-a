@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2013-2023, Arm Limited and Contributors. All rights reserved.
+# Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -42,23 +42,33 @@ BL31_SOURCES		+=	bl31/bl31_main.c				\
 				bl31/bl31_context_mgmt.c			\
 				bl31/bl31_traps.c				\
 				common/runtime_svc.c				\
+				lib/cpus/errata_common.c			\
 				lib/cpus/aarch64/dsu_helpers.S			\
 				plat/common/aarch64/platform_mp_stack.S		\
 				services/arm_arch_svc/arm_arch_svc_setup.c	\
 				services/std_svc/std_svc_setup.c		\
+				lib/el3_runtime/simd_ctx.c			\
 				${PSCI_LIB_SOURCES}				\
 				${SPMD_SOURCES}					\
 				${SPM_MM_SOURCES}				\
 				${SPMC_SOURCES}					\
 				${SPM_SOURCES}
 
+VENDOR_EL3_SRCS		+=	services/el3/ven_el3_svc.c
+
 ifeq (${ENABLE_PMF}, 1)
-BL31_SOURCES		+=	lib/pmf/pmf_main.c
+BL31_SOURCES		+=	lib/pmf/pmf_main.c				\
+				${VENDOR_EL3_SRCS}
 endif
 
 include lib/debugfs/debugfs.mk
 ifeq (${USE_DEBUGFS},1)
-	BL31_SOURCES	+= $(DEBUGFS_SRCS)
+BL31_SOURCES		+=	${DEBUGFS_SRCS}					\
+				${VENDOR_EL3_SRCS}
+endif
+
+ifeq (${PLATFORM_REPORT_CTX_MEM_USE},1)
+BL31_SOURCES		+=	lib/el3_runtime/aarch64/context_debug.c
 endif
 
 ifeq (${EL3_EXCEPTION_HANDLING},1)
@@ -97,6 +107,14 @@ ifneq (${ENABLE_FEAT_AMU},0)
 BL31_SOURCES		+=	${AMU_SOURCES}
 endif
 
+ifneq (${ENABLE_FEAT_FGT2},0)
+BL31_SOURCES		+=	lib/extensions/fgt/fgt2.c
+endif
+
+ifneq (${ENABLE_FEAT_TCR2},0)
+BL31_SOURCES		+=	lib/extensions/tcr/tcr2.c
+endif
+
 ifeq (${ENABLE_MPMM},1)
 BL31_SOURCES		+=	${MPMM_SOURCES}
 endif
@@ -110,6 +128,10 @@ endif
 
 ifneq (${ENABLE_FEAT_MPAM},0)
 BL31_SOURCES		+=	lib/extensions/mpam/mpam.c
+endif
+
+ifneq (${ENABLE_FEAT_DEBUGV8P9},0)
+BL31_SOURCES		+=	lib/extensions/debug/debugv8p9.c
 endif
 
 ifneq (${ENABLE_TRBE_FOR_NS},0)
@@ -157,11 +179,15 @@ BL31_SOURCES		+=	services/std_svc/drtm/drtm_main.c		\
 				${MBEDTLS_SOURCES}
 endif
 
+ifeq ($(CROS_WIDEVINE_SMC),1)
+BL31_SOURCES		+=	services/oem/chromeos/widevine_smc_handlers.c
+endif
+
 BL31_DEFAULT_LINKER_SCRIPT_SOURCE := bl31/bl31.ld.S
 
-ifneq ($(findstring gcc,$(notdir $(LD))),)
+ifeq ($($(ARCH)-ld-id),gnu-gcc)
         BL31_LDFLAGS	+=	-Wl,--sort-section=alignment
-else ifneq ($(findstring ld,$(notdir $(LD))),)
+else ifneq ($(filter llvm-lld gnu-ld,$($(ARCH)-ld-id)),)
         BL31_LDFLAGS	+=	--sort-section=alignment
 endif
 

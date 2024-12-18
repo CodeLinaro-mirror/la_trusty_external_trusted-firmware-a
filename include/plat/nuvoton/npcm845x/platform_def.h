@@ -132,11 +132,6 @@
  */
 #define PLAT_ARM_NS_IMAGE_BASE (ARM_DRAM1_BASE + UL(0x6208000))
 
-#ifdef NPCM845X_DEBUG
-#define COUNTER_FREQUENCY 0x07735940 /* f/4 = 125MHz */
-#endif /* NPCM845X_DEBUG */
-
-#define COUNTER_FREQUENCY 0x0EE6B280 /* f/2 = 250MHz */
 #define PLAT_ARM_NSTIMER_FRAME_ID U(1)
 
 /* GIC parameters */
@@ -162,7 +157,8 @@
 
 /* MMU entry for internal (register) space access */
 #define MAP_DEVICE0                                                            \
-	MAP_REGION_FLAT(PLAT_REG_BASE, PLAT_REG_SIZE, MT_DEVICE | MT_RW | MT_NS)
+	MAP_REGION_FLAT(PLAT_REG_BASE, PLAT_REG_SIZE,                         \
+			MT_DEVICE | MT_RW | MT_SECURE)
 
 #define MAP_DEVICE1                                                            \
 	MAP_REGION_FLAT(DEVICE1_BASE, DEVICE1_SIZE,                            \

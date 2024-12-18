@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2023, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -8,12 +8,14 @@
 #include <string.h>
 
 #include <arch.h>
+#include <arch_features.h>
 #include <arch_helpers.h>
 #include <common/bl_common.h>
 #include <common/debug.h>
 #include <context.h>
 #include <drivers/delay_timer.h>
 #include <lib/el3_runtime/context_mgmt.h>
+#include <lib/extensions/spe.h>
 #include <lib/utils.h>
 #include <plat/common/platform.h>
 
@@ -170,7 +172,8 @@ void psci_query_sys_suspend_pwrstate(psci_power_state_t *state_info)
  ******************************************************************************/
 static bool psci_is_last_cpu_to_idle_at_pwrlvl(unsigned int end_pwrlvl)
 {
-	unsigned int my_idx, lvl, parent_idx;
+	unsigned int my_idx, lvl;
+	unsigned int parent_idx = 0;
 	unsigned int cpu_start_idx, ncpus, cpu_idx;
 	plat_local_state_t local_state;
 
@@ -179,9 +182,9 @@ static bool psci_is_last_cpu_to_idle_at_pwrlvl(unsigned int end_pwrlvl)
 	}
 
 	my_idx = plat_my_core_pos();
-
-	for (lvl = PSCI_CPU_PWR_LVL; lvl <= end_pwrlvl; lvl++) {
-		parent_idx = psci_cpu_pd_nodes[my_idx].parent_node;
+	parent_idx = psci_cpu_pd_nodes[my_idx].parent_node;
+	for (lvl = PSCI_CPU_PWR_LVL + U(1); lvl < end_pwrlvl; lvl++) {
+		parent_idx = psci_non_cpu_pd_nodes[parent_idx].parent_node;
 	}
 
 	cpu_start_idx = psci_non_cpu_pd_nodes[parent_idx].cpu_start_idx;
@@ -662,6 +665,8 @@ int psci_validate_state_coordination(unsigned int end_pwrlvl,
 			}
 			goto exit;
 		}
+
+		parent_idx = psci_non_cpu_pd_nodes[parent_idx].parent_node;
 	}
 
 	/*
@@ -1164,6 +1169,8 @@ int psci_secondaries_brought_up(void)
  ******************************************************************************/
 void psci_pwrdown_cpu(unsigned int power_level)
 {
+	psci_do_manage_extensions();
+
 #if HW_ASSISTED_COHERENCY
 	/*
 	 * With hardware-assisted coherency, the CPU drivers only initiate the
@@ -1282,4 +1289,21 @@ bool psci_are_all_cpus_on_safe(void)
 	psci_release_pwr_domain_locks(PLAT_MAX_PWR_LVL, parent_nodes);
 
 	return true;
+}
+
+/*******************************************************************************
+ * This function performs architectural feature specific management.
+ * It ensures the architectural features are disabled during cpu
+ * power off/suspend operations.
+ ******************************************************************************/
+void psci_do_manage_extensions(void)
+{
+	/*
+	 * On power down we need to disable statistical profiling extensions
+	 * before exiting coherency.
+	 */
+	if (is_feat_spe_supported()) {
+		spe_stop();
+	}
+
 }

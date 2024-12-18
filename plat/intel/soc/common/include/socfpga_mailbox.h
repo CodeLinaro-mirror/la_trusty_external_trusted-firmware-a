@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2019-2023, Intel Corporation. All rights reserved.
+ * Copyright (c) 2024, Altera Corporation. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -68,12 +69,14 @@
 
 /* SEU Commands */
 #define MBOX_CMD_SEU_ERR_READ				0x3C
+#define MBOX_CMD_SAFE_INJECT_SEU_ERR			0x41
 
 /* RSU Commands */
 #define MBOX_GET_SUBPARTITION_TABLE			0x5A
 #define MBOX_RSU_STATUS					0x5B
 #define MBOX_RSU_UPDATE					0x5C
 #define MBOX_HPS_STAGE_NOTIFY				0x5D
+#define MBOX_RSU_GET_DEVICE_INFO			0x74
 
 /* FCS Command */
 #define MBOX_FCS_GET_PROVISION				0x7B
@@ -107,7 +110,7 @@
 #define MBOX_GET_MEASUREMENT				0x183
 
 /* Miscellaneous commands */
-#define MBOX_GET_ROM_PATCH_SHA384	0x1B0
+#define MBOX_GET_ROM_PATCH_SHA384			0x1B0
 
 /* Mailbox Definitions */
 
@@ -196,9 +199,9 @@
 #define RSU_VERSION_ACMF_MASK				0xff00
 
 /* Config Status Macros */
-#define CONFIG_STATUS_WORD_SIZE			16U
-#define CONFIG_STATUS_FW_VER_OFFSET		1
-#define CONFIG_STATUS_FW_VER_MASK		0x00FFFFFF
+#define CONFIG_STATUS_WORD_SIZE				16U
+#define CONFIG_STATUS_FW_VER_OFFSET			1
+#define CONFIG_STATUS_FW_VER_MASK			0x00FFFFFF
 
 /* Data structure */
 
@@ -242,12 +245,19 @@ void mailbox_clear_response(void);
 int intel_mailbox_get_config_status(uint32_t cmd, bool init_done);
 int intel_mailbox_is_fpga_not_ready(void);
 
+#if PLATFORM_MODEL == PLAT_SOCFPGA_AGILEX5
+void intel_smmu_hps_remapper_init(uint64_t *mem);
+int intel_smmu_hps_remapper_config(uint32_t remapper_bypass);
+#endif
+
 int mailbox_rsu_get_spt_offset(uint32_t *resp_buf, uint32_t resp_buf_len);
 int mailbox_rsu_status(uint32_t *resp_buf, uint32_t resp_buf_len);
+int mailbox_rsu_get_device_info(uint32_t *resp_buf, uint32_t resp_buf_len);
 int mailbox_rsu_update(uint32_t *flash_offset);
 int mailbox_hps_stage_notify(uint32_t execution_stage);
 int mailbox_hwmon_readtemp(uint32_t chan, uint32_t *resp_buf);
 int mailbox_hwmon_readvolt(uint32_t chan, uint32_t *resp_buf);
 int mailbox_seu_err_status(uint32_t *resp_buf, uint32_t resp_buf_len);
+int mailbox_safe_inject_seu_err(uint32_t *arg, unsigned int len);
 
 #endif /* SOCFPGA_MBOX_H */

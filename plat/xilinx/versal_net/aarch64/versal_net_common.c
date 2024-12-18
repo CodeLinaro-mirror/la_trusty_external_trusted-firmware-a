@@ -60,11 +60,11 @@ char *board_name_decode(void)
 
 void board_detection(void)
 {
-	uint32_t version;
+	uint32_t version_type;
 
-	version = mmio_read_32(PMC_TAP_VERSION);
-	platform_id = FIELD_GET(PLATFORM_MASK, version);
-	platform_version = FIELD_GET(PLATFORM_VERSION_MASK, version);
+	version_type = mmio_read_32(PMC_TAP_VERSION);
+	platform_id = FIELD_GET(PLATFORM_MASK, version_type);
+	platform_version = FIELD_GET(PLATFORM_VERSION_MASK, version_type);
 
 	if (platform_id == VERSAL_NET_QEMU_COSIM) {
 		platform_id = VERSAL_NET_QEMU;
@@ -114,11 +114,21 @@ uint32_t get_uart_clk(void)
 
 void versal_net_config_setup(void)
 {
+	generic_delay_timer_init();
+
+#if (TFA_NO_PM == 0)
+	/* Configure IPI data for versal_net */
+	versal_net_ipi_config_table_init();
+#endif
+}
+
+void syscnt_freq_config_setup(void)
+{
 	uint32_t val;
 	uintptr_t crl_base, iou_scntrs_base, psx_base;
 
 	crl_base = VERSAL_NET_CRL;
-	iou_scntrs_base = VERSAL_NET_IOU_SCNTRS;
+	iou_scntrs_base = IOU_SCNTRS_BASE;
 	psx_base = PSX_CRF;
 
 	/* Reset for system timestamp generator in FPX */
@@ -133,20 +143,9 @@ void versal_net_config_setup(void)
 	mmio_write_32(crl_base + VERSAL_NET_CRL_RST_TIMESTAMP_OFFSET, 0);
 
 	/* Program freq register in System counter and enable system counter. */
-	mmio_write_32(iou_scntrs_base + VERSAL_NET_IOU_SCNTRS_BASE_FREQ_OFFSET,
+	mmio_write_32(iou_scntrs_base + IOU_SCNTRS_BASE_FREQ_OFFSET,
 		      cpu_clock);
-	mmio_write_32(iou_scntrs_base + VERSAL_NET_IOU_SCNTRS_COUNTER_CONTROL_REG_OFFSET,
-		      VERSAL_NET_IOU_SCNTRS_CONTROL_EN);
-
-	generic_delay_timer_init();
-
-#if (TFA_NO_PM == 0)
-	/* Configure IPI data for versal_net */
-	versal_net_ipi_config_table_init();
-#endif
+	mmio_write_32(iou_scntrs_base + IOU_SCNTRS_COUNTER_CONTROL_REG_OFFSET,
+		      IOU_SCNTRS_CONTROL_EN);
 }
 
-uint32_t plat_get_syscnt_freq2(void)
-{
-	return cpu_clock;
-}

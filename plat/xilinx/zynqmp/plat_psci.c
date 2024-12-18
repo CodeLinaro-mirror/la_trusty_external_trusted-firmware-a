@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2013-2022, Arm Limited and Contributors. All rights reserved.
- * Copyright (c) 2022-2023, Advanced Micro Devices, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Advanced Micro Devices, Inc. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -42,7 +42,11 @@ static int32_t zynqmp_pwr_domain_on(u_register_t mpidr)
 	if (cpu_id == -1) {
 		return PSCI_E_INTERN_FAIL;
 	}
+
 	proc = pm_get_proc(cpu_id);
+	if (proc == NULL) {
+		return PSCI_E_INTERN_FAIL;
+	}
 
 	/* Check the APU proc status before wakeup */
 	ret = pm_get_node_status(proc->node_id, buff);
@@ -54,7 +58,7 @@ static int32_t zynqmp_pwr_domain_on(u_register_t mpidr)
 	pm_client_wakeup(proc);
 
 	/* Send request to PMU to wake up selected APU CPU core */
-	pm_req_wakeup(proc->node_id, 1, zynqmp_sec_entry, REQ_ACK_BLOCKING);
+	(void)pm_req_wakeup(proc->node_id, 1, zynqmp_sec_entry, REQ_ACK_BLOCKING);
 
 	return PSCI_E_SUCCESS;
 }
@@ -63,6 +67,10 @@ static void zynqmp_pwr_domain_off(const psci_power_state_t *target_state)
 {
 	uint32_t cpu_id = plat_my_core_pos();
 	const struct pm_proc *proc = pm_get_proc(cpu_id);
+
+	if (proc == NULL) {
+		return;
+	}
 
 	for (size_t i = 0; i <= PLAT_MAX_PWR_LVL; i++) {
 		VERBOSE("%s: target_state->pwr_domain_state[%lu]=%x\n",
@@ -80,7 +88,7 @@ static void zynqmp_pwr_domain_off(const psci_power_state_t *target_state)
 	 * invoking CPU_on function, during which resume address will
 	 * be set.
 	 */
-	pm_self_suspend(proc->node_id, MAX_LATENCY, PM_STATE_CPU_IDLE, 0);
+	(void)pm_self_suspend(proc->node_id, MAX_LATENCY, PM_STATE_CPU_IDLE, 0);
 }
 
 static void zynqmp_pwr_domain_suspend(const psci_power_state_t *target_state)
@@ -89,15 +97,19 @@ static void zynqmp_pwr_domain_suspend(const psci_power_state_t *target_state)
 	uint32_t cpu_id = plat_my_core_pos();
 	const struct pm_proc *proc = pm_get_proc(cpu_id);
 
+	if (proc == NULL) {
+		return;
+	}
+
 	for (size_t i = 0; i <= PLAT_MAX_PWR_LVL; i++)
 		VERBOSE("%s: target_state->pwr_domain_state[%lu]=%x\n",
 			__func__, i, target_state->pwr_domain_state[i]);
 
-	state = target_state->pwr_domain_state[1] > PLAT_MAX_RET_STATE ?
+	state = (target_state->pwr_domain_state[1] > PLAT_MAX_RET_STATE) ?
 		PM_STATE_SUSPEND_TO_RAM : PM_STATE_CPU_IDLE;
 
 	/* Send request to PMU to suspend this core */
-	pm_self_suspend(proc->node_id, MAX_LATENCY, state, zynqmp_sec_entry);
+	(void)pm_self_suspend(proc->node_id, MAX_LATENCY, state, zynqmp_sec_entry);
 
 	/* APU is to be turned off */
 	if (target_state->pwr_domain_state[1] > PLAT_MAX_RET_STATE) {
@@ -120,6 +132,10 @@ static void zynqmp_pwr_domain_suspend_finish(const psci_power_state_t *target_st
 {
 	uint32_t cpu_id = plat_my_core_pos();
 	const struct pm_proc *proc = pm_get_proc(cpu_id);
+
+	if (proc == NULL) {
+		return;
+	}
 
 	for (size_t i = 0; i <= PLAT_MAX_PWR_LVL; i++) {
 		VERBOSE("%s: target_state->pwr_domain_state[%lu]=%x\n",
@@ -150,10 +166,10 @@ static void __dead2 zynqmp_system_off(void)
 	plat_arm_interconnect_exit_coherency();
 
 	/* Send the power down request to the PMU */
-	pm_system_shutdown(PMF_SHUTDOWN_TYPE_SHUTDOWN,
+	(void)pm_system_shutdown((uint32_t)PMF_SHUTDOWN_TYPE_SHUTDOWN,
 			   pm_get_shutdown_scope());
 
-	while (1) {
+	while (true) {
 		wfi();
 	}
 }
@@ -164,10 +180,10 @@ static void __dead2 zynqmp_system_reset(void)
 	plat_arm_interconnect_exit_coherency();
 
 	/* Send the system reset request to the PMU */
-	pm_system_shutdown(PMF_SHUTDOWN_TYPE_RESET,
+	(void)pm_system_shutdown((uint32_t)PMF_SHUTDOWN_TYPE_RESET,
 			   pm_get_shutdown_scope());
 
-	while (1) {
+	while (true) {
 		wfi();
 	}
 }
@@ -188,7 +204,7 @@ static int32_t zynqmp_validate_power_state(uint32_t power_state,
 		req_state->pwr_domain_state[MPIDR_AFFLVL0] = PLAT_MAX_OFF_STATE;
 	}
 	/* We expect the 'state id' to be zero */
-	if (psci_get_pstate_id(power_state)) {
+	if (psci_get_pstate_id(power_state) != 0U) {
 		return PSCI_E_INVALID_PARAMS;
 	}
 

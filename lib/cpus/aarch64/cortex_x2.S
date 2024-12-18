@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2023, Arm Limited. All rights reserved.
+ * Copyright (c) 2021-2024, Arm Limited. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -126,12 +126,18 @@ workaround_reset_end cortex_x2, ERRATUM(2742423)
 
 check_erratum_ls cortex_x2, ERRATUM(2742423), CPU_REV(2, 1)
 
-workaround_reset_start cortex_x2, ERRATUM(2768515), ERRATA_X2_2768515
+workaround_runtime_start cortex_x2, ERRATUM(2768515), ERRATA_X2_2768515
 	/* dsb before isb of power down sequence */
 	dsb	sy
-workaround_reset_end cortex_x2, ERRATUM(2768515)
+workaround_runtime_end cortex_x2, ERRATUM(2768515)
 
 check_erratum_ls cortex_x2, ERRATUM(2768515), CPU_REV(2, 1)
+
+workaround_reset_start cortex_x2, ERRATUM(2778471), ERRATA_X2_2778471
+	sysreg_bit_set CORTEX_X2_CPUACTLR3_EL1, BIT(47)
+workaround_reset_end cortex_x2, ERRATUM(2778471)
+
+check_erratum_ls cortex_x2, ERRATUM(2778471), CPU_REV(2, 1)
 
 workaround_reset_start cortex_x2, CVE(2022, 23960), WORKAROUND_CVE_2022_23960
 #if IMAGE_BL31
@@ -166,17 +172,10 @@ func cortex_x2_core_pwr_dwn
 	 */
 	sysreg_bit_set CORTEX_X2_CPUPWRCTLR_EL1, CORTEX_X2_CPUPWRCTLR_EL1_CORE_PWRDN_BIT
 
-#if ERRATA_X2_2768515
-	mov	x15, x30
-	bl	cpu_get_rev_var
-	bl	erratum_cortex_x2_2768515_wa
-	mov	x30, x15
-#endif /* ERRATA_X2_2768515 */
+	apply_erratum cortex_x2, ERRATUM(2768515), ERRATA_X2_2768515, NO_GET_CPU_REV
 	isb
 	ret
 endfunc cortex_x2_core_pwr_dwn
-
-errata_report_shim cortex_x2
 
 cpu_reset_func_start cortex_x2
 	/* Disable speculative loads */
