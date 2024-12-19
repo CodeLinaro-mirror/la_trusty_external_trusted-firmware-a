@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2013-2022, Arm Limited and Contributors. All rights reserved.
- * Copyright (c) 2022-2023, Advanced Micro Devices, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Advanced Micro Devices, Inc. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -12,8 +12,9 @@
 #include <drivers/generic_delay_timer.h>
 #include <lib/mmio.h>
 #include <lib/smccc.h>
-#include <lib/xlat_tables/xlat_tables.h>
+#include <lib/xlat_tables/xlat_tables_v2.h>
 #include <plat/common/platform.h>
+#include <plat_arm.h>
 #include <services/arm_arch_svc.h>
 
 #include <plat_ipi.h>
@@ -28,9 +29,9 @@
  * configure_mmu_elx() will give the available subset of that,
  */
 const mmap_region_t plat_zynqmp_mmap[] = {
-	{ DEVICE0_BASE, DEVICE0_BASE, DEVICE0_SIZE, MT_DEVICE | MT_RW | MT_SECURE },
-	{ DEVICE1_BASE, DEVICE1_BASE, DEVICE1_SIZE, MT_DEVICE | MT_RW | MT_SECURE },
-	{ CRF_APB_BASE, CRF_APB_BASE, CRF_APB_SIZE, MT_DEVICE | MT_RW | MT_SECURE },
+	MAP_REGION_FLAT(DEVICE0_BASE, DEVICE0_SIZE, MT_DEVICE | MT_RW | MT_SECURE),
+	MAP_REGION_FLAT(DEVICE1_BASE, DEVICE1_SIZE, MT_DEVICE | MT_RW | MT_SECURE),
+	MAP_REGION_FLAT(CRF_APB_BASE, CRF_APB_SIZE, MT_DEVICE | MT_RW | MT_SECURE),
 	{0}
 };
 
@@ -244,8 +245,8 @@ static char *zynqmp_get_silicon_idcode_name(void)
 	ver = chipid[1] >> ZYNQMP_EFUSE_IPDISABLE_SHIFT;
 
 	for (i = 0; i < ARRAY_SIZE(zynqmp_devices); i++) {
-		if (zynqmp_devices[i].id == id &&
-		    zynqmp_devices[i].ver == (ver & ZYNQMP_CSU_VERSION_MASK)) {
+		if ((zynqmp_devices[i].id == id) &&
+		    (zynqmp_devices[i].ver == (ver & ZYNQMP_CSU_VERSION_MASK))) {
 			break;
 		}
 	}
@@ -299,8 +300,8 @@ static char *zynqmp_print_silicon_idcode(void)
 	tmp = id;
 	tmp &= ZYNQMP_CSU_IDCODE_XILINX_ID_MASK |
 	       ZYNQMP_CSU_IDCODE_FAMILY_MASK;
-	maskid = ZYNQMP_CSU_IDCODE_XILINX_ID << ZYNQMP_CSU_IDCODE_XILINX_ID_SHIFT |
-		 ZYNQMP_CSU_IDCODE_FAMILY << ZYNQMP_CSU_IDCODE_FAMILY_SHIFT;
+	maskid = (ZYNQMP_CSU_IDCODE_XILINX_ID << ZYNQMP_CSU_IDCODE_XILINX_ID_SHIFT) |
+		 (ZYNQMP_CSU_IDCODE_FAMILY << ZYNQMP_CSU_IDCODE_FAMILY_SHIFT);
 	if (tmp != maskid) {
 		ERROR("Incorrect IDCODE 0x%x, maskid 0x%x\n", id, maskid);
 		return "UNKN";
@@ -348,7 +349,7 @@ static void zynqmp_print_platform_name(void)
 {
 	uint32_t ver = zynqmp_get_silicon_ver();
 	uint32_t rtl = zynqmp_get_rtl_ver();
-	char *label = "Unknown";
+	const char *label = "Unknown";
 
 	switch (ver) {
 	case ZYNQMP_CSU_VERSION_QEMU:
