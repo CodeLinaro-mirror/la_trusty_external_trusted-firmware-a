@@ -134,6 +134,21 @@ static int spd_add_dt_node(void *fdt)
 	if (fdt_setprop_u32(fdt, offs, "interrupt-controller", 0))
 		return -1;
 
+#ifdef SPD_spmd
+	offs = fdt_add_subnode(fdt, root_offs, "trusty-ffa");
+	if (offs < 0)
+		return -1;
+	if (fdt_appendprop_string(fdt, offs, "compatible", "android,trusty-ffa-v1"))
+		return -1;
+
+	offs = fdt_add_subnode(fdt, offs, "trusty-core");
+	if (offs < 0)
+		return -1;
+	trusty_offs = offs;
+
+	if (fdt_appendprop_string(fdt, offs, "compatible", "android,trusty-core-v1"))
+		return -1;
+#else
 	offs = fdt_add_subnode(fdt, root_offs, "trusty");
 	if (offs < 0)
 		return -1;
@@ -141,6 +156,7 @@ static int spd_add_dt_node(void *fdt)
 
 	if (fdt_appendprop_string(fdt, offs, "compatible", "android,trusty-smc-v1"))
 		return -1;
+#endif
 	if (fdt_setprop_u32(fdt, offs, "ranges", 0))
 		return -1;
 	if (fdt_setprop_u32(fdt, offs, "#address-cells", 2))
