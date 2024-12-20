@@ -8,7 +8,7 @@
 # Trusted Firmware Version
 #
 VERSION_MAJOR			:= 2
-VERSION_MINOR			:= 11
+VERSION_MINOR			:= 12
 # VERSION_PATCH is only used for LTS releases
 VERSION_PATCH			:= 0
 VERSION				:= ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}
@@ -24,34 +24,30 @@ MAKEOVERRIDES =
 MAKE_HELPERS_DIRECTORY := make_helpers/
 include ${MAKE_HELPERS_DIRECTORY}build_macros.mk
 include ${MAKE_HELPERS_DIRECTORY}build_env.mk
+include ${MAKE_HELPERS_DIRECTORY}build-rules.mk
+include ${MAKE_HELPERS_DIRECTORY}common.mk
 
 ################################################################################
 # Default values for build configurations, and their dependencies
 ################################################################################
 
 include ${MAKE_HELPERS_DIRECTORY}defaults.mk
+include ${MAKE_HELPERS_DIRECTORY}plat_helpers.mk
+
+# To be able to set platform specific defaults
+ifneq ($(PLAT_DEFAULTS_MAKEFILE_FULL),)
+include ${PLAT_DEFAULTS_MAKEFILE_FULL}
+endif
 
 ################################################################################
 # Configure the toolchains used to build TF-A and its tools
 ################################################################################
-
-#
-# The clean and check targets do not behave correctly if the user's environment
-# does not appropriately configure a toolchain. While we try to find a permanent
-# solution to this, do not try to detect any toolchains if we are building
-# exclusively with targets which do not use any toolchain tools.
-#
-
-ifeq ($(filter-out check% %clean doc %tool,$(or $(MAKECMDGOALS),all)),)
-        toolchains :=
-endif
 
 include ${MAKE_HELPERS_DIRECTORY}toolchain.mk
 
 # Assertions enabled for DEBUG builds by default
 ENABLE_ASSERTIONS		:= ${DEBUG}
 ENABLE_PMF			:= ${ENABLE_RUNTIME_INSTRUMENTATION}
-PLAT				:= ${DEFAULT_PLAT}
 
 ################################################################################
 # Checkpatch script options
@@ -93,22 +89,9 @@ CHECK_PATHS		:=	${ROOT_DIRS_TO_CHECK}			\
 # Process build options
 ################################################################################
 
-# Verbose flag
-ifeq (${V},0)
-	Q:=@
-	ECHO:=@echo
+ifeq ($(verbose),)
 	CHECKCODE_ARGS	+=	--no-summary --terse
-else
-	Q:=
-	ECHO:=$(ECHO_QUIET)
 endif
-
-ifneq ($(findstring s,$(filter-out --%,$(MAKEFLAGS))),)
-	Q:=@
-	ECHO:=$(ECHO_QUIET)
-endif
-
-export Q ECHO
 
 ################################################################################
 # Auxiliary tools (fiptool, cert_create, etc)
@@ -273,10 +256,12 @@ WARNINGS	+=		-Wunused-but-set-variable -Wmaybe-uninitialized	\
 				-Wlogical-op
 
 # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=105523
-TF_CFLAGS		+= 	$(call cc_option, --param=min-pagesize=0)
+TF_CFLAGS_MIN_PAGE_SIZE	:=	$(call cc_option, --param=min-pagesize=0)
+TF_CFLAGS		+=	$(TF_CFLAGS_MIN_PAGE_SIZE)
 
 ifeq ($(HARDEN_SLS), 1)
-        TF_CFLAGS_aarch64       +=      $(call cc_option, -mharden-sls=all)
+        TF_CFLAGS_MHARDEN_SLS	:=      $(call cc_option, -mharden-sls=all)
+        TF_CFLAGS_aarch64	+=      $(TF_CFLAGS_MHARDEN_SLS)
 endif
 
 else
@@ -429,7 +414,6 @@ include common/backtrace/backtrace.mk
 ################################################################################
 # Generic definitions
 ################################################################################
-include ${MAKE_HELPERS_DIRECTORY}plat_helpers.mk
 
 ifeq (${BUILD_BASE},)
      BUILD_BASE		:=	./build
@@ -464,6 +448,9 @@ ifneq (${SPD},none)
 			CTX_INCLUDE_EL2_REGS := 1
 			ifeq ($(SPMC_AT_EL3),1)
                                 $(error SPM cannot be enabled in both S-EL2 and EL3.)
+			endif
+			ifeq ($(CTX_INCLUDE_SVE_REGS),1)
+                                $(error SVE context management not needed with Hafnium SPMC.)
 			endif
 		endif
 
@@ -612,17 +599,9 @@ endif #(SUPPORT_STACK_MEMTAG)
 ################################################################################
 # FEAT_RME
 ifeq (${ENABLE_RME},1)
-	# RME doesn't support BRBE
-	ENABLE_BRBE_FOR_NS := 0
-
 	# RME doesn't support PIE
 	ifneq (${ENABLE_PIE},0)
                 $(error ENABLE_RME does not support PIE)
-	endif
-
-	# RME doesn't support BRBE
-	ifneq (${ENABLE_BRBE_FOR_NS},0)
-                $(error ENABLE_RME does not support BRBE.)
 	endif
 
 	# RME requires AARCH64
@@ -669,6 +648,13 @@ ifeq (${CTX_INCLUDE_EL2_REGS}, 1)
 endif
 
 ################################################################################
+# Make 128-Bit sysreg read/writes availabe when FEAT_D128 is enabled.
+################################################################################
+ifneq (${ENABLE_FEAT_D128}, 0)
+        BL_COMMON_SOURCES       +=      lib/extensions/sysreg128/sysreg128.S
+endif
+
+################################################################################
 # Platform specific Makefile might provide us ARCH_MAJOR/MINOR use that to come
 # up with appropriate march values for compiler.
 ################################################################################
@@ -701,8 +687,6 @@ ifeq ($(HANDLE_EA_EL3_FIRST_NS),1)
 else
 	FFH_SUPPORT := 0
 endif
-
-$(eval $(call MAKE_PREREQ_DIR,${BUILD_PLAT}))
 
 ifeq (${ARM_ARCH_MAJOR},7)
 include make_helpers/armv7-a-cpus.mk
@@ -985,25 +969,52 @@ ifeq (${ENABLE_SME_FOR_SWD},1)
 	endif
 endif #(ENABLE_SME_FOR_SWD)
 
+# Enabling SVE for SWD requires enabling SVE for NWD due to ENABLE_FEAT
+# mechanism.
 ifeq (${ENABLE_SVE_FOR_SWD},1)
-	ifeq (${ENABLE_SVE_FOR_NS},0)
-                $(error "ENABLE_SVE_FOR_SWD requires ENABLE_SVE_FOR_NS")
-	endif
-endif #(ENABLE_SVE_FOR_SWD)
+    ifeq (${ENABLE_SVE_FOR_NS},0)
+        $(error "ENABLE_SVE_FOR_SWD requires ENABLE_SVE_FOR_NS")
+    endif
+endif
 
-# SVE and SME cannot be used with CTX_INCLUDE_FPREGS since secure manager does
-# its own context management including FPU registers.
+# Enabling SVE for both the worlds typically requires the context
+# management of SVE registers. The only exception being SPMC at S-EL2.
+ifeq (${ENABLE_SVE_FOR_SWD}, 1)
+    ifneq (${ENABLE_SVE_FOR_NS}, 0)
+        ifeq (${CTX_INCLUDE_SVE_REGS}-$(SPMD_SPM_AT_SEL2),0-0)
+            $(warning "ENABLE_SVE_FOR_SWD and ENABLE_SVE_FOR_NS together require CTX_INCLUDE_SVE_REGS")
+        endif
+    endif
+endif
+
+# Enabling SVE in either world while enabling CTX_INCLUDE_FPREGS requires
+# CTX_INCLUDE_SVE_REGS to be enabled due to architectural dependency between FP
+# and SVE registers.
+ifeq (${CTX_INCLUDE_FPREGS}, 1)
+    ifneq (${ENABLE_SVE_FOR_NS},0)
+        ifeq (${CTX_INCLUDE_SVE_REGS},0)
+	    # Warning instead of error due to CI dependency on this
+            $(warning "CTX_INCLUDE_FPREGS and ENABLE_SVE_FOR_NS together require CTX_INCLUDE_SVE_REGS")
+            $(warning "Forced ENABLE_SVE_FOR_NS=0")
+	    override ENABLE_SVE_FOR_NS	:= 0
+        endif
+    endif
+endif #(CTX_INCLUDE_FPREGS)
+
+# SVE context management is only required if secure world has access to SVE/FP
+# functionality.
+ifeq (${CTX_INCLUDE_SVE_REGS},1)
+    ifeq (${ENABLE_SVE_FOR_SWD},0)
+        $(error "CTX_INCLUDE_SVE_REGS requires ENABLE_SVE_FOR_SWD to also be enabled")
+    endif
+endif
+
+# SME cannot be used with CTX_INCLUDE_FPREGS since SPM does its own context
+# management including FPU registers.
 ifeq (${CTX_INCLUDE_FPREGS},1)
-	ifneq (${ENABLE_SME_FOR_NS},0)
-                $(error "ENABLE_SME_FOR_NS cannot be used with CTX_INCLUDE_FPREGS")
-	endif
-
-	ifeq (${ENABLE_SVE_FOR_NS},1)
-		# Warning instead of error due to CI dependency on this
-                $(warning "ENABLE_SVE_FOR_NS cannot be used with CTX_INCLUDE_FPREGS")
-                $(warning "Forced ENABLE_SVE_FOR_NS=0")
-		override ENABLE_SVE_FOR_NS	:= 0
-	endif
+    ifneq (${ENABLE_SME_FOR_NS},0)
+        $(error "ENABLE_SME_FOR_NS cannot be used with CTX_INCLUDE_FPREGS")
+    endif
 endif #(CTX_INCLUDE_FPREGS)
 
 ifeq ($(DRTM_SUPPORT),1)
@@ -1140,6 +1151,7 @@ $(eval $(call assert_booleans,\
 	CREATE_KEYS \
 	CTX_INCLUDE_AARCH32_REGS \
 	CTX_INCLUDE_FPREGS \
+	CTX_INCLUDE_SVE_REGS \
 	CTX_INCLUDE_EL2_REGS \
 	CTX_INCLUDE_MPAM_REGS \
 	DEBUG \
@@ -1166,6 +1178,7 @@ $(eval $(call assert_booleans,\
 	HW_ASSISTED_COHERENCY \
 	MEASURED_BOOT \
 	DICE_PROTECTION_ENVIRONMENT \
+	RMMD_ENABLE_EL3_TOKEN_SIGN \
 	DRTM_SUPPORT \
 	NS_TIMER_SWITCH \
 	OVERRIDE_LIBC \
@@ -1178,6 +1191,8 @@ $(eval $(call assert_booleans,\
 	SEPARATE_CODE_AND_RODATA \
 	SEPARATE_BL2_NOLOAD_REGION \
 	SEPARATE_NOBITS_REGION \
+	SEPARATE_RWDATA_REGION \
+	SEPARATE_SIMD_SECTION \
 	SPIN_ON_BL1_EXIT \
 	SPM_MM \
 	SPMC_AT_EL3 \
@@ -1239,21 +1254,27 @@ $(eval $(call assert_numerics,\
 	ENABLE_FEAT_AMUv1p1 \
 	ENABLE_FEAT_CSV2_2 \
 	ENABLE_FEAT_CSV2_3 \
+	ENABLE_FEAT_DEBUGV8P9 \
 	ENABLE_FEAT_DIT \
 	ENABLE_FEAT_ECV \
 	ENABLE_FEAT_FGT \
+	ENABLE_FEAT_FGT2 \
 	ENABLE_FEAT_HCX \
+	ENABLE_FEAT_LS64_ACCDATA \
 	ENABLE_FEAT_MTE2 \
 	ENABLE_FEAT_PAN \
 	ENABLE_FEAT_RNG \
 	ENABLE_FEAT_RNG_TRAP \
 	ENABLE_FEAT_SEL2 \
 	ENABLE_FEAT_TCR2 \
+	ENABLE_FEAT_THE \
 	ENABLE_FEAT_SB \
 	ENABLE_FEAT_S2PIE \
 	ENABLE_FEAT_S1PIE \
 	ENABLE_FEAT_S2POE \
 	ENABLE_FEAT_S1POE \
+	ENABLE_FEAT_SCTLR2 \
+	ENABLE_FEAT_D128 \
 	ENABLE_FEAT_GCS \
 	ENABLE_FEAT_VHE \
 	ENABLE_FEAT_MPAM \
@@ -1296,6 +1317,7 @@ $(eval $(call add_defines,\
 	COLD_BOOT_SINGLE_CPU \
 	CTX_INCLUDE_AARCH32_REGS \
 	CTX_INCLUDE_FPREGS \
+	CTX_INCLUDE_SVE_REGS \
 	CTX_INCLUDE_PAUTH_REGS \
 	CTX_INCLUDE_MPAM_REGS \
 	EL3_EXCEPTION_HANDLING \
@@ -1309,12 +1331,14 @@ $(eval $(call add_defines,\
 	AMU_RESTRICT_COUNTERS \
 	ENABLE_ASSERTIONS \
 	ENABLE_BTI \
+	ENABLE_FEAT_DEBUGV8P9 \
 	ENABLE_FEAT_MPAM \
 	ENABLE_PAUTH \
 	ENABLE_PIE \
 	ENABLE_PMF \
 	ENABLE_PSCI_STAT \
 	ENABLE_RME \
+	RMMD_ENABLE_EL3_TOKEN_SIGN \
 	ENABLE_RUNTIME_INSTRUMENTATION \
 	ENABLE_SME_FOR_NS \
 	ENABLE_SME2_FOR_NS \
@@ -1342,9 +1366,13 @@ $(eval $(call add_defines,\
 	PSCI_EXTENDED_STATE_ID \
 	PSCI_OS_INIT_MODE \
 	RESET_TO_BL31 \
+	RME_GPT_BITLOCK_BLOCK \
+	RME_GPT_MAX_BLOCK \
 	SEPARATE_CODE_AND_RODATA \
 	SEPARATE_BL2_NOLOAD_REGION \
 	SEPARATE_NOBITS_REGION \
+	SEPARATE_RWDATA_REGION \
+	SEPARATE_SIMD_SECTION \
 	RECLAIM_INIT_CODE \
 	SPD_${SPD} \
 	SPIN_ON_BL1_EXIT \
@@ -1391,18 +1419,23 @@ $(eval $(call add_defines,\
 	ENABLE_MPMM \
 	ENABLE_MPMM_FCONF \
 	ENABLE_FEAT_FGT \
+	ENABLE_FEAT_FGT2 \
 	ENABLE_FEAT_ECV \
 	ENABLE_FEAT_AMUv1p1 \
 	ENABLE_FEAT_SEL2 \
 	ENABLE_FEAT_VHE \
 	ENABLE_FEAT_CSV2_2 \
 	ENABLE_FEAT_CSV2_3 \
+	ENABLE_FEAT_LS64_ACCDATA \
 	ENABLE_FEAT_PAN \
 	ENABLE_FEAT_TCR2 \
+	ENABLE_FEAT_THE \
 	ENABLE_FEAT_S2PIE \
 	ENABLE_FEAT_S1PIE \
 	ENABLE_FEAT_S2POE \
 	ENABLE_FEAT_S1POE \
+	ENABLE_FEAT_SCTLR2 \
+	ENABLE_FEAT_D128 \
 	ENABLE_FEAT_GCS \
 	ENABLE_FEAT_MTE2 \
 	FEATURE_DETECTION \
@@ -1469,13 +1502,13 @@ endif #(SPD)
 # Build targets
 ################################################################################
 
-.PHONY:	all msg_start clean realclean distclean cscope locate-checkpatch checkcodebase checkpatch fiptool sptool fip sp fwu_fip certtool dtbs memmap doc enctool
+.PHONY:	all msg_start clean realclean distclean cscope locate-checkpatch checkcodebase checkpatch fiptool sptool fip sp tl fwu_fip certtool dtbs memmap doc enctool
 .SUFFIXES:
 
 all: msg_start
 
 msg_start:
-	@echo "Building ${PLAT}"
+	$(s)echo "Building ${PLAT}"
 
 ifeq (${ERROR_DEPRECATED},0)
 # Check if deprecated declarations and cpp warnings should be treated as error or not.
@@ -1486,7 +1519,6 @@ else
 endif
 endif #(!ERROR_DEPRECATED)
 
-$(eval $(call MAKE_LIB_DIRS))
 $(eval $(call MAKE_LIB,c))
 
 # Expand build macros for the different images
@@ -1570,12 +1602,12 @@ endif #(NEED_FDT)
 
 # Add Secure Partition packages
 ifeq (${NEED_SP_PKG},yes)
-$(BUILD_PLAT)/sp_gen.mk: ${SP_MK_GEN} ${SP_LAYOUT_FILE} | ${BUILD_PLAT}
-	@${PYTHON} "$<" "$@" $(filter-out $<,$^) $(BUILD_PLAT) ${COT} ${SP_DTS_LIST_FRAGMENT}
+$(BUILD_PLAT)/sp_gen.mk: ${SP_MK_GEN} ${SP_LAYOUT_FILE} | $$(@D)/
+	$(q)${PYTHON} "$<" "$@" $(filter-out $<,$^) $(BUILD_PLAT) ${COT} ${SP_DTS_LIST_FRAGMENT}
 sp: $(DTBS) $(BUILD_PLAT)/sp_gen.mk $(SP_PKGS)
-	@${ECHO_BLANK_LINE}
-	@echo "Built SP Images successfully"
-	@${ECHO_BLANK_LINE}
+	$(s)echo
+	$(s)echo "Built SP Images successfully"
+	$(s)echo
 endif #(NEED_SP_PKG)
 
 locate-checkpatch:
@@ -1588,37 +1620,37 @@ endif
 endif #(CHECKPATCH)
 
 clean:
-	@echo "  CLEAN"
+	$(s)echo "  CLEAN"
 	$(call SHELL_REMOVE_DIR,${BUILD_PLAT})
 ifdef UNIX_MK
-	${Q}${MAKE} --no-print-directory -C ${FIPTOOLPATH} clean
+	$(q)${MAKE} --no-print-directory -C ${FIPTOOLPATH} clean
 else
 # Clear the MAKEFLAGS as we do not want
 # to pass the gnumake flags to nmake.
-	${Q}set MAKEFLAGS= && ${MSVC_NMAKE} /nologo /f ${FIPTOOLPATH}/Makefile.msvc FIPTOOLPATH=$(subst /,\,$(FIPTOOLPATH)) FIPTOOL=$(subst /,\,$(FIPTOOL)) clean
+	$(q)set MAKEFLAGS= && ${MSVC_NMAKE} /nologo /f ${FIPTOOLPATH}/Makefile.msvc FIPTOOLPATH=$(subst /,\,$(FIPTOOLPATH)) FIPTOOL=$(subst /,\,$(FIPTOOL)) clean
 endif #(UNIX_MK)
-	${Q}${MAKE} PLAT=${PLAT} --no-print-directory -C ${CRTTOOLPATH} clean
-	${Q}${MAKE} PLAT=${PLAT} --no-print-directory -C ${ENCTOOLPATH} clean
-	${Q}${MAKE} --no-print-directory -C ${ROMLIBPATH} clean
+	$(q)${MAKE} PLAT=${PLAT} --no-print-directory -C ${CRTTOOLPATH} clean
+	$(q)${MAKE} PLAT=${PLAT} --no-print-directory -C ${ENCTOOLPATH} clean
+	$(q)${MAKE} --no-print-directory -C ${ROMLIBPATH} clean
 
 realclean distclean:
-	@echo "  REALCLEAN"
+	$(s)echo "  REALCLEAN"
 	$(call SHELL_REMOVE_DIR,${BUILD_BASE})
 	$(call SHELL_DELETE_ALL, ${CURDIR}/cscope.*)
 ifdef UNIX_MK
-	${Q}${MAKE} --no-print-directory -C ${FIPTOOLPATH} clean
+	$(q)${MAKE} --no-print-directory -C ${FIPTOOLPATH} clean
 else
 # Clear the MAKEFLAGS as we do not want
 # to pass the gnumake flags to nmake.
-	${Q}set MAKEFLAGS= && ${MSVC_NMAKE} /nologo /f ${FIPTOOLPATH}/Makefile.msvc FIPTOOLPATH=$(subst /,\,$(FIPTOOLPATH)) FIPTOOL=$(subst /,\,$(FIPTOOL)) realclean
+	$(q)set MAKEFLAGS= && ${MSVC_NMAKE} /nologo /f ${FIPTOOLPATH}/Makefile.msvc FIPTOOLPATH=$(subst /,\,$(FIPTOOLPATH)) FIPTOOL=$(subst /,\,$(FIPTOOL)) realclean
 endif #(UNIX_MK)
-	${Q}${MAKE} PLAT=${PLAT} --no-print-directory -C ${CRTTOOLPATH} realclean
-	${Q}${MAKE} PLAT=${PLAT} --no-print-directory -C ${ENCTOOLPATH} realclean
-	${Q}${MAKE} --no-print-directory -C ${ROMLIBPATH} clean
+	$(q)${MAKE} PLAT=${PLAT} --no-print-directory -C ${CRTTOOLPATH} realclean
+	$(q)${MAKE} PLAT=${PLAT} --no-print-directory -C ${ENCTOOLPATH} realclean
+	$(q)${MAKE} --no-print-directory -C ${ROMLIBPATH} clean
 
 checkcodebase:		locate-checkpatch
-	@echo "  CHECKING STYLE"
-	@if test -d .git ; then						\
+	$(s)echo "  CHECKING STYLE"
+	$(q)if test -d .git ; then						\
 		git ls-files | grep -E -v 'libfdt|libc|docs|\.rst' |	\
 		while read GIT_FILE ;					\
 		do ${CHECKPATCH} ${CHECKCODE_ARGS} -f $$GIT_FILE ;	\
@@ -1634,63 +1666,62 @@ checkcodebase:		locate-checkpatch
 	fi
 
 checkpatch:		locate-checkpatch
-	@echo "  CHECKING STYLE"
-	@if test -n "${CHECKPATCH_OPTS}"; then				\
+	$(s)echo "  CHECKING STYLE"
+	$(q)if test -n "${CHECKPATCH_OPTS}"; then				\
 		echo "    with ${CHECKPATCH_OPTS} option(s)";		\
 	fi
-	${Q}COMMON_COMMIT=$$(git merge-base HEAD ${BASE_COMMIT});	\
+	$(q)COMMON_COMMIT=$$(git merge-base HEAD ${BASE_COMMIT});	\
 	for commit in `git rev-list --no-merges $$COMMON_COMMIT..HEAD`;	\
 	do								\
 		printf "\n[*] Checking style of '$$commit'\n\n";	\
-		git log --format=email "$$commit~..$$commit"		\
-			-- ${CHECK_PATHS} |				\
-			${CHECKPATCH} ${CHECKPATCH_OPTS} - || true;	\
-		git diff --format=email "$$commit~..$$commit"		\
-			-- ${CHECK_PATHS} |				\
+		( git log --format=email "$$commit~..$$commit"		\
+			-- ${CHECK_PATHS} ;				\
+		  git diff --format=email "$$commit~..$$commit"		\
+			-- ${CHECK_PATHS}; ) |				\
 			${CHECKPATCH}  ${CHECKPATCH_OPTS} - || true;	\
 	done
 
 certtool: ${CRTTOOL}
 
 ${CRTTOOL}: FORCE
-	${Q}${MAKE} PLAT=${PLAT} USE_TBBR_DEFS=${USE_TBBR_DEFS} COT=${COT} OPENSSL_DIR=${OPENSSL_DIR} CRTTOOL=${CRTTOOL} DEBUG=${DEBUG} V=${V} --no-print-directory -C ${CRTTOOLPATH} all
-	@${ECHO_BLANK_LINE}
-	@echo "Built $@ successfully"
-	@${ECHO_BLANK_LINE}
+	$(q)${MAKE} PLAT=${PLAT} USE_TBBR_DEFS=${USE_TBBR_DEFS} COT=${COT} OPENSSL_DIR=${OPENSSL_DIR} CRTTOOL=${CRTTOOL} DEBUG=${DEBUG} --no-print-directory -C ${CRTTOOLPATH} all
+	$(s)echo
+	$(s)echo "Built $@ successfully"
+	$(s)echo
 
 ifneq (${GENERATE_COT},0)
 certificates: ${CRT_DEPS} ${CRTTOOL}
-	${Q}${CRTTOOL} ${CRT_ARGS}
-	@${ECHO_BLANK_LINE}
-	@echo "Built $@ successfully"
-	@echo "Certificates can be found in ${BUILD_PLAT}"
-	@${ECHO_BLANK_LINE}
+	$(q)${CRTTOOL} ${CRT_ARGS}
+	$(s)echo
+	$(s)echo "Built $@ successfully"
+	$(s)echo "Certificates can be found in ${BUILD_PLAT}"
+	$(s)echo
 endif #(GENERATE_COT)
 
 ${BUILD_PLAT}/${FIP_NAME}: ${FIP_DEPS} ${FIPTOOL}
 	$(eval ${CHECK_FIP_CMD})
-	${Q}${FIPTOOL} create ${FIP_ARGS} $@
-	${Q}${FIPTOOL} info $@
-	@${ECHO_BLANK_LINE}
-	@echo "Built $@ successfully"
-	@${ECHO_BLANK_LINE}
+	$(q)${FIPTOOL} create ${FIP_ARGS} $@
+	$(q)${FIPTOOL} info $@
+	$(s)echo
+	$(s)echo "Built $@ successfully"
+	$(s)echo
 
 ifneq (${GENERATE_COT},0)
 fwu_certificates: ${FWU_CRT_DEPS} ${CRTTOOL}
-	${Q}${CRTTOOL} ${FWU_CRT_ARGS}
-	@${ECHO_BLANK_LINE}
-	@echo "Built $@ successfully"
-	@echo "FWU certificates can be found in ${BUILD_PLAT}"
-	@${ECHO_BLANK_LINE}
+	$(q)${CRTTOOL} ${FWU_CRT_ARGS}
+	$(s)echo
+	$(s)echo "Built $@ successfully"
+	$(s)echo "FWU certificates can be found in ${BUILD_PLAT}"
+	$(s)echo
 endif #(GENERATE_COT)
 
 ${BUILD_PLAT}/${FWU_FIP_NAME}: ${FWU_FIP_DEPS} ${FIPTOOL}
 	$(eval ${CHECK_FWU_FIP_CMD})
-	${Q}${FIPTOOL} create ${FWU_FIP_ARGS} $@
-	${Q}${FIPTOOL} info $@
-	@${ECHO_BLANK_LINE}
-	@echo "Built $@ successfully"
-	@${ECHO_BLANK_LINE}
+	$(q)${FIPTOOL} create ${FWU_FIP_ARGS} $@
+	$(q)${FIPTOOL} info $@
+	$(s)echo
+	$(s)echo "Built $@ successfully"
+	$(s)echo
 
 fiptool: ${FIPTOOL}
 fip: ${BUILD_PLAT}/${FIP_NAME}
@@ -1698,85 +1729,90 @@ fwu_fip: ${BUILD_PLAT}/${FWU_FIP_NAME}
 
 ${FIPTOOL}: FORCE
 ifdef UNIX_MK
-	${Q}${MAKE} CPPFLAGS="-DVERSION='\"${VERSION_STRING}\"'" FIPTOOL=${FIPTOOL} OPENSSL_DIR=${OPENSSL_DIR} DEBUG=${DEBUG} V=${V} --no-print-directory -C ${FIPTOOLPATH} all
+	$(q)${MAKE} PLAT=${PLAT} CPPFLAGS="-DVERSION='\"${VERSION_STRING}\"'" FIPTOOL=${FIPTOOL} OPENSSL_DIR=${OPENSSL_DIR} DEBUG=${DEBUG} --no-print-directory -C ${FIPTOOLPATH} all
 else
 # Clear the MAKEFLAGS as we do not want
 # to pass the gnumake flags to nmake.
-	${Q}set MAKEFLAGS= && ${MSVC_NMAKE} /nologo /f ${FIPTOOLPATH}/Makefile.msvc FIPTOOLPATH=$(subst /,\,$(FIPTOOLPATH)) FIPTOOL=$(subst /,\,$(FIPTOOL))
+	$(q)set MAKEFLAGS= && ${MSVC_NMAKE} /nologo /f ${FIPTOOLPATH}/Makefile.msvc FIPTOOLPATH=$(subst /,\,$(FIPTOOLPATH)) FIPTOOL=$(subst /,\,$(FIPTOOL))
 endif #(UNIX_MK)
 
 romlib.bin: libraries FORCE
-	${Q}${MAKE} PLAT_DIR=${PLAT_DIR} BUILD_PLAT=${BUILD_PLAT} ENABLE_BTI=${ENABLE_BTI} ARM_ARCH_MINOR=${ARM_ARCH_MINOR} INCLUDES=$(call escape-shell,$(INCLUDES)) DEFINES=$(call escape-shell,$(DEFINES)) --no-print-directory -C ${ROMLIBPATH} all
+	$(q)${MAKE} PLAT_DIR=${PLAT_DIR} BUILD_PLAT=${BUILD_PLAT} ENABLE_BTI=${ENABLE_BTI} ARM_ARCH_MINOR=${ARM_ARCH_MINOR} INCLUDES=$(call escape-shell,$(INCLUDES)) DEFINES=$(call escape-shell,$(DEFINES)) --no-print-directory -C ${ROMLIBPATH} all
 
 memmap: all
 ifdef UNIX_MK
-	${Q}PYTHONPATH=${CURDIR}/tools/memory \
+	$(q)PYTHONPATH=${CURDIR}/tools/memory \
 		${PYTHON} -m memory.memmap -sr ${BUILD_PLAT}
 else
-	${Q}set PYTHONPATH=${CURDIR}/tools/memory && \
+	$(q)set PYTHONPATH=${CURDIR}/tools/memory && \
 		${PYTHON} -m memory.memmap -sr ${BUILD_PLAT}
 endif
 
+tl: ${BUILD_PLAT}/tl.bin
+${BUILD_PLAT}/tl.bin: ${HW_CONFIG}
+	$(if $(host-poetry),$(q)poetry -q install)
+	$(q)$(if $(host-poetry),poetry run )tlc create --fdt $< -s ${FW_HANDOFF_SIZE} $@
+
 doc:
-	@echo "  BUILD DOCUMENTATION"
-	${Q}${MAKE} --no-print-directory -C ${DOCS_PATH} html
+	$(s)echo "  BUILD DOCUMENTATION"
+	$(q)${MAKE} --no-print-directory -C ${DOCS_PATH} html
 
 enctool: ${ENCTOOL}
 
 ${ENCTOOL}: FORCE
-	${Q}${MAKE} PLAT=${PLAT} BUILD_INFO=0 OPENSSL_DIR=${OPENSSL_DIR} ENCTOOL=${ENCTOOL} DEBUG=${DEBUG} V=${V} --no-print-directory -C ${ENCTOOLPATH} all
-	@${ECHO_BLANK_LINE}
-	@echo "Built $@ successfully"
-	@${ECHO_BLANK_LINE}
+	$(q)${MAKE} PLAT=${PLAT} BUILD_INFO=0 OPENSSL_DIR=${OPENSSL_DIR} ENCTOOL=${ENCTOOL} DEBUG=${DEBUG} --no-print-directory -C ${ENCTOOLPATH} all
+	$(s)echo
+	$(s)echo "Built $@ successfully"
+	$(s)echo
 
 cscope:
-	@echo "  CSCOPE"
-	${Q}find ${CURDIR} -name "*.[chsS]" > cscope.files
-	${Q}cscope -b -q -k
+	$(s)echo "  CSCOPE"
+	$(q)find ${CURDIR} -name "*.[chsS]" > cscope.files
+	$(q)cscope -b -q -k
 
 help:
-	@echo "usage: ${MAKE} [PLAT=<platform>] [OPTIONS] [TARGET]"
-	@echo ""
-	@echo "PLAT is used to specify which platform you wish to build."
-	@echo "If no platform is specified, PLAT defaults to: ${DEFAULT_PLAT}"
-	@echo ""
-	@echo "platform = ${PLATFORM_LIST}"
-	@echo ""
-	@echo "Please refer to the User Guide for a list of all supported options."
-	@echo "Note that the build system doesn't track dependencies for build "
-	@echo "options. Therefore, if any of the build options are changed "
-	@echo "from a previous build, a clean build must be performed."
-	@echo ""
-	@echo "Supported Targets:"
-	@echo "  all            Build all individual bootloader binaries"
-	@echo "  bl1            Build the BL1 binary"
-	@echo "  bl2            Build the BL2 binary"
-	@echo "  bl2u           Build the BL2U binary"
-	@echo "  bl31           Build the BL31 binary"
-	@echo "  bl32           Build the BL32 binary. If ARCH=aarch32, then "
-	@echo "                 this builds secure payload specified by AARCH32_SP"
-	@echo "  certificates   Build the certificates (requires 'GENERATE_COT=1')"
-	@echo "  fip            Build the Firmware Image Package (FIP)"
-	@echo "  fwu_fip        Build the FWU Firmware Image Package (FIP)"
-	@echo "  checkcodebase  Check the coding style of the entire source tree"
-	@echo "  checkpatch     Check the coding style on changes in the current"
-	@echo "                 branch against BASE_COMMIT (default origin/master)"
-	@echo "  clean          Clean the build for the selected platform"
-	@echo "  cscope         Generate cscope index"
-	@echo "  distclean      Remove all build artifacts for all platforms"
-	@echo "  certtool       Build the Certificate generation tool"
-	@echo "  enctool        Build the Firmware encryption tool"
-	@echo "  fiptool        Build the Firmware Image Package (FIP) creation tool"
-	@echo "  sp             Build the Secure Partition Packages"
-	@echo "  sptool         Build the Secure Partition Package creation tool"
-	@echo "  dtbs           Build the Device Tree Blobs (if required for the platform)"
-	@echo "  memmap         Print the memory map of the built binaries"
-	@echo "  doc            Build html based documentation using Sphinx tool"
-	@echo ""
-	@echo "Note: most build targets require PLAT to be set to a specific platform."
-	@echo ""
-	@echo "example: build all targets for the FVP platform:"
-	@echo "  CROSS_COMPILE=aarch64-none-elf- make PLAT=fvp all"
+	$(s)echo "usage: ${MAKE} [PLAT=<platform>] [OPTIONS] [TARGET]"
+	$(s)echo ""
+	$(s)echo "PLAT is used to specify which platform you wish to build."
+	$(s)echo "If no platform is specified, PLAT defaults to: ${DEFAULT_PLAT}"
+	$(s)echo ""
+	$(s)echo "platform = ${PLATFORM_LIST}"
+	$(s)echo ""
+	$(s)echo "Please refer to the User Guide for a list of all supported options."
+	$(s)echo "Note that the build system doesn't track dependencies for build "
+	$(s)echo "options. Therefore, if any of the build options are changed "
+	$(s)echo "from a previous build, a clean build must be performed."
+	$(s)echo ""
+	$(s)echo "Supported Targets:"
+	$(s)echo "  all            Build all individual bootloader binaries"
+	$(s)echo "  bl1            Build the BL1 binary"
+	$(s)echo "  bl2            Build the BL2 binary"
+	$(s)echo "  bl2u           Build the BL2U binary"
+	$(s)echo "  bl31           Build the BL31 binary"
+	$(s)echo "  bl32           Build the BL32 binary. If ARCH=aarch32, then "
+	$(s)echo "                 this builds secure payload specified by AARCH32_SP"
+	$(s)echo "  certificates   Build the certificates (requires 'GENERATE_COT=1')"
+	$(s)echo "  fip            Build the Firmware Image Package (FIP)"
+	$(s)echo "  fwu_fip        Build the FWU Firmware Image Package (FIP)"
+	$(s)echo "  checkcodebase  Check the coding style of the entire source tree"
+	$(s)echo "  checkpatch     Check the coding style on changes in the current"
+	$(s)echo "                 branch against BASE_COMMIT (default origin/master)"
+	$(s)echo "  clean          Clean the build for the selected platform"
+	$(s)echo "  cscope         Generate cscope index"
+	$(s)echo "  distclean      Remove all build artifacts for all platforms"
+	$(s)echo "  certtool       Build the Certificate generation tool"
+	$(s)echo "  enctool        Build the Firmware encryption tool"
+	$(s)echo "  fiptool        Build the Firmware Image Package (FIP) creation tool"
+	$(s)echo "  sp             Build the Secure Partition Packages"
+	$(s)echo "  sptool         Build the Secure Partition Package creation tool"
+	$(s)echo "  dtbs           Build the Device Tree Blobs (if required for the platform)"
+	$(s)echo "  memmap         Print the memory map of the built binaries"
+	$(s)echo "  doc            Build html based documentation using Sphinx tool"
+	$(s)echo ""
+	$(s)echo "Note: most build targets require PLAT to be set to a specific platform."
+	$(s)echo ""
+	$(s)echo "example: build all targets for the FVP platform:"
+	$(s)echo "  CROSS_COMPILE=aarch64-none-elf- make PLAT=fvp all"
 
 .PHONY: FORCE
 FORCE:;
