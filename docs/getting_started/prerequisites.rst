@@ -27,16 +27,16 @@ Requirements
         Program          Min supported version
 ======================== =====================
 Arm Compiler             6.18
-Arm GNU Compiler         13.2
-Clang/LLVM               11.0.0
-Device Tree Compiler     1.4.7
+Arm GNU Compiler         13.3
+Clang/LLVM               18.1.8
+Device Tree Compiler     1.6.1
 GNU make                 3.81
-mbed TLS\ [#f1]_         3.6.0
+mbed TLS\ [#f1]_         3.6.1
 Node.js [#f2]_           16
 OpenSSL                  1.0.0
-Poetry [#f2]_            1.3.2
+Poetry                   1.3.2
 QCBOR\ [#f3]_            1.2
-Sphinx\ [#f2]_           2.4.4
+Sphinx\ [#f2]_           5.3.0
 ======================== =====================
 
 .. [#f1] Required for Trusted Board Boot and Measured Boot.
@@ -51,7 +51,7 @@ preceding table that target Armv7-A or Armv8-A. For AArch32 and
 AArch64 builds, the respective targets required are ``arm-none-eabi`` and
 ``aarch64-none-elf``.
 
-Testing has been performed with version 13.2.Rel1 (gcc 13.2) of the Arm
+Testing has been performed with version 13.3.Rel1 (gcc 13.3) of the Arm
 GNU compiler, which can be installed from the `Arm Developer website`_.
 
 In addition, a native compiler is required to build supporting tools.
@@ -103,9 +103,11 @@ Poetry
 ^^^^^^
 
 Required for managing Python dependencies, this will allow you to reliably
-reproduce a Python environment to build documentation and run analysis tools.
-Most importantly, it ensures your system environment will not be affected by
-dependencies in the Python scripts.
+reproduce a Python environment to build documentation and run some of the
+integrated Python tools. Most importantly, it ensures your system environment
+will not be affected by dependencies in the Python scripts.
+
+For installation instructions, see the `official Poetry documentation`_.
 
 .. _prerequisites_software_and_libraries:
 
@@ -191,3 +193,4 @@ documentation, available `here <https://git-scm.com/docs/githooks>`_.
 .. _Arm-DS: https://developer.arm.com/Tools%20and%20Software/Arm%20Development%20Studio
 .. _Linaro Release 20.01: http://releases.linaro.org/members/arm/platforms/20.01
 .. _TrustedFirmware.org: https://www.trustedfirmware.org/
+.. _official Poetry documentation: https://python-poetry.org/docs/#installation

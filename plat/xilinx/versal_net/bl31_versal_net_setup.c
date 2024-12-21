@@ -59,6 +59,20 @@ static inline void bl31_set_default_config(void)
 					DISABLE_ALL_EXCEPTIONS);
 }
 
+/* Define read and write function for clusterbusqos register */
+DEFINE_RENAME_SYSREG_RW_FUNCS(cluster_bus_qos, S3_0_C15_C4_4)
+
+static void versal_net_setup_qos(void)
+{
+	int ret;
+
+	ret = read_cluster_bus_qos();
+	INFO("BL31: default cluster bus qos: 0x%x\n", ret);
+	write_cluster_bus_qos(0);
+	ret = read_cluster_bus_qos();
+	INFO("BL31: cluster bus qos written: 0x%x\n", ret);
+}
+
 /*
  * Perform any BL31 specific platform actions. Here is an opportunity to copy
  * parameters passed by the calling EL (S-EL1 in BL2 & S-EL3 in BL1) before they
@@ -68,6 +82,11 @@ static inline void bl31_set_default_config(void)
 void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 				u_register_t arg2, u_register_t arg3)
 {
+	(void)arg0;
+	(void)arg1;
+	(void)arg2;
+	(void)arg3;
+
 #if !(TFA_NO_PM)
 	uint64_t tfa_handoff_addr, buff[HANDOFF_PARAMS_MAX_SIZE] = {0};
 	uint32_t payload[PAYLOAD_ARG_CNT], max_size = HANDOFF_PARAMS_MAX_SIZE;
@@ -103,6 +122,8 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 	NOTICE("TF-A running on %s %d.%d\n", board_name_decode(),
 	       platform_version / 10U, platform_version % 10U);
 
+	versal_net_setup_qos();
+
 	/* Initialize the platform config for future decision making */
 	versal_net_config_setup();
 
@@ -137,18 +158,6 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 
 		INFO("BL31: PLM to TF-A handover success\n");
 
-		/*
-		 * The BL32 load address is indicated as 0x0 in the handoff
-		 * parameters, which is different from the default/user-provided
-		 * load address of 0x60000000 but the flags are correctly
-		 * configured. Consequently, in this scenario, set the PC
-		 * to the requested BL32_BASE address.
-		 */
-
-		/* TODO: Remove the following check once this is fixed from PLM */
-		if (bl32_image_ep_info.pc == 0 && bl32_image_ep_info.spsr != 0) {
-			bl32_image_ep_info.pc = (uintptr_t)BL32_BASE;
-		}
 	} else {
 		INFO("BL31: setting up default configs\n");
 
@@ -170,7 +179,7 @@ int request_intr_type_el3(uint32_t id, interrupt_type_handler_t handler)
 	uint32_t i;
 
 	/* Validate 'handler' and 'id' parameters */
-	if (handler == NULL || index >= MAX_INTR_EL3) {
+	if ((handler == NULL) || (index >= MAX_INTR_EL3)) {
 		return -EINVAL;
 	}
 
@@ -205,7 +214,7 @@ static uint64_t rdo_el3_interrupt_handler(uint32_t id, uint32_t flags,
 	}
 
 	if (handler != NULL) {
-		handler(intr_id, flags, handle, cookie);
+		(void)handler(intr_id, flags, handle, cookie);
 	}
 
 	return 0;

@@ -1,21 +1,20 @@
 #
+# Copyright (c) 2024, Arm Limited. All rights reserved.
 # Copyright (c) 2019-2022, Linaro Limited. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
 
-V		?= 0
 BUILD_INFO	?= 1
 DEBUG		:= 0
 ENCTOOL		?= encrypt_fw${BIN_EXT}
 BINARY		:= $(notdir ${ENCTOOL})
 OPENSSL_DIR	:= /usr
 
-toolchains := host
-
 MAKE_HELPERS_DIRECTORY := ../../make_helpers/
 include ${MAKE_HELPERS_DIRECTORY}build_macros.mk
 include ${MAKE_HELPERS_DIRECTORY}build_env.mk
+include ${MAKE_HELPERS_DIRECTORY}common.mk
 include ${MAKE_HELPERS_DIRECTORY}defaults.mk
 include ${MAKE_HELPERS_DIRECTORY}toolchain.mk
 
@@ -37,11 +36,6 @@ ifeq (${BUILD_INFO},1)
 else
   HOSTCCFLAGS += -O2 -DLOG_LEVEL=10
 endif
-endif
-ifeq (${V},0)
-  Q := @
-else
-  Q :=
 endif
 
 HOSTCCFLAGS += ${DEFINES}
@@ -68,22 +62,20 @@ LIB := -lssl -lcrypto
 all: --openssl ${BINARY}
 
 ${BINARY}: ${OBJECTS} Makefile
-	@echo "  HOSTLD  $@"
-	@echo 'const char build_msg[] = "Built : "__TIME__", "__DATE__;' | \
-                $(host-cc) -c ${HOSTCCFLAGS} -xc - -o src/build_msg.o
-	${Q}$(host-cc) src/build_msg.o ${OBJECTS} ${LIB_DIR} ${LIB} -o $@
+	$(s)echo "  HOSTLD  $@"
+	$(q)$(host-cc) ${OBJECTS} ${LIB_DIR} ${LIB} -o $@
 
 %.o: %.c
-	@echo "  HOSTCC  $<"
-	${Q}$(host-cc) -c ${HOSTCCFLAGS} ${INC_DIR} $< -o $@
+	$(s)echo "  HOSTCC  $<"
+	$(q)$(host-cc) -c ${HOSTCCFLAGS} ${INC_DIR} $< -o $@
 
 --openssl:
 ifeq ($(DEBUG),1)
-	@echo "Selected OpenSSL version: ${OPENSSL_CURRENT_VER}"
+	$(s)echo "Selected OpenSSL version: ${OPENSSL_CURRENT_VER}"
 endif
 
 clean:
-	$(call SHELL_DELETE_ALL, src/build_msg.o ${OBJECTS})
+	$(call SHELL_DELETE_ALL,${OBJECTS})
 
 realclean: clean
 	$(call SHELL_DELETE,${BINARY})
