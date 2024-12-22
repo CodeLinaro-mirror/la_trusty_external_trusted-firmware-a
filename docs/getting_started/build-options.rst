@@ -23,8 +23,9 @@ Common build options
    is expected to contain a makefile called ``<aarch32_sp-value>.mk``.
 
 -  ``AMU_RESTRICT_COUNTERS``: Register reads to the group 1 counters will return
-   zero at all but the highest implemented exception level.  Reads from the
-   memory mapped view are unaffected by this control.
+   zero at all but the highest implemented exception level. External
+   memory-mapped debug accesses are unaffected by this control.
+   The default value is 1 for all platforms.
 
 -  ``ARCH`` : Choose the target build architecture for TF-A. It can take either
    ``aarch64`` or ``aarch32`` as values. By default, it is defined to
@@ -97,6 +98,10 @@ Common build options
 -  ``BL32_KEY``: This option is used when ``GENERATE_COT=1``. It specifies a
    file that contains the BL32 private key in PEM format or a PKCS11 URI. If
    ``SAVE_KEYS=1``, only a file is accepted and it will be used to save the key.
+
+-  ``RMM``: This is an optional build option used when ``ENABLE_RME`` is set.
+   It specifies the path to RMM binary for the ``fip`` target. If the RMM option
+   is not specified, TF-A builds the TRP to load and run at R-EL2.
 
 -  ``BL33``: Path to BL33 image in the host file system. This is mandatory for
    ``fip`` target in case TF-A BL2 is used.
@@ -198,6 +203,13 @@ Common build options
 
    Note that Pointer Authentication is enabled for Non-secure world irrespective
    of the value of this flag if the CPU supports it.
+
+-  ``CTX_INCLUDE_SVE_REGS``: Boolean option that, when set to 1, will cause the
+   SVE registers to be included when saving and restoring the CPU context. Note
+   that this build option requires ``ENABLE_SVE_FOR_SWD`` to be enabled. In
+   general, it is recommended to perform SVE context management in lower ELs
+   and skip in EL3 due to the additional cost of maintaining large data
+   structures to track the SVE state. Hence, the default value is 0.
 
 -  ``DEBUG``: Chooses between a debug and release build. It can take either 0
    (release) or 1 (debug) as values. 0 is the default.
@@ -320,6 +332,12 @@ Common build options
    The flag can take values 0 to 2, to align with the ``ENABLE_FEAT``
    mechanism. Default value is ``0``.
 
+- ``ENABLE_FEAT_DEBUGV8P9``: Numeric value to enable ``FEAT_DEBUGV8P9``
+   extension which allows the ability to implement more than 16 breakpoints
+   and/or watchpoints. This feature is mandatory from v8.9 and is optional
+   from v8.8. This flag can take the values of 0 to 2, to align with the
+   ``ENABLE_FEAT`` mechanism. Default value is ``0``.
+
 -  ``ENABLE_FEAT_DIT``: Numeric value to enable ``FEAT_DIT`` (Data Independent
    Timing) extension. It allows setting the ``DIT`` bit of PSTATE in EL3.
    ``FEAT_DIT`` is a mandatory  architectural feature and is enabled from v8.4
@@ -337,6 +355,13 @@ Common build options
    feature allowing for access to the HDFGRTR_EL2 (Hypervisor Debug Fine-Grained
    Read Trap Register) during EL2 to EL3 context save/restore operations.
    Its a mandatory architectural feature and is enabled from v8.6 and upwards.
+   This flag can take the values 0 to 2, to align  with the ``ENABLE_FEAT``
+   mechanism. Default value is ``0``.
+
+-  ``ENABLE_FEAT_FGT2``: Numeric value to enable support for FGT2
+   (Fine Grain Traps 2) feature allowing for access to Fine-grained trap 2 registers
+   during  EL2 to EL3 context save/restore operations.
+   Its an optional architectural feature and is available from v8.8 and upwards.
    This flag can take the values 0 to 2, to align  with the ``ENABLE_FEAT``
    mechanism. Default value is ``0``.
 
@@ -430,6 +455,31 @@ Common build options
    the values 0 to 2, to align  with the ``ENABLE_FEAT`` mechanism.
    Default value is ``0``.
 
+-  ``ENABLE_FEAT_THE``: Numeric value to enable support for FEAT_THE
+   (Translation Hardening Extension) at EL2 and below, setting the bit
+   SCR_EL3.RCWMASKEn in EL3 to allow access to RCWMASK_EL1 and RCWSMASK_EL1
+   registers and context switch them.
+   Its an optional architectural feature and is available from v8.8 and upwards.
+   This flag can take the values 0 to 2, to align  with the ``ENABLE_FEAT``
+   mechanism. Default value is ``0``.
+
+-  ``ENABLE_FEAT_SCTLR2``: Numeric value to enable support for FEAT_SCTLR2
+   (Extension to SCTLR_ELx) at EL2 and below, setting the bit
+   SCR_EL3.SCTLR2En in EL3 to allow access to SCTLR2_ELx registers and
+   context switch them. This feature is OPTIONAL from Armv8.0 implementations
+   and mandatory in Armv8.9 implementations.
+   This flag can take the values 0 to 2, to align  with the ``ENABLE_FEAT``
+   mechanism. Default value is ``0``.
+
+-  ``ENABLE_FEAT_D128``: Numeric value to enable support for FEAT_D128
+   at EL2 and below, setting the bit SCT_EL3.D128En in EL3 to allow access to
+   128 bit version of system registers like PAR_EL1, TTBR0_EL1, TTBR1_EL1,
+   TTBR0_EL2, TTBR1_EL2, TTBR0_EL12, TTBR1_EL12 , VTTBR_EL2, RCWMASK_EL1, and
+   RCWSMASK_EL1. Its an optional architectural feature and is available from
+   9.3 and upwards.
+   This flag can take the values 0 to 2, to align  with the ``ENABLE_FEAT``
+   mechanism. Default value is ``0``.
+
 -  ``ENABLE_LTO``: Boolean option to enable Link Time Optimization (LTO)
    support in GCC for TF-A. This option is currently only supported for
    AArch64. Default is 0.
@@ -448,6 +498,11 @@ Common build options
    defaults to ``2`` since MPAM is enabled by default for NS world only.
    The flag is automatically disabled when the target
    architecture is AArch32.
+
+-  ``ENABLE_FEAT_LS64_ACCDATA``: Numeric value to enable access and save and
+   restore the ACCDATA_EL1 system register, at EL2 and below. This flag can
+   take the values 0 to 2, to align  with the ``ENABLE_FEAT`` mechanism.
+   Default value is ``0``.
 
 -  ``ENABLE_MPMM``: Boolean option to enable support for the Maximum Power
    Mitigation Mechanism supported by certain Arm cores, which allows the SoC
@@ -487,21 +542,26 @@ Common build options
 
 -  ``ENABLE_SVE_FOR_NS``: Numeric value to enable Scalable Vector Extension
    (SVE) for the Non-secure world only. SVE is an optional architectural feature
-   for AArch64. Note that when SVE is enabled for the Non-secure world, access
-   to SIMD and floating-point functionality from the Secure world is disabled by
-   default and controlled with ENABLE_SVE_FOR_SWD.
-   This is to avoid corruption of the Non-secure world data in the Z-registers
-   which are aliased by the SIMD and FP registers. The build option is not
-   compatible with the ``CTX_INCLUDE_FPREGS`` build option, and will raise an
-   assert on platforms where SVE is implemented and ``ENABLE_SVE_FOR_NS``
-   enabled.  This flag can take the values 0 to 2, to align with the
-   ``ENABLE_FEAT`` mechanism. At this time, this build option cannot be
-   used on systems that have SPM_MM enabled. The default is 1.
+   for AArch64. This flag can take the values 0 to 2, to align with the
+   ``ENABLE_FEAT`` mechanism. At this time, this build option cannot be used on
+   systems that have SPM_MM enabled. The default value is 2.
 
--  ``ENABLE_SVE_FOR_SWD``: Boolean option to enable SVE for the Secure world.
-   SVE is an optional architectural feature for AArch64. Note that this option
-   requires ENABLE_SVE_FOR_NS to be enabled. The default is 0 and it is
-   automatically disabled when the target architecture is AArch32.
+   Note that when SVE is enabled for the Non-secure world, access
+   to SVE, SIMD and floating-point functionality from the Secure world is
+   independently controlled by build option ``ENABLE_SVE_FOR_SWD``. When enabling
+   ``CTX_INCLUDE_FPREGS`` and ``ENABLE_SVE_FOR_NS`` together, it is mandatory to
+   enable ``CTX_INCLUDE_SVE_REGS``. This is to avoid corruption of the Non-secure
+   world data in the Z-registers which are aliased by the SIMD and FP registers.
+
+-  ``ENABLE_SVE_FOR_SWD``: Boolean option to enable SVE and FPU/SIMD functionality
+   for the Secure world. SVE is an optional architectural feature for AArch64.
+   The default is 0 and it is automatically disabled when the target architecture
+   is AArch32.
+
+   .. note::
+      This build flag requires ``ENABLE_SVE_FOR_NS`` to be enabled. When enabling
+      ``ENABLE_SVE_FOR_SWD``, a developer must carefully consider whether
+      ``CTX_INCLUDE_SVE_REGS`` is also needed.
 
 -  ``ENABLE_STACK_PROTECTOR``: String option to enable the stack protection
    checks in GCC. Allowed values are "all", "strong", "default" and "none". The
@@ -805,6 +865,21 @@ Common build options
    instead of the BL1 entrypoint. It can take the value 0 (CPU reset to BL1
    entrypoint) or 1 (CPU reset to SP_MIN entrypoint). The default value is 0.
 
+-  ``RME_GPT_BITLOCK_BLOCK``: This defines the block size (in number of 512MB
+-  blocks) covered by a single bit of the bitlock structure during RME GPT
+-  operations. The lower the block size, the better opportunity for
+-  parallelising GPT operations but at the cost of more bits being needed
+-  for the bitlock structure. This numeric parameter can take the values
+-  from 0 to 512 and must be a power of 2. The value of 0 is special and
+-  and it chooses a single spinlock for all GPT L1 table entries. Default
+-  value is 1 which corresponds to block size of 512MB per bit of bitlock
+-  structure.
+
+-  ``RME_GPT_MAX_BLOCK``: Numeric value in MB to define the maximum size of
+   supported contiguous blocks in GPT Library. This parameter can take the
+   values 0, 2, 32 and 512. Setting this value to 0 disables use of Contigious
+   descriptors. Default value is 512.
+
 -  ``ROT_KEY``: This option is used when ``GENERATE_COT=1``. It specifies a
    file that contains the ROT private key in PEM format or a PKCS11 URI and
    enforces public key hash generation. If ``SAVE_KEYS=1``, only a file is
@@ -851,6 +926,11 @@ Common build options
    provide definitions of ``BL2_NOLOAD_START`` and ``BL2_NOLOAD_LIMIT``. This
    flag is disabled by default and NOLOAD sections are placed in RAM immediately
    following the loaded firmware image.
+
+-  ``SEPARATE_SIMD_SECTION``: Setting this option to ``1`` allows the SIMD context
+    data structures to be put in a dedicated memory region as decided by platform
+    integrator. Default value is ``0`` which means the SIMD context is put in BSS
+    section of EL3 firmware.
 
 -  ``SMC_PCI_SUPPORT``: This option allows platforms to handle PCI configuration
    access requests via a standard SMCCC defined in `DEN0115`_. When combined with
@@ -1267,6 +1347,13 @@ Common build options
 -  ``ENABLE_RME``: Numeric value to enable support for the ARMv9 Realm
    Management Extension. This flag can take the values 0 to 2, to align with
    the ``ENABLE_FEAT`` mechanism. Default value is 0.
+
+-  ``RMMD_ENABLE_EL3_TOKEN_SIGN``: Numeric value to enable support for singing
+   realm attestation token signing requests in EL3. This flag can take the
+   values 0 and 1. The default value is ``0``. When set to ``1``, this option
+   enables additional RMMD SMCs to push and pop requests for signing to
+   EL3 along with platform hooks that must be implemented to service those
+   requests and responses.
 
 -  ``ENABLE_SME_FOR_NS``: Numeric value to enable Scalable Matrix Extension
    (SME), SVE, and FPU/SIMD for the non-secure world only. These features share
