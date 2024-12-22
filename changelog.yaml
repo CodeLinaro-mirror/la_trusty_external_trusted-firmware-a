@@ -104,8 +104,14 @@ subsections:
       - title: Extended Translation Control Register (FEAT_TCR2).
         scope: tcr2
 
+      - title: Fine-grained Traps 2 (FEAT_FGT2).
+        scope: fgt2
+
       - title: CPU feature / ID register handling in general
         scope: cpufeat
+
+      - title: Debug Extension (FEAT_Debugv8p9)
+        scope: debugv8p9
 
       - title: Guarded Control Stack (FEAT_GCS)
         scope: gcs
@@ -155,6 +161,18 @@ subsections:
       - title: DynamIQ Shared Unit (DSU)
         scope: dsu
 
+      - title: Extension to SCTLR_ELx (FEAT_SCTLR2)
+        scope: sctlr2
+
+        deprecated:
+          - feat_sctlr2
+
+      - title: 128-bit Translation Tables (FEAT_D128)
+        scope: d128
+
+      - title: Translation Hardening Extension (FEAT_THE)
+        scope: the
+
   - title: Platforms
     scope: platforms
 
@@ -176,6 +194,9 @@ subsections:
           - plat/arm
 
         subsections:
+          - title: Common
+            scope: common
+
           - title: A5DS
             scope: a5ds
 
@@ -241,8 +262,12 @@ subsections:
               - title: RD-N2
                 scope: rdn2
 
+              - title: RD-V3
+                scope: rdv3
+
                 deprecated:
                   - board/rdn2
+                  - rdfremont
 
             deprecated:
               - neoverse
@@ -262,6 +287,16 @@ subsections:
 
           - title: Corstone-1000
             scope: corstone-1000
+
+            deprecated:
+              - corstone1000
+
+          - title: Automotive RD
+            scope: automotive_rd
+
+            subsections:
+              - title: RD-1 AE
+                scope: rd1ae
 
       - title: Aspeed
         scope: aspeed
@@ -285,6 +320,9 @@ subsections:
 
           - title: HiKey960
             scope: hikey960
+
+          - title: Poplar
+            scope: poplar
 
       - title: Intel
         scope: intel
@@ -600,6 +638,9 @@ subsections:
           - title: RK3328
             scope: rk3328
 
+          - title: RK3588
+            scope: rk3588
+
       - title: Socionext
         scope: socionext
 
@@ -632,6 +673,10 @@ subsections:
 
           - title: STM32MP2
             scope: stm32mp2
+
+            subsections:
+              - title: STM32MP25
+                scope: stm32mp25
 
       - title: Texas Instruments
         scope: ti
@@ -674,6 +719,13 @@ subsections:
               - plat/zynqmp
               - plat/xilinx/zynqmp
 
+      - title: AMD
+        scope: amd
+
+        subsections:
+          - title: Versal Gen 2
+            scope: versal2
+
       - title: Nuvoton
         scope: nuvoton
 
@@ -706,6 +758,9 @@ subsections:
 
   - title: Services
     scope: services
+
+    deprecated:
+      - std_svc
 
     subsections:
       - title: FF-A
@@ -764,6 +819,28 @@ subsections:
       - title: ChromeOS
         scope: cros
 
+      - title: Secure Payload Dispatcher
+        scope: spd
+
+        subsections:
+          - title: OP-TEE
+            scope: optee
+
+            deprecated:
+              - lib/optee
+
+          - title: ProvenCore
+            scope: pncd
+
+          - title: Trusted Little Kernel
+            scope: tlkd
+
+          - title: Trusty
+            scope: trusty
+
+          - title: TSP
+            scope: tspd
+
   - title: Libraries
     scope: lib
 
@@ -789,17 +866,14 @@ subsections:
           - title: RAS
             scope: ras
 
+          - title: SIMD
+            scope: simd
+
       - title: FCONF
         scope: fconf
 
       - title: MPMM
         scope: mpmm
-
-      - title: OP-TEE
-        scope: optee
-
-        deprecated:
-          - lib/optee
 
       - title: PSCI
         scope: psci
@@ -873,6 +947,9 @@ subsections:
 
       - title: Console
         scope: console
+
+      - title: Delay Timer
+        scope: delay-timer
 
       - title: Generic Clock
         scope: clk
@@ -1136,6 +1213,9 @@ subsections:
           - title: TRDC
             scope: imx-trdc
 
+          - title: Clock
+            scope: nxp-clk
+
       - title: Renesas
         scope: renesas-drivers
 
@@ -1303,6 +1383,10 @@ subsections:
           - title: STM32MP2
             scope: stm32mp2-fdts
 
+            subsections:
+              - title: STM32MP25
+                scope: stm32mp25-fdts
+
       - title: PIE
         scope: pie
 
@@ -1383,6 +1467,7 @@ subsections:
           - git-hooks
 
   - title: Tools
+    scope: tools
 
     subsections:
       - title: STM32 Image
@@ -1403,6 +1488,9 @@ subsections:
       - title: Certificate Creation Tool
         scope: cert-create
 
+      - title: Firmware Encryption Tool
+        scope: encrypt-fw
+
       - title: Memory Mapping Tool
         scope: memmap
 
@@ -1411,6 +1499,22 @@ subsections:
 
       - title: Marvell Tools
         scope: marvell-tools
+
+      - title: Renesas Tools
+        scope: renesas-tools
+
+        subsections:
+          - title: R-Car Layout Tool
+            scope: rcar-layout
+
+          - title: R/ZG Layout Tool
+            scope: rzg-layout
+
+      - title: Transfer List Compiler
+        scope: tlc
+
+      - title: Chain of Trust device tree to C source file
+        scope: cot-dt2c
 
   - title: Dependencies
     scope: deps

@@ -134,6 +134,21 @@ static int spd_add_dt_node(void *fdt)
 	if (fdt_setprop_u32(fdt, offs, "interrupt-controller", 0))
 		return -1;
 
+#ifdef SPD_spmd
+	offs = fdt_add_subnode(fdt, root_offs, "trusty-ffa");
+	if (offs < 0)
+		return -1;
+	if (fdt_appendprop_string(fdt, offs, "compatible", "android,trusty-ffa-v1"))
+		return -1;
+
+	offs = fdt_add_subnode(fdt, offs, "trusty-core");
+	if (offs < 0)
+		return -1;
+	trusty_offs = offs;
+
+	if (fdt_appendprop_string(fdt, offs, "compatible", "android,trusty-core-v1"))
+		return -1;
+#else
 	offs = fdt_add_subnode(fdt, root_offs, "trusty");
 	if (offs < 0)
 		return -1;
@@ -141,6 +156,7 @@ static int spd_add_dt_node(void *fdt)
 
 	if (fdt_appendprop_string(fdt, offs, "compatible", "android,trusty-smc-v1"))
 		return -1;
+#endif
 	if (fdt_setprop_u32(fdt, offs, "ranges", 0))
 		return -1;
 	if (fdt_setprop_u32(fdt, offs, "#address-cells", 2))
@@ -391,7 +407,8 @@ static void bl2_plat_gpt_setup(void)
 	 * moment we use a 8KB table, which covers 1TB of RAM (40-bit PA).
 	 */
 	if (gpt_init_l0_tables(GPCCR_PPS_1TB, PLAT_QEMU_L0_GPT_BASE,
-			       PLAT_QEMU_L0_GPT_SIZE) < 0) {
+			       PLAT_QEMU_L0_GPT_SIZE +
+			       PLAT_QEMU_GPT_BITLOCK_SIZE) < 0) {
 		ERROR("gpt_init_l0_tables() failed!\n");
 		panic();
 	}
@@ -574,12 +591,20 @@ static int qemu_bl2_handle_post_image_load(unsigned int image_id)
 	case BL31_IMAGE_ID:
 		/*
 		 * arg0 is a bl_params_t reserved for bl31_early_platform_setup2
-		 * we just need arg1 and arg3 for BL31 to update th TL from S
+		 * we just need arg1 and arg3 for BL31 to update the TL from S
 		 * to NS memory before it exits
 		 */
-		bl_mem_params->ep_info.args.arg1 =
-			TRANSFER_LIST_SIGNATURE |
-			REGISTER_CONVENTION_VERSION_MASK;
+#ifdef __aarch64__
+		if (GET_RW(bl_mem_params->ep_info.spsr) == MODE_RW_64) {
+			bl_mem_params->ep_info.args.arg1 =
+				TRANSFER_LIST_HANDOFF_X1_VALUE(REGISTER_CONVENTION_VERSION);
+		} else
+#endif
+		{
+			bl_mem_params->ep_info.args.arg1 =
+				TRANSFER_LIST_HANDOFF_R1_VALUE(REGISTER_CONVENTION_VERSION);
+		}
+
 		bl_mem_params->ep_info.args.arg3 = (uintptr_t)bl2_tl;
 		break;
 #endif
