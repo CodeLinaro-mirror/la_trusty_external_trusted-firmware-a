@@ -150,8 +150,7 @@ exit:
  * of trust.
  */
 static int load_auth_image_recursive(unsigned int image_id,
-				    image_info_t *image_data,
-				    int is_parent_image)
+				    image_info_t *image_data)
 {
 	int rc;
 	unsigned int parent_id;
@@ -159,7 +158,7 @@ static int load_auth_image_recursive(unsigned int image_id,
 	/* Use recursion to authenticate parent images */
 	rc = auth_mod_get_parent_id(image_id, &parent_id);
 	if (rc == 0) {
-		rc = load_auth_image_recursive(parent_id, image_data, 1);
+		rc = load_auth_image_recursive(parent_id, image_data);
 		if (rc != 0) {
 			return rc;
 		}
@@ -193,7 +192,7 @@ static int load_auth_image_internal(unsigned int image_id,
 {
 #if TRUSTED_BOARD_BOOT
 	if (dyn_is_auth_disabled() == 0) {
-		return load_auth_image_recursive(image_id, image_data, 0);
+		return load_auth_image_recursive(image_id, image_data);
 	}
 #endif
 
@@ -211,18 +210,18 @@ int load_auth_image(unsigned int image_id, image_info_t *image_data)
 {
 	int err;
 
-/*
- * All firmware banks should be part of the same non-volatile storage as per
- * PSA FWU specification, hence don't check for any alternate boot source
- * when PSA FWU is enabled.
- */
-#if PSA_FWU_SUPPORT
-	err = load_auth_image_internal(image_id, image_data);
-#else
-	do {
+	if ((plat_try_img_ops == NULL) || (plat_try_img_ops->next_instance == NULL)) {
 		err = load_auth_image_internal(image_id, image_data);
-	} while ((err != 0) && (plat_try_next_boot_source() != 0));
-#endif /* PSA_FWU_SUPPORT */
+	} else {
+		do {
+			err = load_auth_image_internal(image_id, image_data);
+			if (err != 0) {
+				if (plat_try_img_ops->next_instance(image_id) != 0) {
+					return err;
+				}
+			}
+		} while (err != 0);
+	}
 
 	if (err == 0) {
 		/*

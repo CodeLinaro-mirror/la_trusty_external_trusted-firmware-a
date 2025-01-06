@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2019-2022, Xilinx, Inc. All rights reserved.
- * Copyright (c) 2022-2023, Advanced Micro Devices, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Advanced Micro Devices, Inc. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -36,6 +36,32 @@
 #define EVENT_CPU_PWRDWN	(4U)
 #define MBOX_SGI_SHARED_IPI	(7U)
 
+/**
+ * upper_32_bits - return bits 32-63 of a number
+ * @n: the number we're accessing
+ */
+#define upper_32_bits(n)	((uint32_t)((n) >> 32U))
+
+/**
+ * lower_32_bits - return bits 0-31 of a number
+ * @n: the number we're accessing
+ */
+#define lower_32_bits(n)	((uint32_t)((n) & 0xffffffffU))
+
+/**
+ * EXTRACT_SMC_ARGS - extracts 32-bit payloads from 64-bit SMC arguments
+ * @pm_arg: array of 32-bit payloads
+ * @x: array of 64-bit SMC arguments
+ */
+#define EXTRACT_ARGS(pm_arg, x)						\
+	for (uint32_t i = 0U; i < (PAYLOAD_ARG_CNT - 1U); i++) {	\
+		if ((i % 2U) != 0U) {					\
+			pm_arg[i] = lower_32_bits(x[(i / 2U) + 1U]);	\
+		} else {						\
+			pm_arg[i] = upper_32_bits(x[i / 2U]);		\
+		}							\
+	}
+
 /* 1 sec of wait timeout for secondary core down */
 #define PWRDWN_WAIT_TIMEOUT	(1000U)
 DEFINE_RENAME_SYSREG_RW_FUNCS(icc_asgi1r_el1, S3_0_C12_C11_6)
@@ -53,6 +79,10 @@ static void notify_os(void)
 static uint64_t cpu_pwrdwn_req_handler(uint32_t id, uint32_t flags,
 				       void *handle, void *cookie)
 {
+	(void)id;
+	(void)flags;
+	(void)handle;
+	(void)cookie;
 	uint32_t cpu_id = plat_my_core_pos();
 
 	VERBOSE("Powering down CPU %d\n", cpu_id);
@@ -97,6 +127,9 @@ void request_cpu_pwrdwn(void)
 static uint64_t ipi_fiq_handler(uint32_t id, uint32_t flags, void *handle,
 				void *cookie)
 {
+	(void)flags;
+	(void)handle;
+	(void)cookie;
 	uint32_t payload[4] = {0};
 	enum pm_ret_status ret;
 	int ipi_status, i;
@@ -149,6 +182,9 @@ static uint64_t ipi_fiq_handler(uint32_t id, uint32_t flags, void *handle,
 				}
 			}
 			notify_os();
+		} else if (payload[2] == EVENT_CPU_PWRDWN) {
+			request_cpu_pwrdwn();
+			(void)psci_cpu_off();
 		}
 		break;
 	case PM_RET_ERROR_INVALID_CRC:
@@ -240,6 +276,14 @@ int32_t pm_setup(void)
 	}
 
 	gicd_write_irouter(gicv3_driver_data->gicd_base, PLAT_VERSAL_IPI_IRQ, MODE);
+
+	/* Register for idle callback during force power down/restart */
+	ret = pm_register_notifier(primary_proc->node_id, EVENT_CPU_PWRDWN,
+				   0x0U, 0x1U, SECURE_FLAG);
+	if (ret != 0) {
+		WARN("BL31: registering idle callback for restart/force power down failed\n");
+	}
+
 	return ret;
 }
 
@@ -265,33 +309,9 @@ static uintptr_t eemi_for_compatibility(uint32_t api_id, uint32_t *pm_arg,
 
 	switch (api_id) {
 
-	case (uint32_t)PM_IOCTL:
-	{
-		uint32_t value = 0U;
-
-		ret = pm_api_ioctl(pm_arg[0], pm_arg[1], pm_arg[2],
-				   pm_arg[3], pm_arg[4],
-				   &value, security_flag);
-		if (ret == PM_RET_ERROR_NOTSUPPORTED)
-			return (uintptr_t)0;
-
-		SMC_RET1(handle, (uint64_t)ret | ((uint64_t)value) << 32U);
-	}
-
-	case (uint32_t)PM_QUERY_DATA:
-	{
-		uint32_t data[PAYLOAD_ARG_CNT] = { 0 };
-
-		ret = pm_query_data(pm_arg[0], pm_arg[1], pm_arg[2],
-				    pm_arg[3], data, security_flag);
-
-		SMC_RET2(handle, (uint64_t)ret | ((uint64_t)data[0] << 32U),
-			 (uint64_t)data[1] | ((uint64_t)data[2] << 32U));
-	}
-
 	case (uint32_t)PM_FEATURE_CHECK:
 	{
-		uint32_t result[PAYLOAD_ARG_CNT] = {0U};
+		uint32_t result[RET_PAYLOAD_ARG_CNT] = {0U};
 
 		ret = pm_feature_check(pm_arg[0], result, security_flag);
 		SMC_RET2(handle, (uint64_t)ret | ((uint64_t)result[0] << 32U),
@@ -380,6 +400,15 @@ static uintptr_t TF_A_specific_handler(uint32_t api_id, uint32_t *pm_arg,
 {
 	switch (api_id) {
 
+	case TF_A_FEATURE_CHECK:
+	{
+		enum pm_ret_status ret;
+		uint32_t result[PAYLOAD_ARG_CNT] = {0U};
+
+		ret = eemi_feature_check(pm_arg[0], result);
+		SMC_RET1(handle, (uint64_t)ret | ((uint64_t)result[0] << 32U));
+	}
+
 	case TF_A_PM_REGISTER_SGI:
 	{
 		int32_t ret;
@@ -437,7 +466,7 @@ static uintptr_t eemi_handler(uint32_t api_id, uint32_t *pm_arg,
 			      void *handle, uint32_t security_flag)
 {
 	enum pm_ret_status ret;
-	uint32_t buf[PAYLOAD_ARG_CNT] = {0};
+	uint32_t buf[RET_PAYLOAD_ARG_CNT] = {0};
 
 	ret = pm_handle_eemi_call(security_flag, api_id, pm_arg[0], pm_arg[1],
 				  pm_arg[2], pm_arg[3], pm_arg[4],
@@ -449,9 +478,9 @@ static uintptr_t eemi_handler(uint32_t api_id, uint32_t *pm_arg,
 	 * than other eemi calls.
 	 */
 	if (api_id == (uint32_t)PM_QUERY_DATA) {
-		if ((pm_arg[0] == XPM_QID_CLOCK_GET_NAME ||
-		    pm_arg[0] == XPM_QID_PINCTRL_GET_FUNCTION_NAME) &&
-		    ret == PM_RET_SUCCESS) {
+		if (((pm_arg[0] == XPM_QID_CLOCK_GET_NAME) ||
+		    (pm_arg[0] == XPM_QID_PINCTRL_GET_FUNCTION_NAME)) &&
+		    (ret == PM_RET_SUCCESS)) {
 			SMC_RET2(handle, (uint64_t)buf[0] | ((uint64_t)buf[1] << 32U),
 				(uint64_t)buf[2] | ((uint64_t)buf[3] << 32U));
 		}
@@ -459,6 +488,45 @@ static uintptr_t eemi_handler(uint32_t api_id, uint32_t *pm_arg,
 
 	SMC_RET2(handle, (uint64_t)ret | ((uint64_t)buf[0] << 32U),
 		 (uint64_t)buf[1] | ((uint64_t)buf[2] << 32U));
+}
+
+/**
+ * eemi_api_handler() - Prepare EEMI payload and perform IPI transaction.
+ * @api_id: identifier for the API being called.
+ * @pm_arg: pointer to the argument data for the API call.
+ * @handle: Pointer to caller's context structure.
+ * @security_flag: SECURE_FLAG or NON_SECURE_FLAG.
+ *
+ * EEMI - Embedded Energy Management Interface is AMD-Xilinx proprietary
+ * protocol to allow communication between power management controller and
+ * different processing clusters.
+ *
+ * This handler prepares EEMI protocol payload received from kernel and performs
+ * IPI transaction.
+ *
+ * Return: If EEMI API found then, uintptr_t type address, else 0
+ */
+static uintptr_t eemi_api_handler(uint32_t api_id, const uint32_t *pm_arg,
+				  void *handle, uint32_t security_flag)
+{
+	enum pm_ret_status ret;
+	uint32_t buf[RET_PAYLOAD_ARG_CNT] = {0U};
+	uint32_t payload[PAYLOAD_ARG_CNT] = {0U};
+	uint32_t module_id;
+
+	module_id = (api_id & MODULE_ID_MASK) >> 8U;
+
+	PM_PACK_PAYLOAD7(payload, module_id, security_flag, api_id,
+			 pm_arg[0], pm_arg[1], pm_arg[2], pm_arg[3],
+			 pm_arg[4], pm_arg[5]);
+
+	ret = pm_ipi_send_sync(primary_proc, payload, (uint32_t *)buf,
+			       RET_PAYLOAD_ARG_CNT);
+
+	SMC_RET4(handle, (uint64_t)ret | ((uint64_t)buf[0] << 32U),
+		 (uint64_t)buf[1] | ((uint64_t)buf[2] << 32U),
+		 (uint64_t)buf[3] | ((uint64_t)buf[4] << 32U),
+		 (uint64_t)buf[5]);
 }
 
 /**
@@ -485,11 +553,13 @@ static uintptr_t eemi_handler(uint32_t api_id, uint32_t *pm_arg,
 uint64_t pm_smc_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2, uint64_t x3,
 			uint64_t x4, const void *cookie, void *handle, uint64_t flags)
 {
+	(void)cookie;
 	uintptr_t ret;
 	uint32_t pm_arg[PAYLOAD_ARG_CNT] = {0};
 	uint32_t security_flag = NON_SECURE_FLAG;
 	uint32_t api_id;
 	bool status = false, status_tmp = false;
+	const uint64_t x[4] = {x1, x2, x3, x4};
 
 	/* Handle case where PM wasn't initialized properly */
 	if (pm_up == false) {
@@ -505,6 +575,14 @@ uint64_t pm_smc_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2, uint64_t x3,
 	SECURE_REDUNDANT_CALL(status, status_tmp, is_caller_secure, flags);
 	if ((status != false) && (status_tmp != false)) {
 		security_flag = SECURE_FLAG;
+	}
+
+	if ((smc_fid & FUNCID_NUM_MASK) == PASS_THROUGH_FW_CMD_ID) {
+		api_id = lower_32_bits(x[0]);
+
+		EXTRACT_ARGS(pm_arg, x);
+
+		return eemi_api_handler(api_id, pm_arg, handle, security_flag);
 	}
 
 	pm_arg[0] = (uint32_t)x1;
