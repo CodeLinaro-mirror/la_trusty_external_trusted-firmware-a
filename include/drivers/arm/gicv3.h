@@ -150,6 +150,7 @@
 /* GICD_TYPER shifts and masks */
 #define	TYPER_ESPI		U(1 << 8)
 #define	TYPER_DVIS		U(1 << 18)
+#define	TYPER_LPIS		U(1 << 17)
 #define	TYPER_ESPI_RANGE_MASK	U(0x1f)
 #define	TYPER_ESPI_RANGE_SHIFT	U(27)
 #define	TYPER_ESPI_RANGE	U(TYPER_ESPI_MASK << TYPER_ESPI_SHIFT)
@@ -340,7 +341,7 @@
 
 /* GITS_CTLR bit definitions */
 #define GITS_CTLR_ENABLED_BIT		BIT_32(0)
-#define GITS_CTLR_QUIESCENT_BIT		BIT_32(1)
+#define GITS_CTLR_QUIESCENT_BIT		BIT_32(31)
 
 #define GITS_TYPER_VSGI			BIT_64(39)
 
