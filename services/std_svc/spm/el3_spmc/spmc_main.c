@@ -2265,6 +2265,7 @@ void spmc_populate_attrs(spmc_manifest_attribute_t *spmc_attrs)
 	spmc_attrs->minor_version = FFA_VERSION_MINOR;
 	spmc_attrs->exec_state = MODE_RW_64;
 	spmc_attrs->spmc_id = FFA_SPMC_ID;
+	spmc_attrs->sp_ffa_version = spmc_get_current_sp_ctx()->ffa_version;
 }
 
 /*******************************************************************************
