@@ -75,6 +75,8 @@
  */
 #if CTX_INCLUDE_FPREGS
 func fpregs_context_save
+.arch_extension fp
+	/* Temporarily enable floating point */
 	stp	q0, q1, [x0], #32
 	stp	q2, q3, [x0], #32
 	stp	q4, q5, [x0], #32
@@ -96,6 +98,7 @@ func fpregs_context_save
 	# because the macro use CTX_SIMD_* offsets from x0
 	sub	x0, x0, #(16 * 32)
 	fpregs_state_save x0, x9
+.arch_extension nofp
 
 	ret
 endfunc fpregs_context_save
@@ -115,6 +118,8 @@ endfunc fpregs_context_save
  * ------------------------------------------------------------------
  */
 func fpregs_context_restore
+.arch_extension fp
+	/* Temporarily enable floating point */
 	ldp	q0, q1, [x0], #32
 	ldp	q2, q3, [x0], #32
 	ldp	q4, q5, [x0], #32
@@ -136,6 +141,7 @@ func fpregs_context_restore
 	# because the macro use CTX_SIMD_* offsets from x0
 	sub	x0, x0, #(16 * 32)
 	fpregs_state_restore x0, x9
+.arch_extension nofp
 
 	ret
 endfunc fpregs_context_restore
