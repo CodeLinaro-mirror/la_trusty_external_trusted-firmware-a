@@ -210,6 +210,8 @@
 #define FFA_PARTITION_INDIRECT_MSG	U(1 << 2)
 #define FFA_PARTITION_VM_CREATED	U(1 << 6)
 #define FFA_PARTITION_VM_DESTROYED	U(1 << 7)
+#define FFA_PARTITION_DIRECT_REQ2_RECV	U(1 << 9)
+#define FFA_PARTITION_DIRECT_REQ2_SEND	U(1 << 10)
 
 /*
  * "vm-availability-messages" values.
