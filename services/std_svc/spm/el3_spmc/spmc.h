@@ -134,6 +134,13 @@ struct sp_exec_ctx {
 
 	/* Track the source partition ID to validate a direct response. */
 	uint16_t dir_req_origin_id;
+
+	/* Track direct message function id to validate a direct response. */
+	uint16_t dir_req_funcid;
+};
+
+struct ffa_uuid {
+	uint32_t uuid[4];
 };
 
 /*
@@ -153,8 +160,11 @@ struct secure_partition_desc {
 	/* Runtime EL. */
 	enum sp_runtime_el runtime_el;
 
-	/* Partition UUID. */
-	uint32_t uuid[4];
+	/* Partition UUID array. */
+	struct ffa_uuid uuid_array[SPMC_AT_EL3_PARTITION_MAX_UUIDS];
+
+	/* Number of UUIDs in uuid array. */
+	int num_uuids;
 
 	/* Partition Properties. */
 	uint32_t properties;
