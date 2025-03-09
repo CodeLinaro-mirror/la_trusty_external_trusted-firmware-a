@@ -968,6 +968,8 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 		    (!is_spmc_at_el3() && (ctx->state == SPMC_STATE_RESET))) {
 			ret = FFA_ERROR_NOT_SUPPORTED;
 		} else if (!secure_origin) {
+			nonsecure_ffa_version = input_version;
+
 			if (is_spmc_at_el3()) {
 				/*
 				 * Forward the call directly to the EL3 SPMC, if
@@ -981,8 +983,6 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 
 			gp_regs_t *gpregs = get_gpregs_ctx(&ctx->cpu_ctx);
 			uint64_t rc;
-
-			nonsecure_ffa_version = input_version;
 
 			if (spmc_attrs.major_version == 1 &&
 			    spmc_attrs.minor_version == 0) {
