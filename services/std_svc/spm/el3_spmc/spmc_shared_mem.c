@@ -691,7 +691,7 @@ spmc_validate_mtd_start(struct ffa_mtd *desc, uint32_t ffa_version,
 	/* Determine the appropriate minimum descriptor size. */
 	if (ffa_version == MAKE_FFA_VERSION(1, 0)) {
 		min_desc_size = sizeof(struct ffa_mtd_v1_0);
-	} else if (ffa_version == MAKE_FFA_VERSION(1, 1)) {
+	} else if (ffa_version >= MAKE_FFA_VERSION(1, 1)) {
 		min_desc_size = sizeof(struct ffa_mtd);
 	} else {
 		return FFA_ERROR_INVALID_PARAMETER;
@@ -1215,7 +1215,7 @@ long spmc_ffa_mem_send(uint32_t smc_fid,
 
 	if (ffa_version == MAKE_FFA_VERSION(1, 0)) {
 		min_desc_size = sizeof(struct ffa_mtd_v1_0);
-	} else if (ffa_version == MAKE_FFA_VERSION(1, 1)) {
+	} else if (ffa_version >= MAKE_FFA_VERSION(1, 1)) {
 		min_desc_size = sizeof(struct ffa_mtd);
 	} else {
 		WARN("%s: bad FF-A version.\n", __func__);

@@ -1184,11 +1184,11 @@ static uint64_t ffa_features_retrieve_request(bool secure_origin,
 	} else {
 		struct secure_partition_desc *sp = spmc_get_current_sp_ctx();
 		/*
-		 * If v1.1 the NS bit must be set otherwise it is an invalid
-		 * call. If v1.0 check and store whether the SP has requested
-		 * the use of the NS bit.
+		 * If v1.1 or higher the NS bit must be set otherwise it is
+		 * an invalid call. If v1.0 check and store whether the SP
+		 * has requested the use of the NS bit.
 		 */
-		if (sp->ffa_version == MAKE_FFA_VERSION(1, 1)) {
+		if (sp->ffa_version >= MAKE_FFA_VERSION(1, 1)) {
 			if ((input_properties &
 			     FFA_FEATURES_RET_REQ_NS_BIT) == 0U) {
 				return spmc_ffa_error_return(handle,
@@ -1913,6 +1913,31 @@ static int sp_manifest_parse(void *sp_manifest, int offset,
 	sp->properties = config_32;
 
 	ret = fdt_read_uint32(sp_manifest, node,
+			      "vm-availability-messages", &config_32);
+	if (ret != 0) {
+		WARN("Missing VM availability messaging.\n");
+	} else if ((sp->properties & FFA_PARTITION_DIRECT_REQ_RECV) == 0) {
+		ERROR("VM availability messaging requested without "
+		      "direct message receive support.\n");
+		return -EINVAL;
+	} else {
+		/* Validate this entry. */
+		if ((config_32 & ~(FFA_VM_AVAILABILITY_CREATED |
+				  FFA_VM_AVAILABILITY_DESTROYED)) != 0U) {
+			WARN("Invalid VM availability messaging (0x%x)\n",
+			     config_32);
+			return -EINVAL;
+		}
+
+		if ((config_32 & FFA_VM_AVAILABILITY_CREATED) != 0U) {
+			sp->properties |= FFA_PARTITION_VM_CREATED;
+		}
+		if ((config_32 & FFA_VM_AVAILABILITY_DESTROYED) != 0U) {
+			sp->properties |= FFA_PARTITION_VM_DESTROYED;
+		}
+	}
+
+	ret = fdt_read_uint32(sp_manifest, node,
 			      "execution-ctx-count", &config_32);
 
 	if (ret != 0) {
@@ -2240,6 +2265,7 @@ void spmc_populate_attrs(spmc_manifest_attribute_t *spmc_attrs)
 	spmc_attrs->minor_version = FFA_VERSION_MINOR;
 	spmc_attrs->exec_state = MODE_RW_64;
 	spmc_attrs->spmc_id = FFA_SPMC_ID;
+	spmc_attrs->sp_ffa_version = spmc_get_current_sp_ctx()->ffa_version;
 }
 
 /*******************************************************************************
