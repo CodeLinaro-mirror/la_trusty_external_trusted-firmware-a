@@ -73,6 +73,7 @@ BL31_SOURCES		+=	${QEMU_CPU_LIBS}				\
 				plat/common/plat_psci_common.c			\
 				${PLAT_QEMU_COMMON_PATH}/aarch64/plat_helpers.S	\
 				${PLAT_QEMU_COMMON_PATH}/qemu_bl31_setup.c	\
+				${PLAT_QEMU_COMMON_PATH}/qemu_trng.c		\
 				common/fdt_fixup.c				\
 				${QEMU_GIC_SOURCES}
 
@@ -110,6 +111,7 @@ ENABLE_TRF_FOR_NS	:=	2
 
 # 8.5
 ENABLE_FEAT_RNG		:=	2
+TRNG_SUPPORT		:=	1
 # TF-A currently does not do dynamic detection of FEAT_SB.
 # Compiler puts SB instruction when it is enabled.
 ENABLE_FEAT_SB		:=	0
