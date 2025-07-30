@@ -86,8 +86,6 @@ static int spd_add_dt_node(void *fdt)
 {
 	int offs, trusty_offs, root_offs;
 	int gic, ipi;
-	int len;
-	const uint32_t *prop;
 
 	if (fdt_path_offset(fdt, "/trusty") >= 0) {
 		WARN("Trusty Device Tree node already exists!\n");
@@ -234,18 +232,6 @@ static int spd_add_dt_node(void *fdt)
 	if (offs < 0)
 		return -1;
 	if (fdt_appendprop_string(fdt, offs, "compatible", "android,trusty-virtio-v1"))
-		return -1;
-
-	offs = fdt_node_offset_by_compatible(fdt, -1, "arm,armv8-timer");
-	if (offs < 0)
-		offs = fdt_node_offset_by_compatible(fdt, -1, "arm,armv7-timer");
-	if (offs < 0)
-		return -1;
-
-	prop = fdt_getprop(fdt, offs, "interrupts", &len);
-	if (fdt_setprop_inplace_namelen_partial(fdt, offs, "interrupts",
-	                                        strlen("interrupts"), 0,
-	                                        prop + len / 4 / 2, len / 4))
 		return -1;
 
 	return 0;
