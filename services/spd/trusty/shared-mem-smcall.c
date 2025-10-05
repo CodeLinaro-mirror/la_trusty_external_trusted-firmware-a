@@ -765,6 +765,11 @@ static int trusty_ffa_mem_reclaim(struct trusty_shmem_client_state *client,
 	if (obj->in_use) {
 		return -EACCES;
 	}
+	if (obj->desc_filled != obj->desc_size) {
+		NOTICE("%s: incomplete object desc filled %zu < size %zu\n", __func__,
+			obj->desc_filled, obj->desc_size);
+		return -EINVAL;
+	}
 
 	ret = plat_mem_set_shared(&obj->desc, false);
 	if (ret) {
