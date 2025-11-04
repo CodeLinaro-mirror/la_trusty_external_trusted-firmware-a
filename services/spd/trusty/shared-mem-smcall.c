@@ -1028,6 +1028,7 @@ static int trusty_ffa_features(struct trusty_shmem_client_state *client,
 	case FFA_VERSION:
 	case FFA_FEATURES:
 	case FFA_RXTX_UNMAP:
+	case FFA_RX_RELEASE:
 	case FFA_ID_GET:
 	case FFA_MEM_RETRIEVE_RESP:
 	case FFA_MEM_FRAG_RX:
