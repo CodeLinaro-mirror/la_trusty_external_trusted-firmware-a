@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2024, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2025, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -52,30 +52,22 @@ CASSERT(BL2_BASE >= ARM_FW_CONFIG_LIMIT, assert_bl2_base_overflows);
 #pragma weak bl2_plat_arch_setup
 #pragma weak bl2_plat_sec_mem_layout
 
-#if ENABLE_RME
 #define MAP_BL2_TOTAL		MAP_REGION_FLAT(			\
 					bl2_tzram_layout.total_base,	\
 					bl2_tzram_layout.total_size,	\
-					MT_MEMORY | MT_RW | MT_ROOT)
-#else
-#define MAP_BL2_TOTAL		MAP_REGION_FLAT(			\
-					bl2_tzram_layout.total_base,	\
-					bl2_tzram_layout.total_size,	\
-					MT_MEMORY | MT_RW | MT_SECURE)
-#endif /* ENABLE_RME */
+					MT_MEMORY | MT_RW | EL3_PAS)
 
 #pragma weak arm_bl2_plat_handle_post_image_load
 
-static struct transfer_list_header *secure_tl __unused;
-static struct transfer_list_header *ns_tl __unused;
+struct transfer_list_header *secure_tl __unused;
 
 /*******************************************************************************
  * BL1 has passed the extents of the trusted SRAM that should be visible to BL2
  * in x0. This memory layout is sitting at the base of the free trusted SRAM.
  * Copy it to a safe location before its reclaimed by later BL2 functionality.
  ******************************************************************************/
-void arm_bl2_early_platform_setup(uintptr_t fw_config,
-				  struct meminfo *mem_layout)
+void arm_bl2_early_platform_setup(u_register_t arg0, u_register_t arg1,
+				  u_register_t arg2, u_register_t arg3)
 {
 	struct transfer_list_entry *te __unused;
 	int __maybe_unused ret;
@@ -84,20 +76,19 @@ void arm_bl2_early_platform_setup(uintptr_t fw_config,
 	arm_console_boot_init();
 
 #if TRANSFER_LIST
-	// TODO: modify the prototype of this function fw_config != bl2_tl
-	secure_tl = (struct transfer_list_header *)fw_config;
+	secure_tl = (struct transfer_list_header *)arg3;
 
-	te = transfer_list_find(secure_tl, TL_TAG_SRAM_LAYOUT64);
+	te = transfer_list_find(secure_tl, TL_TAG_SRAM_LAYOUT);
 	assert(te != NULL);
 
 	bl2_tzram_layout = *(meminfo_t *)transfer_list_entry_data(te);
 	transfer_list_rem(secure_tl, te);
 #else
-	config_base = fw_config;
+	config_base = (uintptr_t)arg0;
 
 	/* Setup the BL2 memory layout */
-	bl2_tzram_layout = *mem_layout;
-#endif
+	bl2_tzram_layout = *(meminfo_t *)arg1;
+#endif /* TRANSFER_LIST */
 
 	/* Initialise the IO layer and register platform IO devices */
 	plat_arm_io_setup();
@@ -113,9 +104,10 @@ void arm_bl2_early_platform_setup(uintptr_t fw_config,
 #endif /* ARM_GPT_SUPPORT */
 }
 
-void bl2_early_platform_setup2(u_register_t arg0, u_register_t arg1, u_register_t arg2, u_register_t arg3)
+void bl2_early_platform_setup2(u_register_t arg0, u_register_t arg1,
+			       u_register_t arg2, u_register_t arg3)
 {
-	arm_bl2_early_platform_setup((uintptr_t)arg0, (meminfo_t *)arg1);
+	arm_bl2_early_platform_setup(arg0, arg1, arg2, arg3);
 
 	generic_delay_timer_init();
 }
@@ -129,15 +121,14 @@ void bl2_plat_preload_setup(void)
 #if TRANSFER_LIST
 /* Assume the secure TL hasn't been initialised if BL2 is running at EL3. */
 #if RESET_TO_BL2
-	secure_tl = transfer_list_init((void *)PLAT_ARM_EL3_FW_HANDOFF_BASE,
-				       PLAT_ARM_FW_HANDOFF_SIZE);
+	secure_tl = transfer_list_ensure((void *)PLAT_ARM_EL3_FW_HANDOFF_BASE,
+					 PLAT_ARM_FW_HANDOFF_SIZE);
 
 	if (secure_tl == NULL) {
 		ERROR("Secure transfer list initialisation failed!\n");
 		panic();
 	}
 #endif
-
 	arm_transfer_list_dyn_cfg_init(secure_tl);
 #else
 #if ARM_FW_CONFIG_LOAD_ENABLE
@@ -232,11 +223,10 @@ void bl2_plat_arch_setup(void)
 	arm_bl2_plat_arch_setup();
 
 #if TRANSFER_LIST
-	te = transfer_list_find(secure_tl, TL_TAG_TB_FW_CONFIG);
-	assert(te != NULL);
-
-	fconf_populate("TB_FW", (uintptr_t)transfer_list_entry_data(te));
+#if CRYPTO_SUPPORT
+	te = arm_transfer_list_set_heap_info(secure_tl);
 	transfer_list_rem(secure_tl, te);
+#endif /* CRYPTO_SUPPORT */
 #else
 	/* Fill the properties struct with the info from the config dtb */
 	fconf_populate("FW_CONFIG", config_base);
@@ -246,7 +236,7 @@ void bl2_plat_arch_setup(void)
 	assert(tb_fw_config_info != NULL);
 
 	fconf_populate("TB_FW", tb_fw_config_info->config_addr);
-#endif
+#endif /* TRANSFER_LIST */
 }
 
 int arm_bl2_handle_post_image_load(unsigned int image_id)
@@ -330,6 +320,13 @@ int arm_bl2_plat_handle_post_image_load(unsigned int image_id)
 void arm_bl2_setup_next_ep_info(bl_mem_params_node_t *next_param_node)
 {
 	entry_point_info_t *ep __unused;
+
+	/*
+	 * Information might have been added to the TL before this (i.e. event log)
+	 * make sure the checksum is up to date.
+	 */
+	transfer_list_update_checksum(secure_tl);
+
 	ep = transfer_list_set_handoff_args(secure_tl,
 					    &next_param_node->ep_info);
 	assert(ep != NULL);

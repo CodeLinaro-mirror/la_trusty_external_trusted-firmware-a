@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2024, Arm Limited. All rights reserved.
+ * Copyright (c) 2020-2025, Arm Limited. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -57,8 +57,8 @@
 	<< FFA_MSG_SEND_ATTRS_BLK_SHIFT)
 
 /* Defines for FF-A framework messages exchanged using direct messages. */
-#define FFA_FWK_MSG_BIT		BIT(31)
-#define FFA_FWK_MSG_MASK	0xFF
+#define FFA_FWK_MSG_BIT		BIT_32(31)
+#define FFA_FWK_MSG_MASK	U(0xFF)
 #define FFA_FWK_MSG_PSCI	U(0x0)
 
 /* Defines for FF-A power management messages framework messages. */
@@ -173,8 +173,8 @@
 #define FFA_SPM_ID_GET		FFA_FID(SMC_32, FFA_FNUM_SPM_ID_GET)
 #define FFA_NORMAL_WORLD_RESUME	FFA_FID(SMC_32, FFA_FNUM_NORMAL_WORLD_RESUME)
 #define FFA_EL3_INTR_HANDLE	FFA_FID(SMC_32, FFA_FNUM_EL3_INTR_HANDLE)
-#define FFA_MEM_PERM_GET	FFA_FID(SMC_32, FFA_FNUM_MEM_PERM_GET)
-#define FFA_MEM_PERM_SET	FFA_FID(SMC_32, FFA_FNUM_MEM_PERM_SET)
+#define FFA_MEM_PERM_GET_SMC32	FFA_FID(SMC_32, FFA_FNUM_MEM_PERM_GET)
+#define FFA_MEM_PERM_SET_SMC32	FFA_FID(SMC_32, FFA_FNUM_MEM_PERM_SET)
 #define FFA_CONSOLE_LOG_SMC32 FFA_FID(SMC_32, FFA_FNUM_CONSOLE_LOG)
 
 /* FFA SMC64 FIDs */
@@ -201,6 +201,8 @@
 	FFA_FID(SMC_64, FFA_FNUM_MSG_SEND_DIRECT_REQ2)
 #define FFA_MSG_SEND_DIRECT_RESP2_SMC64	\
 	FFA_FID(SMC_64, FFA_FNUM_MSG_SEND_DIRECT_RESP2)
+#define FFA_MEM_PERM_GET_SMC64	FFA_FID(SMC_64, FFA_FNUM_MEM_PERM_GET)
+#define FFA_MEM_PERM_SET_SMC64	FFA_FID(SMC_64, FFA_FNUM_MEM_PERM_SET)
 
 /*
  * FF-A partition properties values.

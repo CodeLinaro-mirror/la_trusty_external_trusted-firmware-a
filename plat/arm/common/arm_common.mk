@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2015-2024, Arm Limited and Contributors. All rights reserved.
+# Copyright (c) 2015-2025, Arm Limited and Contributors. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -107,9 +107,6 @@ ifeq (${ARM_LINUX_KERNEL_AS_BL33},1)
     ifneq (${RESET_TO_SP_MIN},1)
       $(error ARM_LINUX_KERNEL_AS_BL33 is only available if RESET_TO_SP_MIN=1.)
     endif
-  endif
-  ifndef PRELOADED_BL33_BASE
-    $(error PRELOADED_BL33_BASE must be set if ARM_LINUX_KERNEL_AS_BL33 is used.)
   endif
   ifeq (${RESET_TO_BL31},1)
     ifndef ARM_PRELOADED_DTB_BASE
@@ -227,13 +224,8 @@ ifeq (${ARM_XLAT_TABLES_LIB_V1}, 1)
 PLAT_BL_COMMON_SOURCES 	+=	lib/xlat_tables/xlat_tables_common.c	      \
 				lib/xlat_tables/${ARCH}/xlat_tables.c
 else
-ifeq (${XLAT_MPU_LIB_V1}, 1)
-include lib/xlat_mpu/xlat_mpu.mk
-PLAT_BL_COMMON_SOURCES	+=	${XLAT_MPU_LIB_V1_SRCS}
-else
 include lib/xlat_tables_v2/xlat_tables.mk
 PLAT_BL_COMMON_SOURCES	+=      ${XLAT_TABLES_LIB_SRCS}
-endif
 endif
 
 ARM_IO_SOURCES		+=	plat/arm/common/arm_io_storage.c		\
@@ -314,6 +306,7 @@ BL31_SOURCES		+=	plat/arm/common/arm_bl31_setup.c		\
 				plat/common/plat_psci_common.c
 
 ifeq (${TRANSFER_LIST}, 1)
+	include lib/transfer_list/transfer_list.mk
 	TRANSFER_LIST_SOURCES += plat/arm/common/arm_transfer_list.c
 endif
 
@@ -363,7 +356,7 @@ BL31_SOURCES		+=	lib/extensions/ras/std_err_record.c		\
 endif
 
 # Pointer Authentication sources
-ifeq (${ENABLE_PAUTH}, 1)
+ifeq ($(BRANCH_PROTECTION),$(filter $(BRANCH_PROTECTION),1 2 3 5))
 PLAT_BL_COMMON_SOURCES	+=	plat/arm/common/aarch64/arm_pauth.c
 endif
 
@@ -382,19 +375,22 @@ endif
 ifneq ($(filter 1,${MEASURED_BOOT} ${TRUSTED_BOARD_BOOT} ${DRTM_SUPPORT}),)
     PLAT_INCLUDES		+=	-Iplat/arm/common	\
 					-Iinclude/drivers/auth/mbedtls
-    # Specify mbed TLS configuration file
-    ifeq (${PSA_CRYPTO},1)
-      MBEDTLS_CONFIG_FILE	?=	"<plat_arm_psa_mbedtls_config.h>"
+    ifeq (${HASH_ALG}, sha512)
+      ARM_ROTPK_HASH_LEN	:=	64
+    else ifeq (${HASH_ALG}, sha384)
+      ARM_ROTPK_HASH_LEN	:=	48
     else
-      MBEDTLS_CONFIG_FILE	?=	"<plat_arm_mbedtls_config.h>"
+      ARM_ROTPK_HASH_LEN	:=	32
     endif
+    $(eval $(call add_define,ARM_ROTPK_HASH_LEN))
 endif
 
 ifneq (${TRUSTED_BOARD_BOOT},0)
 
     # Include common TBB sources
-    AUTH_SOURCES 	:= 	drivers/auth/auth_mod.c	\
-				drivers/auth/img_parser_mod.c
+    AUTH_MK := drivers/auth/auth.mk
+    $(info Including ${AUTH_MK})
+    include ${AUTH_MK}
 
     # Include the selected chain of trust sources.
     ifeq (${COT},tbbr)
@@ -461,6 +457,9 @@ ifneq ($(filter 1,${MEASURED_BOOT} ${DRTM_SUPPORT}),)
     ifeq (${MEASURED_BOOT},1)
          BL1_SOURCES		+= 	${EVENT_LOG_SOURCES}
          BL2_SOURCES		+= 	${EVENT_LOG_SOURCES}
+         ifeq (${SPD_tspd},1)
+             BL32_SOURCES		+= 	${EVENT_LOG_SOURCES}
+         endif
     endif
 
     ifeq (${DRTM_SUPPORT},1)
@@ -468,12 +467,22 @@ ifneq ($(filter 1,${MEASURED_BOOT} ${DRTM_SUPPORT}),)
     endif
 endif
 
-ifneq ($(filter 1,${MEASURED_BOOT} ${TRUSTED_BOARD_BOOT} ${DRTM_SUPPORT}),)
-    CRYPTO_SOURCES	:=	drivers/auth/crypto_mod.c 	\
-				lib/fconf/fconf_tbbr_getter.c
+ifneq ($(filter 1,${MEASURED_BOOT} ${DRTM_SUPPORT}),)
+ifeq (${TRUSTED_BOARD_BOOT},0)
+    CRYPTO_SOURCES	:=	drivers/auth/crypto_mod.c
     BL1_SOURCES		+=	${CRYPTO_SOURCES}
     BL2_SOURCES		+=	${CRYPTO_SOURCES}
+endif
+endif
+
+ifeq (${DRTM_SUPPORT},1)
     BL31_SOURCES	+=	drivers/auth/crypto_mod.c
+endif
+
+ifneq ($(filter 1,${MEASURED_BOOT} ${TRUSTED_BOARD_BOOT} ${DRTM_SUPPORT}),)
+    FCONF_TBB_SOURCES	:=	lib/fconf/fconf_tbbr_getter.c
+    BL1_SOURCES		+=	${FCONF_TBB_SOURCES}
+    BL2_SOURCES		+=	${FCONF_TBB_SOURCES}
 
     # We expect to locate the *.mk files under the directories specified below
     CRYPTO_LIB_MK := drivers/auth/mbedtls/mbedtls_crypto.mk
@@ -503,7 +512,7 @@ ifneq ($(COTDTPATH),)
 		$(q)$($(ARCH)-cpp) $(cot-dt-cpp-flags)
 
         $(BUILD_PLAT)/$(COTDTPATH:.dtsi=.c): $(BUILD_PLAT)/$(COTDTPATH:.dtsi=.dts) | $$(@D)/
-		$(if $(host-poetry),$(q)poetry -q install)
+		$(if $(host-poetry),$(q)poetry -q install --no-root)
 		$(q)$(if $(host-poetry),poetry run )cot-dt2c convert-to-c $< $@
 
         BL2_SOURCES += $(BUILD_PLAT)/$(COTDTPATH:.dtsi=.c)

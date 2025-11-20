@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018-2020, Arm Limited and Contributors. All rights reserved.
  * Copyright (c) 2021-2022, Xilinx, Inc. All rights reserved.
- * Copyright (c) 2022-2024, Advanced Micro Devices, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Advanced Micro Devices, Inc. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -35,20 +35,22 @@ static void zynqmp_cpu_standby(plat_local_state_t cpu_state)
 
 static int32_t zynqmp_nopmu_pwr_domain_on(u_register_t mpidr)
 {
-	uint32_t cpu_id = plat_core_pos_by_mpidr(mpidr) & ~BIT(MPIDR_MT_BIT);
-	uint32_t cpu = cpu_id % PLATFORM_CORE_COUNT_PER_CLUSTER;
-	uint32_t cluster = cpu_id / PLATFORM_CORE_COUNT_PER_CLUSTER;
+	int32_t cpu_id = plat_core_pos_by_mpidr(mpidr) & ~BIT(MPIDR_MT_BIT);
+	int32_t cpu = cpu_id % PLATFORM_CORE_COUNT_PER_CLUSTER;
+	int32_t cluster = cpu_id / PLATFORM_CORE_COUNT_PER_CLUSTER;
 	uintptr_t apu_cluster_base = 0, apu_pcli_base, apu_pcli_cluster = 0;
 	uintptr_t rst_apu_cluster = PSX_CRF + RST_APU0_OFFSET + ((uint64_t)cluster * 0x4U);
+	int32_t ret = PSCI_E_SUCCESS;
 
 	VERBOSE("%s: mpidr: 0x%lx, cpuid: %x, cpu: %x, cluster: %x\n",
 		__func__, mpidr, cpu_id, cpu, cluster);
 
 	if (cpu_id == -1) {
-		return PSCI_E_INTERN_FAIL;
+		ret = PSCI_E_INTERN_FAIL;
+		goto exit_label;
 	}
 
-	if (cluster > 3) {
+	if (cluster > 3U) {
 		panic();
 	}
 
@@ -69,7 +71,7 @@ static int32_t zynqmp_nopmu_pwr_domain_on(u_register_t mpidr)
 	mmio_write_32(apu_cluster_base + APU_RVBAR_L_0 + (cpu << 3),
 		      (uint32_t)_sec_entry);
 	mmio_write_32(apu_cluster_base + APU_RVBAR_H_0 + (cpu << 3),
-		      _sec_entry >> 32);
+		      (uint32_t)(_sec_entry >> 32));
 
 	/* de-assert core reset */
 	mmio_clrbits_32(rst_apu_cluster, ((RST_APU_COLD_RESET|RST_APU_WARN_RESET) << cpu));
@@ -84,7 +86,8 @@ static int32_t zynqmp_nopmu_pwr_domain_on(u_register_t mpidr)
 	mmio_write_32(apu_pcli_base + PCLI_PSTATE_OFFSET, PCLI_PSTATE_VAL_CLEAR);
 	mmio_write_32(apu_pcli_base + PCLI_PREQ_OFFSET, PREQ_CHANGE_REQUEST);
 
-	return PSCI_E_SUCCESS;
+exit_label:
+	return ret;
 }
 
 static void zynqmp_nopmu_pwr_domain_off(const psci_power_state_t *target_state)
@@ -101,13 +104,15 @@ static void __dead2 zynqmp_nopmu_system_reset(void)
 
 static int32_t zynqmp_validate_ns_entrypoint(uint64_t ns_entrypoint)
 {
+	int32_t ret = PSCI_E_INVALID_ADDRESS;
+
 	VERBOSE("Validate ns_entry point %lx\n", ns_entrypoint);
 
 	if ((ns_entrypoint) != 0U) {
-		return PSCI_E_SUCCESS;
-	} else {
-		return PSCI_E_INVALID_ADDRESS;
+		ret = PSCI_E_SUCCESS;
 	}
+
+	return ret;
 }
 
 static void zynqmp_pwr_domain_on_finish(const psci_power_state_t *target_state)
@@ -178,9 +183,9 @@ static int32_t no_pm_ioctl(uint32_t device_id, uint32_t ioctl_id,
 		ret = (int32_t) mmio_read_32(PMXC_IOU_SLCR_TX_RX_CONFIG_RDY);
 		break;
 	case IOCTL_UFS_SRAM_CSR_SEL:
-		if (arg1 == 1) {
+		if (arg1 == 1U) {
 			ret = (int32_t) mmio_read_32(PMXC_IOU_SLCR_SRAM_CSR);
-		} else if (arg1 == 0) {
+		} else if (arg1 == 0U) {
 			mmio_write_32(PMXC_IOU_SLCR_SRAM_CSR, arg2);
 		}
 		break;
@@ -195,7 +200,7 @@ static int32_t no_pm_ioctl(uint32_t device_id, uint32_t ioctl_id,
 }
 
 static uint64_t no_pm_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2, uint64_t x3,
-			      uint64_t x4, void *cookie, void *handle, uint64_t flags)
+			      uint64_t x4, const void *cookie, void *handle, uint64_t flags)
 {
 	int32_t ret;
 	uint32_t arg[4], api_id;
@@ -235,7 +240,7 @@ static uint64_t no_pm_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2, uint64
 }
 
 uint64_t smc_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2, uint64_t x3, uint64_t x4,
-		     void *cookie, void *handle, uint64_t flags)
+		     const void *cookie, void *handle, uint64_t flags)
 {
 	return no_pm_handler(smc_fid, x1, x2, x3, x4, cookie, handle, flags);
 }

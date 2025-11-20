@@ -1,17 +1,12 @@
 #
-# Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
+# Copyright (c) 2013-2025, Arm Limited and Contributors. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
 
 include common/fdt_wrappers.mk
 
-# Include GICv2 driver files
-include drivers/arm/gic/v2/gicv2.mk
-
-JUNO_GIC_SOURCES	:=	${GICV2_SOURCES}			\
-				plat/common/plat_gicv2.c		\
-				plat/arm/common/arm_gicv2.c
+USE_GIC_DRIVER		:=	2
 
 JUNO_INTERCONNECT_SOURCES	:=	drivers/arm/cci/cci.c		\
 					plat/arm/common/arm_cci.c
@@ -99,7 +94,6 @@ BL31_SOURCES		+=	drivers/cfi/v2m/v2m_flash.c		\
 				plat/arm/board/juno/juno_pm.c		\
 				plat/arm/board/juno/juno_topology.c	\
 				plat/arm/common/arm_nor_psci_mem_protect.c \
-				${JUNO_GIC_SOURCES}			\
 				${JUNO_INTERCONNECT_SOURCES}		\
 				${JUNO_SECURITY_SOURCES}
 
@@ -130,10 +124,10 @@ ifneq (${RESET_TO_BL31},0)
 endif
 
 ifeq ($(USE_ROMLIB),1)
-all : bl1_romlib.bin
+all: $(BUILD_PLAT)/bl1_romlib.bin
 endif
 
-bl1_romlib.bin : $(BUILD_PLAT)/bl1.bin romlib.bin
+$(BUILD_PLAT)/bl1_romlib.bin: $(BUILD_PLAT)/bl1.bin $(BUILD_PLAT)/romlib/romlib.bin
 	$(s)echo "Building combined BL1 and ROMLIB binary for Juno $@"
 	./lib/romlib/gen_combined_bl1_romlib.sh -o bl1_romlib.bin $(BUILD_PLAT)
 

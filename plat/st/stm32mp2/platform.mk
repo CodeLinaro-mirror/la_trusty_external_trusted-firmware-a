@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2023-2024, STMicroelectronics - All Rights Reserved
+# Copyright (c) 2023-2025, STMicroelectronics - All Rights Reserved
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -11,9 +11,12 @@ STM32_EXTRA_PARTS		:=	6
 include plat/st/common/common.mk
 
 CRASH_REPORTING			:=	1
-ENABLE_PIE			:=	1
+# Disable PIE by default. To re-enable it, uncomment next line.
+#ENABLE_PIE			:=	1
 PROGRAMMABLE_RESET_ADDRESS	:=	1
+ifeq ($(ENABLE_PIE),1)
 BL2_IN_XIP_MEM			:=	1
+endif
 
 STM32MP_BL33_EL1		?=	1
 ifeq ($(STM32MP_BL33_EL1),1)
@@ -84,6 +87,19 @@ $(eval $(call TOOL_ADD_IMG_PAYLOAD,STM32MP_SOC_FW_CONFIG,$(STM32MP_SOC_FW_CONFIG
 ifeq (${STM32MP_DDR_FIP_IO_STORAGE},1)
 # Add the FW_DDR to FIP and specify the same to certtool
 $(eval $(call TOOL_ADD_IMG,STM32MP_DDR_FW,--ddr-fw))
+endif
+
+# Ultratronik Specific Boards
+ifeq ($(findstring ultra-fly,$(DTB_FILE_NAME)),ultra-fly)
+ULTRA_FLY := 1
+$(eval $(call assert_booleans,\
+	$(sort \
+		ULTRA_FLY \
+	)))
+$(eval $(call add_defines,\
+	$(sort \
+		ULTRA_FLY \
+	)))
 endif
 
 # Enable flags for C files
@@ -202,10 +218,15 @@ BL31_SOURCES			+=	${GICV2_SOURCES}					\
 # Generic PSCI
 BL31_SOURCES			+=	plat/common/plat_psci_common.c
 
+BL31_SOURCES			+=	plat/st/common/stm32mp_svc_setup.c			\
+					plat/st/stm32mp2/services/stgen_svc.c			\
+					plat/st/stm32mp2/services/stm32mp2_svc_setup.c
+
+# Arm Archtecture services
+BL31_SOURCES			+=	services/arm_arch_svc/arm_arch_svc_setup.c
+
 # Compilation rules
 .PHONY: check_ddr_type
-.SUFFIXES:
-
 bl2: check_ddr_type
 
 check_ddr_type:

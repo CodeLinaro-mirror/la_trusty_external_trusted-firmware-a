@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
+# Copyright (c) 2013-2025, Arm Limited and Contributors. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -24,7 +24,6 @@ ifeq (${SPM_MM},1)
 endif
 
 include lib/extensions/amu/amu.mk
-include lib/mpmm/mpmm.mk
 
 ifeq (${SPMC_AT_EL3},1)
   $(info Including EL3 SPMC makefile)
@@ -43,7 +42,6 @@ BL31_SOURCES		+=	bl31/bl31_main.c				\
 				bl31/bl31_traps.c				\
 				common/runtime_svc.c				\
 				lib/cpus/errata_common.c			\
-				lib/cpus/aarch64/dsu_helpers.S			\
 				plat/common/aarch64/platform_mp_stack.S		\
 				services/arm_arch_svc/arm_arch_svc_setup.c	\
 				services/std_svc/std_svc_setup.c		\
@@ -115,10 +113,6 @@ ifneq (${ENABLE_FEAT_TCR2},0)
 BL31_SOURCES		+=	lib/extensions/tcr/tcr2.c
 endif
 
-ifeq (${ENABLE_MPMM},1)
-BL31_SOURCES		+=	${MPMM_SOURCES}
-endif
-
 ifneq (${ENABLE_SME_FOR_NS},0)
 BL31_SOURCES		+=	lib/extensions/sme/sme.c
 endif
@@ -148,6 +142,10 @@ endif
 
 ifneq (${ENABLE_TRF_FOR_NS},0)
 BL31_SOURCES		+=	lib/extensions/trf/aarch64/trf.c
+endif
+
+ifneq (${ENABLE_FEAT_FPMR},0)
+BL31_SOURCES		+=	lib/extensions/fpmr/fpmr.c
 endif
 
 ifeq (${WORKAROUND_CVE_2017_5715},1)

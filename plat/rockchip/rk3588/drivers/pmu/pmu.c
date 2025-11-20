@@ -760,10 +760,10 @@ static inline void cpus_pd_req_enter_wfi(void)
 			  "mrs	x0, S3_0_C15_C2_7\n"
 			  "orr	x0, x0, #0x1\n"
 			  "msr	S3_0_C15_C2_7, x0\n"
-			  "wfi_loop:\n"
+			  "1:\n"
 			  "isb\n"
 			  "wfi\n"
-			  "b wfi_loop\n");
+			  "b 1b\n");
 }
 
 static void nonboot_cpus_off(void)
@@ -1319,12 +1319,16 @@ void __dead2 rockchip_soc_cores_pd_pwr_dn_wfi(const
 					psci_power_state_t *target_state)
 {
 	psci_power_down_wfi();
+	/* should never reach here */
+	panic();
 }
 
 void __dead2 rockchip_soc_sys_pd_pwr_dn_wfi(void)
 {
 	cpus_pd_req_enter_wfi();
 	psci_power_down_wfi();
+	/* should never reach here */
+	panic();
 }
 
 void __dead2 rockchip_soc_soft_reset(void)
@@ -1352,6 +1356,8 @@ void __dead2 rockchip_soc_soft_reset(void)
 	 * so we do not hope the core to execute valid codes.
 	 */
 	psci_power_down_wfi();
+	/* should never reach here */
+	panic();
 }
 
 void __dead2 rockchip_soc_system_off(void)
@@ -1373,6 +1379,8 @@ void __dead2 rockchip_soc_system_off(void)
 	 * so we do not hope the core to execute valid codes.
 	 */
 	psci_power_down_wfi();
+	/* should never reach here */
+	panic();
 }
 
 static void rockchip_pmu_pd_init(void)

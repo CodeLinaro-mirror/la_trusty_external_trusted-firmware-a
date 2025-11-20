@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2024, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2014-2025, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -23,10 +23,10 @@
 /* Size of cpu_context array */
 #define CPU_DATA_CONTEXT_NUM		3
 /* Offset of cpu_ops_ptr, size 8 bytes */
-#define CPU_DATA_CPU_OPS_PTR		0x18
+#define CPU_DATA_CPU_OPS_PTR		0x20
 #else /* ENABLE_RME */
 #define CPU_DATA_CONTEXT_NUM		2
-#define CPU_DATA_CPU_OPS_PTR		0x10
+#define CPU_DATA_CPU_OPS_PTR		0x18
 #endif /* ENABLE_RME */
 
 #if ENABLE_PAUTH
@@ -47,8 +47,9 @@
 #if CRASH_REPORTING
 #error "Crash reporting is not supported in AArch32"
 #endif
-#define CPU_DATA_CPU_OPS_PTR		0x0
-#define CPU_DATA_CRASH_BUF_OFFSET	(0x4 + PSCI_CPU_DATA_SIZE)
+#define WARMBOOT_EP_INFO		0x0
+#define CPU_DATA_CPU_OPS_PTR		0x4
+#define CPU_DATA_CRASH_BUF_OFFSET	(CPU_DATA_CPU_OPS_PTR + PSCI_CPU_DATA_SIZE)
 
 #endif	/* __aarch64__ */
 
@@ -79,7 +80,12 @@
 #if ENABLE_RUNTIME_INSTRUMENTATION
 /* Temporary space to store PMF timestamps from assembly code */
 #define CPU_DATA_PMF_TS_COUNT		1
+#if __aarch64__
 #define CPU_DATA_PMF_TS0_OFFSET		CPU_DATA_EHF_DATA_BUF_END
+#else
+/* alignment */
+#define CPU_DATA_PMF_TS0_OFFSET		(CPU_DATA_EHF_DATA_BUF_END + 8)
+#endif
 #define CPU_DATA_PMF_TS0_IDX		0
 #endif
 
@@ -131,6 +137,7 @@ typedef struct cpu_data {
 #ifdef __aarch64__
 	void *cpu_context[CPU_DATA_CONTEXT_NUM];
 #endif /* __aarch64__ */
+	entry_point_info_t *warmboot_ep_info;
 	uintptr_t cpu_ops_ptr;
 	struct psci_cpu_data psci_svc_cpu_data;
 #if ENABLE_PAUTH
@@ -230,7 +237,6 @@ static inline context_pas_t get_cpu_context_index(uint32_t security_state)
  * APIs for initialising and accessing per-cpu data
  *************************************************************************/
 
-void init_cpu_data_ptr(void);
 void init_cpu_ops(void);
 
 #define get_cpu_data(_m)		   _cpu_data()->_m

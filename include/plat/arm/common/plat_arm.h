@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2024, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2025, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -10,6 +10,7 @@
 #include <stdint.h>
 
 #include <common/desc_image_load.h>
+#include <drivers/arm/gic.h>
 #include <drivers/arm/tzc_common.h>
 #include <lib/bakery_lock.h>
 #include <lib/cassert.h>
@@ -147,6 +148,14 @@ void arm_setup_romlib(void);
 
 #endif /* defined(IMAGE_BL31) || (!defined(__aarch64__) && defined(IMAGE_BL32)) */
 
+#ifdef __aarch64__
+#define TL_TAG_EXEC_EP_INFO	TL_TAG_EXEC_EP_INFO64
+#define TL_TAG_SRAM_LAYOUT	TL_TAG_SRAM_LAYOUT64
+#else
+#define TL_TAG_EXEC_EP_INFO	TL_TAG_EXEC_EP_INFO32
+#define TL_TAG_SRAM_LAYOUT	TL_TAG_SRAM_LAYOUT32
+#endif
+
 #if ARM_RECOM_STATE_ID_ENC
 /*
  * Macros used to parse state information from State-ID if it is using the
@@ -249,7 +258,8 @@ void arm_bl1_platform_setup(void);
 void arm_bl1_plat_arch_setup(void);
 
 /* BL2 utility functions */
-void arm_bl2_early_platform_setup(uintptr_t fw_config, struct meminfo *mem_layout);
+void arm_bl2_early_platform_setup(u_register_t arg0, u_register_t arg1,
+				   u_register_t arg2, u_register_t arg3);
 void arm_bl2_platform_setup(void);
 void arm_bl2_plat_arch_setup(void);
 uint32_t arm_get_spsr_for_bl32_entry(void);
@@ -273,13 +283,8 @@ void arm_bl2u_platform_setup(void);
 void arm_bl2u_plat_arch_setup(void);
 
 /* BL31 utility functions */
-#if TRANSFER_LIST
 void arm_bl31_early_platform_setup(u_register_t arg0, u_register_t arg1,
 				   u_register_t arg2, u_register_t arg3);
-#else
-void arm_bl31_early_platform_setup(void *from_bl2, uintptr_t soc_fw_config,
-				uintptr_t hw_config, void *plat_params_from_bl2);
-#endif
 void arm_bl31_platform_setup(void);
 void arm_bl31_plat_runtime_setup(void);
 void arm_bl31_plat_arch_setup(void);
@@ -288,13 +293,19 @@ void arm_bl31_plat_arch_setup(void);
 void arm_transfer_list_dyn_cfg_init(struct transfer_list_header *secure_tl);
 void arm_transfer_list_populate_ep_info(bl_mem_params_node_t *next_param_node,
 					struct transfer_list_header *secure_tl);
+void arm_transfer_list_copy_hw_config(struct transfer_list_header *secure_tl,
+				      struct transfer_list_header *ns_tl);
+struct transfer_list_entry *
+arm_transfer_list_set_heap_info(struct transfer_list_header *tl);
+void arm_transfer_list_get_heap_info(void **heap_addr, size_t *heap_size);
 
 /* TSP utility functions */
-void arm_tsp_early_platform_setup(void);
+void arm_tsp_early_platform_setup(u_register_t arg0, u_register_t arg1,
+				  u_register_t arg2, u_register_t arg3);
 
 /* SP_MIN utility functions */
-void arm_sp_min_early_platform_setup(void *from_bl2, uintptr_t tos_fw_config,
-				uintptr_t hw_config, void *plat_params_from_bl2);
+void arm_sp_min_early_platform_setup(u_register_t arg0, u_register_t arg1,
+			u_register_t arg2, u_register_t arg3);
 void arm_sp_min_plat_runtime_setup(void);
 void arm_sp_min_plat_arch_setup(void);
 
@@ -349,6 +360,9 @@ void arm_xlat_make_tables_readonly(void);
  * Mandatory functions required in ARM standard platforms
  */
 unsigned int plat_arm_get_cluster_core_count(u_register_t mpidr);
+
+/* should not be used, but keep for compatibility */
+#if USE_GIC_DRIVER == 0
 void plat_arm_gic_driver_init(void);
 void plat_arm_gic_init(void);
 void plat_arm_gic_cpuif_enable(void);
@@ -358,6 +372,7 @@ void plat_arm_gic_redistif_off(void);
 void plat_arm_gic_pcpu_init(void);
 void plat_arm_gic_save(void);
 void plat_arm_gic_resume(void);
+#endif
 void plat_arm_security_setup(void);
 void plat_arm_pwrc_setup(void);
 void plat_arm_interconnect_init(void);
@@ -427,6 +442,7 @@ void plat_arm_sp_min_early_platform_setup(u_register_t arg0, u_register_t arg1,
 extern plat_psci_ops_t plat_arm_psci_pm_ops;
 extern const mmap_region_t plat_arm_mmap[];
 extern const unsigned int arm_pm_idle_states[];
+extern struct transfer_list_header *secure_tl;
 
 /* secure watchdog */
 void plat_arm_secure_wdt_start(void);

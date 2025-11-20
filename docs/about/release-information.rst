@@ -35,7 +35,7 @@ TF-A version is given in Makefile, through several macros:
 
 For example, TF-A v2.10 has VERSION_MAJOR=2, VERSION_MINOR=10 and VERSION_PATCH=0.
 
-This VERSION_PATCH macro is only increased for LTS releases.
+This VERSION_PATCH macro is only increased for :ref:`LTS - Long-Term Support` releases.
 
 Upcoming Releases
 ~~~~~~~~~~~~~~~~~
@@ -73,6 +73,8 @@ depending on project requirement and partner feedback.
 | v2.12           | 4th week of Nov '24       | 2nd week of Nov '24          |
 +-----------------+---------------------------+------------------------------+
 | v2.13           | 4th week of May '25       | 2nd week of May '25          |
++-----------------+---------------------------+------------------------------+
+| v2.14           | 4th week of Nov '25       | 2nd week of Nov '25          |
 +-----------------+---------------------------+------------------------------+
 
 Removal of Deprecated Interfaces
@@ -120,4 +122,4 @@ Populated table provides details about build options that were removed or deprec
 
 --------------
 
-*Copyright (c) 2018-2024, Arm Limited and Contributors. All rights reserved.*
+*Copyright (c) 2018-2025, Arm Limited and Contributors. All rights reserved.*
