@@ -117,7 +117,7 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 	SET_PARAM_HEAD(&bl33_image_ep_info, PARAM_EP, VERSION_1, 0);
 	SET_SECURITY_STATE(bl33_image_ep_info.h.attr, NON_SECURE);
 
-	PM_PACK_PAYLOAD4(payload, LOADER_MODULE_ID, 1, PM_LOAD_GET_HANDOFF_PARAMS,
+	PM_PACK_PAYLOAD4(payload, LOADER_MODULE_ID, 1U, PM_LOAD_GET_HANDOFF_PARAMS,
 			(uintptr_t)addr >> 32U, (uintptr_t)addr, max_size);
 	ret_status = pm_ipi_send_sync(primary_proc, payload, NULL, 0);
 	if (ret_status == PM_RET_SUCCESS) {
@@ -151,16 +151,19 @@ int request_intr_type_el3(uint32_t id, interrupt_type_handler_t handler)
 {
 	static uint32_t index;
 	uint32_t i;
+	int32_t ret = 0;
 
 	/* Validate 'handler' and 'id' parameters */
 	if ((handler == NULL) || (index >= MAX_INTR_EL3)) {
-		return -EINVAL;
+		ret = -EINVAL;
+		goto exit_label;
 	}
 
 	/* Check if a handler has already been registered */
 	for (i = 0; i < index; i++) {
 		if (id == type_el3_interrupt_table[i].id) {
-			return -EALREADY;
+			ret = -EALREADY;
+			goto exit_label;
 		}
 	}
 
@@ -169,7 +172,8 @@ int request_intr_type_el3(uint32_t id, interrupt_type_handler_t handler)
 
 	index++;
 
-	return 0;
+exit_label:
+	return ret;
 }
 
 static uint64_t rdo_el3_interrupt_handler(uint32_t id, uint32_t flags,
@@ -178,6 +182,7 @@ static uint64_t rdo_el3_interrupt_handler(uint32_t id, uint32_t flags,
 	(void)id;
 	uint32_t intr_id;
 	uint32_t i;
+	uint64_t ret = 0;
 	interrupt_type_handler_t handler = NULL;
 
 	intr_id = plat_ic_get_pending_interrupt_id();
@@ -189,10 +194,10 @@ static uint64_t rdo_el3_interrupt_handler(uint32_t id, uint32_t flags,
 	}
 
 	if (handler != NULL) {
-		return handler(intr_id, flags, handle, cookie);
+		ret = handler(intr_id, flags, handle, cookie);
 	}
 
-	return 0;
+	return ret;
 }
 
 void bl31_platform_setup(void)

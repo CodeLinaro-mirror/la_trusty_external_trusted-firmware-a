@@ -1,6 +1,6 @@
 # Copyright (c) 2018-2022, Arm Limited and Contributors. All rights reserved.
 # Copyright (c) 2021-2022, Xilinx, Inc. All rights reserved.
-# Copyright (c) 2022-2024, Advanced Micro Devices, Inc. All rights reserved.
+# Copyright (c) 2022-2025, Advanced Micro Devices, Inc. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -28,12 +28,19 @@ PL011_GENERIC_UART := 1
 IPI_CRC_CHECK := 0
 GIC_ENABLE_V4_EXTN :=  0
 GICV3_SUPPORT_GIC600 := 1
+TFA_NO_PM := 0
+CPU_PWRDWN_SGI ?= 6
+$(eval $(call add_define_val,CPU_PWR_DOWN_REQ_INTR,ARM_IRQ_SEC_SGI_${CPU_PWRDWN_SGI}))
 
 override CTX_INCLUDE_AARCH32_REGS    := 0
 
 # Platform to support Dynamic XLAT Table by default
 override PLAT_XLAT_TABLES_DYNAMIC := 1
 $(eval $(call add_define,PLAT_XLAT_TABLES_DYNAMIC))
+
+ifdef TFA_NO_PM
+   $(eval $(call add_define,TFA_NO_PM))
+endif
 
 ifdef MEM_BASE
     $(eval $(call add_define,MEM_BASE))
@@ -64,13 +71,13 @@ endif
 USE_COHERENT_MEM := 0
 HW_ASSISTED_COHERENCY := 1
 
-VERSAL2_CONSOLE  ?=      pl011
-ifeq (${VERSAL2_CONSOLE}, $(filter ${VERSAL2_CONSOLE},pl011 pl011_0 pl011_1 dcc dtb none))
+CONSOLE  ?=      pl011
+ifeq (${CONSOLE}, $(filter ${CONSOLE},pl011 pl011_0 pl011_1 dcc dtb none))
 	else
-	  $(error "Please define VERSAL2_CONSOLE")
+	  $(error "Please define CONSOLE")
   endif
 
-$(eval $(call add_define_val,VERSAL2_CONSOLE,VERSAL2_CONSOLE_ID_${VERSAL2_CONSOLE}))
+$(eval $(call add_define_val,CONSOLE,CONSOLE_ID_${CONSOLE}))
 
 # Runtime console in default console in DEBUG build
 ifeq ($(DEBUG), 1)
@@ -86,13 +93,14 @@ else
 endif
 endif
 
-
-ifdef XILINX_OF_BOARD_DTB_ADDR
+ifeq (${TRANSFER_LIST},0)
+XILINX_OF_BOARD_DTB_ADDR ?= 0x1000000
 $(eval $(call add_define,XILINX_OF_BOARD_DTB_ADDR))
 endif
 
 PLAT_INCLUDES		:=	-Iinclude/plat/arm/common/			\
 				-Iplat/xilinx/common/include/			\
+				-Iplat/amd/common/include/			\
 				-Iplat/xilinx/common/ipi_mailbox_service/	\
 				-I${PLAT_PATH}/include/				\
 				-Iplat/xilinx/versal/pm_service/
@@ -128,11 +136,17 @@ BL31_SOURCES		+=	drivers/arm/cci/cci.c				\
 				drivers/scmi-msg/reset_domain.c			\
 				${PLAT_PATH}/scmi.c
 
+ifeq ($(TFA_NO_PM), 0)
+BL31_SOURCES		+=	plat/xilinx/common/pm_service/pm_api_sys.c	\
+				plat/xilinx/common/pm_service/pm_ipi.c		\
+				${PLAT_PATH}/plat_psci_pm.c			\
+				${PLAT_PATH}/pm_service/pm_svc_main.c	\
+				${PLAT_PATH}/pm_service/pm_client.c
+else
 BL31_SOURCES		+=	${PLAT_PATH}/plat_psci.c
+endif
 
-BL31_SOURCES		+=	plat/xilinx/common/plat_fdt.c			\
-				common/fdt_wrappers.c                           \
-				plat/xilinx/common/plat_fdt.c                   \
+BL31_SOURCES		+=	common/fdt_wrappers.c                           \
 				plat/xilinx/common/plat_console.c               \
 				plat/xilinx/common/plat_startup.c		\
 				plat/xilinx/common/ipi.c			\
@@ -146,6 +160,11 @@ BL31_SOURCES		+=	plat/xilinx/common/plat_fdt.c			\
 				${PLAT_PATH}/sip_svc_setup.c			\
 				${PLAT_PATH}/gicv3.c
 
+
+ifeq ($(DEBUG),1)
+BL31_SOURCES            +=      ${PLAT_PATH}/plat_ocm_coherency.c
+endif
+
 ifeq (${ERRATA_ABI_SUPPORT}, 1)
 # enable the cpu macros for errata abi interface
 CORTEX_A78_AE_H_INC     := 1
@@ -153,7 +172,20 @@ $(eval $(call add_define, CORTEX_A78_AE_H_INC))
 endif
 
 # Enable Handoff protocol using transfer lists
-TRANSFER_LIST                   := 1
+TRANSFER_LIST                   ?= 0
 
+ifeq (${TRANSFER_LIST},1)
 include lib/transfer_list/transfer_list.mk
-BL31_SOURCES           +=      plat/xilinx/common/plat_xfer_list.c
+BL31_SOURCES           +=	plat/amd/common/plat_fdt.c
+BL31_SOURCES           +=	plat/amd/common/plat_xfer_list.c
+else
+BL31_SOURCES           +=	plat/xilinx/common/plat_fdt.c
+endif
+
+XLNX_DT_CFG	?= 1
+ifeq (${TRANSFER_LIST},0)
+ifndef XILINX_OF_BOARD_DTB_ADDR
+XLNX_DT_CFG	:= 0
+endif
+endif
+$(eval $(call add_define,XLNX_DT_CFG))

@@ -51,164 +51,164 @@ typedef struct __attribute__((packed)) {
 /* Dependent APIs for TF-A to check their version from firmware */
 static const eemi_api_dependency api_dep_table[] = {
 	{
-		.id = PM_SELF_SUSPEND,
-		.api_id = PM_SELF_SUSPEND,
+		.id = (uint8_t)PM_SELF_SUSPEND,
+		.api_id = (uint8_t)PM_SELF_SUSPEND,
 	},
 	{
-		.id = PM_REQ_WAKEUP,
-		.api_id = PM_REQ_WAKEUP,
+		.id = (uint8_t)PM_REQ_WAKEUP,
+		.api_id = (uint8_t)PM_REQ_WAKEUP,
 	},
 	{
-		.id = PM_ABORT_SUSPEND,
-		.api_id = PM_ABORT_SUSPEND,
+		.id = (uint8_t)PM_ABORT_SUSPEND,
+		.api_id = (uint8_t)PM_ABORT_SUSPEND,
 	},
 	{
-		.id = PM_SET_WAKEUP_SOURCE,
-		.api_id = PM_SET_WAKEUP_SOURCE,
+		.id = (uint8_t)PM_SET_WAKEUP_SOURCE,
+		.api_id = (uint8_t)PM_SET_WAKEUP_SOURCE,
 	},
 	{
-		.id = PM_SYSTEM_SHUTDOWN,
-		.api_id = PM_SYSTEM_SHUTDOWN,
+		.id = (uint8_t)PM_SYSTEM_SHUTDOWN,
+		.api_id = (uint8_t)PM_SYSTEM_SHUTDOWN,
 	},
 	{
-		.id = PM_GET_API_VERSION,
-		.api_id = PM_GET_API_VERSION,
+		.id = (uint8_t)PM_GET_API_VERSION,
+		.api_id = (uint8_t)PM_GET_API_VERSION,
 	},
 	{
-		.id = PM_CLOCK_ENABLE,
-		.api_id = PM_PLL_SET_MODE,
+		.id = (uint8_t)PM_CLOCK_ENABLE,
+		.api_id = (uint8_t)PM_PLL_SET_MODE,
 	},
 	{
-		.id = PM_CLOCK_ENABLE,
-		.api_id = PM_CLOCK_ENABLE,
+		.id = (uint8_t)PM_CLOCK_ENABLE,
+		.api_id = (uint8_t)PM_CLOCK_ENABLE,
 	},
 	{
-		.id = PM_CLOCK_DISABLE,
-		.api_id = PM_PLL_SET_MODE,
+		.id = (uint8_t)PM_CLOCK_DISABLE,
+		.api_id = (uint8_t)PM_PLL_SET_MODE,
 	},
 	{
-		.id = PM_CLOCK_DISABLE,
-		.api_id = PM_CLOCK_DISABLE,
+		.id = (uint8_t)PM_CLOCK_DISABLE,
+		.api_id = (uint8_t)PM_CLOCK_DISABLE,
 	},
 	{
-		.id = PM_CLOCK_GETSTATE,
-		.api_id = PM_PLL_GET_MODE,
+		.id = (uint8_t)PM_CLOCK_GETSTATE,
+		.api_id = (uint8_t)PM_PLL_GET_MODE,
 	},
 	{
-		.id = PM_CLOCK_GETSTATE,
-		.api_id = PM_CLOCK_GETSTATE,
+		.id = (uint8_t)PM_CLOCK_GETSTATE,
+		.api_id = (uint8_t)PM_CLOCK_GETSTATE,
 	},
 	{
-		.id = PM_CLOCK_SETDIVIDER,
-		.api_id = PM_PLL_SET_PARAMETER,
+		.id = (uint8_t)PM_CLOCK_SETDIVIDER,
+		.api_id = (uint8_t)PM_PLL_SET_PARAMETER,
 	},
 	{
-		.id = PM_CLOCK_SETDIVIDER,
-		.api_id = PM_CLOCK_SETDIVIDER,
+		.id = (uint8_t)PM_CLOCK_SETDIVIDER,
+		.api_id = (uint8_t)PM_CLOCK_SETDIVIDER,
 	},
 	{
-		.id = PM_CLOCK_GETDIVIDER,
-		.api_id = PM_PLL_GET_PARAMETER,
+		.id = (uint8_t)PM_CLOCK_GETDIVIDER,
+		.api_id = (uint8_t)PM_PLL_GET_PARAMETER,
 	},
 	{
-		.id = PM_CLOCK_GETDIVIDER,
-		.api_id = PM_CLOCK_GETDIVIDER,
+		.id = (uint8_t)PM_CLOCK_GETDIVIDER,
+		.api_id = (uint8_t)PM_CLOCK_GETDIVIDER,
 	},
 	{
-		.id = PM_CLOCK_SETPARENT,
-		.api_id = PM_PLL_SET_PARAMETER,
+		.id = (uint8_t)PM_CLOCK_SETPARENT,
+		.api_id = (uint8_t)PM_PLL_SET_PARAMETER,
 	},
 	{
-		.id = PM_CLOCK_SETPARENT,
-		.api_id = PM_CLOCK_SETPARENT,
+		.id = (uint8_t)PM_CLOCK_SETPARENT,
+		.api_id = (uint8_t)PM_CLOCK_SETPARENT,
 	},
 	{
-		.id = PM_CLOCK_GETPARENT,
-		.api_id = PM_PLL_GET_PARAMETER,
+		.id = (uint8_t)PM_CLOCK_GETPARENT,
+		.api_id = (uint8_t)PM_PLL_GET_PARAMETER,
 	},
 	{
-		.id = PM_CLOCK_GETPARENT,
-		.api_id = PM_CLOCK_GETPARENT,
+		.id = (uint8_t)PM_CLOCK_GETPARENT,
+		.api_id = (uint8_t)PM_CLOCK_GETPARENT,
 	},
 	{
-		.id = PM_PLL_SET_PARAMETER,
-		.api_id = PM_PLL_SET_PARAMETER,
+		.id = (uint8_t)PM_PLL_SET_PARAMETER,
+		.api_id = (uint8_t)PM_PLL_SET_PARAMETER,
 	},
 	{
-		.id = PM_PLL_GET_PARAMETER,
-		.api_id = PM_PLL_GET_PARAMETER,
+		.id = (uint8_t)PM_PLL_GET_PARAMETER,
+		.api_id = (uint8_t)PM_PLL_GET_PARAMETER,
 	},
 	{
-		.id = PM_PLL_SET_MODE,
-		.api_id = PM_PLL_SET_MODE,
+		.id = (uint8_t)PM_PLL_SET_MODE,
+		.api_id = (uint8_t)PM_PLL_SET_MODE,
 	},
 	{
-		.id = PM_PLL_GET_MODE,
-		.api_id = PM_PLL_GET_MODE,
+		.id = (uint8_t)PM_PLL_GET_MODE,
+		.api_id = (uint8_t)PM_PLL_GET_MODE,
 	},
 	{
-		.id = PM_REGISTER_ACCESS,
-		.api_id = PM_MMIO_WRITE,
+		.id = (uint8_t)PM_REGISTER_ACCESS,
+		.api_id = (uint8_t)PM_MMIO_WRITE,
 	},
 	{
-		.id = PM_REGISTER_ACCESS,
-		.api_id = PM_MMIO_READ,
+		.id = (uint8_t)PM_REGISTER_ACCESS,
+		.api_id = (uint8_t)PM_MMIO_READ,
 	},
 	{
-		.id = PM_FEATURE_CHECK,
-		.api_id = PM_FEATURE_CHECK,
+		.id = (uint8_t)PM_FEATURE_CHECK,
+		.api_id = (uint8_t)PM_FEATURE_CHECK,
 	},
 	{
-		.id = IOCTL_SET_TAPDELAY_BYPASS,
-		.api_id = PM_MMIO_WRITE,
+		.id = (uint8_t)IOCTL_SET_TAPDELAY_BYPASS,
+		.api_id = (uint8_t)PM_MMIO_WRITE,
 	},
 	{
-		.id = IOCTL_SD_DLL_RESET,
-		.api_id = PM_MMIO_WRITE,
+		.id = (uint8_t)IOCTL_SD_DLL_RESET,
+		.api_id = (uint8_t)PM_MMIO_WRITE,
 	},
 	{
-		.id = IOCTL_SET_SD_TAPDELAY,
-		.api_id = PM_MMIO_WRITE,
+		.id = (uint8_t)IOCTL_SET_SD_TAPDELAY,
+		.api_id = (uint8_t)PM_MMIO_WRITE,
 	},
 	{
-		.id = IOCTL_SET_SD_TAPDELAY,
-		.api_id = PM_MMIO_READ,
+		.id = (uint8_t)IOCTL_SET_SD_TAPDELAY,
+		.api_id = (uint8_t)PM_MMIO_READ,
 	},
 	{
-		.id = IOCTL_SET_PLL_FRAC_DATA,
-		.api_id = PM_PLL_SET_PARAMETER,
+		.id = (uint8_t)IOCTL_SET_PLL_FRAC_DATA,
+		.api_id = (uint8_t)PM_PLL_SET_PARAMETER,
 	},
 	{
-		.id = IOCTL_GET_PLL_FRAC_DATA,
-		.api_id = PM_PLL_GET_PARAMETER,
+		.id = (uint8_t)IOCTL_GET_PLL_FRAC_DATA,
+		.api_id = (uint8_t)PM_PLL_GET_PARAMETER,
 	},
 	{
-		.id = IOCTL_WRITE_GGS,
-		.api_id = PM_MMIO_WRITE,
+		.id = (uint8_t)IOCTL_WRITE_GGS,
+		.api_id = (uint8_t)PM_MMIO_WRITE,
 	},
 	{
-		.id = IOCTL_READ_GGS,
-		.api_id = PM_MMIO_READ,
+		.id = (uint8_t)IOCTL_READ_GGS,
+		.api_id = (uint8_t)PM_MMIO_READ,
 	},
 	{
-		.id = IOCTL_WRITE_PGGS,
-		.api_id = PM_MMIO_WRITE,
+		.id = (uint8_t)IOCTL_WRITE_PGGS,
+		.api_id = (uint8_t)PM_MMIO_WRITE,
 	},
 	{
-		.id = IOCTL_READ_PGGS,
-		.api_id = PM_MMIO_READ,
+		.id = (uint8_t)IOCTL_READ_PGGS,
+		.api_id = (uint8_t)PM_MMIO_READ,
 	},
 	{
-		.id = IOCTL_ULPI_RESET,
-		.api_id = PM_MMIO_WRITE,
+		.id = (uint8_t)IOCTL_ULPI_RESET,
+		.api_id = (uint8_t)PM_MMIO_WRITE,
 	},
 	{
-		.id = IOCTL_SET_BOOT_HEALTH_STATUS,
-		.api_id = PM_MMIO_WRITE,
+		.id = (uint8_t)IOCTL_SET_BOOT_HEALTH_STATUS,
+		.api_id = (uint8_t)PM_MMIO_WRITE,
 	},
 	{
-		.id = IOCTL_AFI,
-		.api_id = PM_MMIO_WRITE,
+		.id = (uint8_t)IOCTL_AFI,
+		.api_id = (uint8_t)PM_MMIO_WRITE,
 	},
 };
 
@@ -305,14 +305,17 @@ enum pm_ret_status pm_req_suspend(enum pm_node_id target,
 				  uint32_t latency, uint32_t state)
 {
 	uint32_t payload[PAYLOAD_ARG_CNT];
+	enum pm_ret_status ret = PM_RET_SUCCESS;
 
 	/* Send request to the PMU */
 	PM_PACK_PAYLOAD5(payload, PM_REQ_SUSPEND, target, ack, latency, state);
 	if (ack == REQ_ACK_BLOCKING) {
-		return pm_ipi_send_sync(primary_proc, payload, NULL, 0);
+		ret = pm_ipi_send_sync(primary_proc, payload, NULL, 0);
 	} else {
-		return pm_ipi_send(primary_proc, payload);
+		ret = pm_ipi_send(primary_proc, payload);
 	}
+
+	return ret;
 }
 
 /**
@@ -339,21 +342,23 @@ enum pm_ret_status pm_req_wakeup(enum pm_node_id target,
 {
 	uint32_t payload[PAYLOAD_ARG_CNT];
 	uint64_t encoded_address;
-
+	enum pm_ret_status ret = PM_RET_SUCCESS;
 
 	/* encode set Address into 1st bit of address */
 	encoded_address = address;
-	encoded_address |= !!set_address;
+	encoded_address |= (uint32_t)!!set_address;
 
 	/* Send request to the PMU to perform the wake of the PU */
 	PM_PACK_PAYLOAD5(payload, PM_REQ_WAKEUP, target, encoded_address,
 			 encoded_address >> 32, ack);
 
 	if (ack == REQ_ACK_BLOCKING) {
-		return pm_ipi_send_sync(primary_proc, payload, NULL, 0);
+		ret = pm_ipi_send_sync(primary_proc, payload, NULL, 0);
 	} else {
-		return pm_ipi_send(primary_proc, payload);
+		ret = pm_ipi_send(primary_proc, payload);
 	}
+
+	return ret;
 }
 
 /**
@@ -369,15 +374,18 @@ enum pm_ret_status pm_force_powerdown(enum pm_node_id target,
 				      enum pm_request_ack ack)
 {
 	uint32_t payload[PAYLOAD_ARG_CNT];
+	enum pm_ret_status ret = PM_RET_SUCCESS;
 
 	/* Send request to the PMU */
 	PM_PACK_PAYLOAD3(payload, PM_FORCE_POWERDOWN, target, ack);
 
 	if (ack == REQ_ACK_BLOCKING) {
-		return pm_ipi_send_sync(primary_proc, payload, NULL, 0);
+		ret = pm_ipi_send_sync(primary_proc, payload, NULL, 0);
 	} else {
-		return pm_ipi_send(primary_proc, payload);
+		ret = pm_ipi_send(primary_proc, payload);
 	}
+
+	return ret;
 }
 
 /**
@@ -439,15 +447,17 @@ enum pm_ret_status pm_set_wakeup_source(enum pm_node_id target,
 enum pm_ret_status pm_system_shutdown(uint32_t type, uint32_t subtype)
 {
 	uint32_t payload[PAYLOAD_ARG_CNT];
+	enum pm_ret_status ret = PM_RET_SUCCESS;
 
-	if (type == PMF_SHUTDOWN_TYPE_SETSCOPE_ONLY) {
+	if (type == (uint32_t)PMF_SHUTDOWN_TYPE_SETSCOPE_ONLY) {
 		/* Setting scope for subsequent PSCI reboot or shutdown */
 		pm_shutdown_scope = subtype;
-		return PM_RET_SUCCESS;
+	} else {
+		PM_PACK_PAYLOAD3(payload, PM_SYSTEM_SHUTDOWN, type, subtype);
+		ret = pm_ipi_send_non_blocking(primary_proc, payload);
 	}
 
-	PM_PACK_PAYLOAD3(payload, PM_SYSTEM_SHUTDOWN, type, subtype);
-	return pm_ipi_send_non_blocking(primary_proc, payload);
+	return ret;
 }
 
 /* APIs for managing PM slaves: */
@@ -468,14 +478,17 @@ enum pm_ret_status pm_req_node(enum pm_node_id nid,
 			       enum pm_request_ack ack)
 {
 	uint32_t payload[PAYLOAD_ARG_CNT];
+	enum pm_ret_status ret = PM_RET_SUCCESS;
 
 	PM_PACK_PAYLOAD5(payload, PM_REQ_NODE, nid, capabilities, qos, ack);
 
 	if (ack == REQ_ACK_BLOCKING) {
-		return pm_ipi_send_sync(primary_proc, payload, NULL, 0);
+		ret = pm_ipi_send_sync(primary_proc, payload, NULL, 0);
 	} else {
-		return pm_ipi_send(primary_proc, payload);
+		ret = pm_ipi_send(primary_proc, payload);
 	}
+
+	return ret;
 }
 
 /**
@@ -496,15 +509,18 @@ enum pm_ret_status pm_set_requirement(enum pm_node_id nid,
 				      enum pm_request_ack ack)
 {
 	uint32_t payload[PAYLOAD_ARG_CNT];
+	enum pm_ret_status ret = PM_RET_SUCCESS;
 
 	PM_PACK_PAYLOAD5(payload, PM_SET_REQUIREMENT, nid, capabilities, qos,
 			 ack);
 
 	if (ack == REQ_ACK_BLOCKING) {
-		return pm_ipi_send_sync(primary_proc, payload, NULL, 0);
+		ret = pm_ipi_send_sync(primary_proc, payload, NULL, 0);
 	} else {
-		return pm_ipi_send(primary_proc, payload);
+		ret = pm_ipi_send(primary_proc, payload);
 	}
+
+	return ret;
 }
 
 /* Miscellaneous API functions */
@@ -709,13 +725,16 @@ enum pm_ret_status pm_aes_engine(uint32_t address_high,
 enum pm_ret_status pm_get_callbackdata(uint32_t *data, size_t count)
 {
 	enum pm_ret_status ret = PM_RET_SUCCESS;
+
 	/* Return if interrupt is not from PMU */
-	if (!pm_ipi_irq_status(primary_proc)) {
-		return ret;
+	if ((pm_ipi_irq_status(primary_proc) == 0U)) {
+		goto exit_label;
 	}
 
 	ret = pm_ipi_buff_read_callb(data, count);
 	pm_ipi_irq_clear(primary_proc);
+
+exit_label:
 	return ret;
 }
 
@@ -770,7 +789,7 @@ enum pm_ret_status check_api_dependency(uint8_t id)
 {
 	uint8_t i;
 	uint32_t version_type;
-	int ret;
+	enum pm_ret_status ret = PM_RET_SUCCESS;
 
 	for (i = 0U; i < ARRAY_SIZE(api_dep_table); i++) {
 		if (api_dep_table[i].id == id) {
@@ -781,17 +800,19 @@ enum pm_ret_status check_api_dependency(uint8_t id)
 			ret = fw_api_version(api_dep_table[i].api_id,
 					     &version_type, 1);
 			if (ret != PM_RET_SUCCESS) {
-				return ret;
+				goto exit_label;
 			}
 
 			/* Check if fw version matches TF-A expected version */
 			if (version_type != tfa_expected_ver_id[api_dep_table[i].api_id]) {
-				return PM_RET_ERROR_NOTSUPPORTED;
+				ret = PM_RET_ERROR_NOTSUPPORTED;
+				goto exit_label;
 			}
 		}
 	}
 
-	return PM_RET_SUCCESS;
+exit_label:
+	return ret;
 }
 
 /**
@@ -806,20 +827,26 @@ enum pm_ret_status check_api_dependency(uint8_t id)
 static enum pm_ret_status feature_check_tfa(uint32_t api_id, uint32_t *version,
 					    uint32_t *bit_mask)
 {
+	enum pm_ret_status ret = PM_RET_ERROR_NO_FEATURE;
+
 	switch (api_id) {
 	case PM_QUERY_DATA:
 		*version = TFA_API_QUERY_DATA_VERSION;
 		bit_mask[0] = (uint32_t)(PM_QUERY_FEATURE_BITMASK);
 		bit_mask[1] = (uint32_t)(PM_QUERY_FEATURE_BITMASK >> 32);
-		return PM_RET_SUCCESS;
+		ret = PM_RET_SUCCESS;
+		break;
 	case PM_GET_CALLBACK_DATA:
 	case PM_GET_TRUSTZONE_VERSION:
 	case PM_SET_SUSPEND_MODE:
 		*version = TFA_API_BASE_VERSION;
-		return PM_RET_SUCCESS;
+		ret = PM_RET_SUCCESS;
+		break;
 	default:
-		return PM_RET_ERROR_NO_FEATURE;
+		break;
 	}
+
+	return ret;
 }
 
 /**
@@ -834,6 +861,8 @@ static enum pm_ret_status feature_check_tfa(uint32_t api_id, uint32_t *version,
 static enum pm_ret_status get_tfa_version_for_partial_apis(uint32_t api_id,
 							   uint32_t *version)
 {
+	enum pm_ret_status ret = PM_RET_ERROR_ARGS;
+
 	switch (api_id) {
 	case PM_SELF_SUSPEND:
 	case PM_REQ_WAKEUP:
@@ -854,13 +883,17 @@ static enum pm_ret_status get_tfa_version_for_partial_apis(uint32_t api_id,
 	case PM_PLL_GET_MODE:
 	case PM_REGISTER_ACCESS:
 		*version = TFA_API_BASE_VERSION;
-		return PM_RET_SUCCESS;
+		ret = PM_RET_SUCCESS;
+		break;
 	case PM_FEATURE_CHECK:
 		*version = FW_API_VERSION_2;
-		return PM_RET_SUCCESS;
+		ret = PM_RET_SUCCESS;
+		break;
 	default:
-		return PM_RET_ERROR_ARGS;
+		break;
 	}
+
+	return ret;
 }
 
 /**
@@ -876,6 +909,7 @@ static enum pm_ret_status feature_check_partial(uint32_t api_id,
 						uint32_t *version)
 {
 	uint32_t status;
+	uint32_t ret = PM_RET_ERROR_NO_FEATURE;
 
 	switch (api_id) {
 	case PM_SELF_SUSPEND:
@@ -899,12 +933,16 @@ static enum pm_ret_status feature_check_partial(uint32_t api_id,
 	case PM_FEATURE_CHECK:
 		status = check_api_dependency(api_id);
 		if (status != PM_RET_SUCCESS) {
-			return status;
+			ret = status;
+		} else {
+			ret = get_tfa_version_for_partial_apis(api_id, version);
 		}
-		return get_tfa_version_for_partial_apis(api_id, version);
+		break;
 	default:
-		return PM_RET_ERROR_NO_FEATURE;
+		break;
 	}
+
+	return ret;
 }
 
 /**
@@ -921,18 +959,18 @@ enum pm_ret_status pm_feature_check(uint32_t api_id, uint32_t *version,
 				    uint32_t *bit_mask, uint8_t len)
 {
 	uint32_t ret_payload[RET_PAYLOAD_ARG_CNT] = {0U};
-	uint32_t status;
+	enum pm_ret_status status;
 
 	/* Get API version implemented in TF-A */
 	status = feature_check_tfa(api_id, version, bit_mask);
 	if (status != PM_RET_ERROR_NO_FEATURE) {
-		return status;
+		goto exit_label;
 	}
 
 	/* Get API version implemented by firmware and TF-A both */
 	status = feature_check_partial(api_id, version);
 	if (status != PM_RET_ERROR_NO_FEATURE) {
-		return status;
+		goto exit_label;
 	}
 
 	/* Get API version implemented by firmware */
@@ -940,20 +978,21 @@ enum pm_ret_status pm_feature_check(uint32_t api_id, uint32_t *version,
 	/* IOCTL call may return failure whose ID is not implemented in
 	 * firmware but implemented in TF-A
 	 */
-	if ((api_id != PM_IOCTL) && (status != PM_RET_SUCCESS)) {
-		return status;
+	if ((api_id != (uint32_t)PM_IOCTL) && (status != PM_RET_SUCCESS)) {
+		goto exit_label;
 	}
 
 	*version = ret_payload[0];
 
 	/* Update IOCTL bit mask which are implemented in TF-A */
-	if ((api_id == PM_IOCTL) || (api_id == PM_GET_OP_CHARACTERISTIC)) {
-		if (len < 2) {
-			return PM_RET_ERROR_ARGS;
+	if ((api_id == (uint32_t)PM_IOCTL) || (api_id == (uint32_t)PM_GET_OP_CHARACTERISTIC)) {
+		if (len < 2U) {
+			status = PM_RET_ERROR_ARGS;
+			goto exit_label;
 		}
 		bit_mask[0] = ret_payload[1];
 		bit_mask[1] = ret_payload[2];
-		if (api_id == PM_IOCTL) {
+		if (api_id == (uint32_t)PM_IOCTL) {
 			/* Get IOCTL's implemented by TF-A */
 			status = tfa_ioctl_bitmask(bit_mask);
 		}
@@ -961,6 +1000,7 @@ enum pm_ret_status pm_feature_check(uint32_t api_id, uint32_t *version,
 		/* Requires for MISRA */
 	}
 
+exit_label:
 	return status;
 }
 
@@ -1112,7 +1152,7 @@ static enum pm_ret_status pm_clock_gate(uint32_t clock_id,
 	/* Check if clock ID is valid and return an error if it is not */
 	status = pm_clock_id_is_valid(clock_id);
 	if (status != PM_RET_SUCCESS) {
-		return status;
+		goto exit_label;
 	}
 
 	if (enable != 0U) {
@@ -1130,6 +1170,7 @@ static enum pm_ret_status pm_clock_gate(uint32_t clock_id,
 		status = PM_RET_SUCCESS;
 	}
 
+exit_label:
 	return status;
 }
 
@@ -1147,15 +1188,19 @@ static enum pm_ret_status pm_clock_gate(uint32_t clock_id,
 enum pm_ret_status pm_clock_enable(uint32_t clock_id)
 {
 	struct pm_pll *pll;
+	enum pm_ret_status ret = PM_RET_SUCCESS;
 
 	/* First try to handle it as a PLL */
 	pll = pm_clock_get_pll(clock_id);
 	if (pll != NULL) {
-		return pm_clock_pll_enable(pll);
+		ret = pm_clock_pll_enable(pll);
+	} else {
+
+		/* It's an on-chip clock, PMU should configure clock's gate */
+		ret = pm_clock_gate(clock_id, 1);
 	}
 
-	/* It's an on-chip clock, PMU should configure clock's gate */
-	return pm_clock_gate(clock_id, 1);
+	return ret;
 }
 
 /**
@@ -1172,15 +1217,19 @@ enum pm_ret_status pm_clock_enable(uint32_t clock_id)
 enum pm_ret_status pm_clock_disable(uint32_t clock_id)
 {
 	struct pm_pll *pll;
+	enum pm_ret_status ret = PM_RET_SUCCESS;
 
 	/* First try to handle it as a PLL */
 	pll = pm_clock_get_pll(clock_id);
 	if (pll != NULL) {
-		return pm_clock_pll_disable(pll);
+		ret = pm_clock_pll_disable(pll);
+	} else {
+
+		/* It's an on-chip clock, PMU should configure clock's gate */
+		ret = pm_clock_gate(clock_id, 0);
 	}
 
-	/* It's an on-chip clock, PMU should configure clock's gate */
-	return pm_clock_gate(clock_id, 0);
+	return ret;
 }
 
 /**
@@ -1204,17 +1253,21 @@ enum pm_ret_status pm_clock_getstate(uint32_t clock_id,
 	/* First try to handle it as a PLL */
 	pll = pm_clock_get_pll(clock_id);
 	if (pll != NULL) {
-		return pm_clock_pll_get_state(pll, state);
+		status = pm_clock_pll_get_state(pll, state);
+		goto exit_label;
 	}
 	/* Check if clock ID is a valid on-chip clock */
 	status = pm_clock_id_is_valid(clock_id);
 	if (status != PM_RET_SUCCESS) {
-		return status;
+		goto exit_label;
 	}
 
 	/* Send request to the PMU */
 	PM_PACK_PAYLOAD2(payload, PM_CLOCK_GETSTATE, clock_id);
-	return pm_ipi_send_sync(primary_proc, payload, state, 1);
+	status = pm_ipi_send_sync(primary_proc, payload, state, 1);
+
+exit_label:
+	return status;
 }
 
 /**
@@ -1242,13 +1295,14 @@ enum pm_ret_status pm_clock_setdivider(uint32_t clock_id,
 	/* Get PLL node ID using PLL clock ID */
 	status = pm_clock_get_pll_node_id(clock_id, &nid);
 	if (status == PM_RET_SUCCESS) {
-		return pm_pll_set_parameter(nid, PM_PLL_PARAM_FBDIV, divider);
+		status = pm_pll_set_parameter(nid, PM_PLL_PARAM_FBDIV, divider);
+		goto exit_label;
 	}
 
 	/* Check if clock ID is a valid on-chip clock */
 	status = pm_clock_id_is_valid(clock_id);
 	if (status != PM_RET_SUCCESS) {
-		return status;
+		goto exit_label;
 	}
 
 	if (div0 == (divider & div0)) {
@@ -1258,12 +1312,16 @@ enum pm_ret_status pm_clock_setdivider(uint32_t clock_id,
 		div_id = PM_CLOCK_DIV1_ID;
 		val = (divider & ~div1) >> 16;
 	} else {
-		return PM_RET_ERROR_ARGS;
+		status = PM_RET_ERROR_ARGS;
+		goto exit_label;
 	}
 
 	/* Send request to the PMU */
 	PM_PACK_PAYLOAD4(payload, PM_CLOCK_SETDIVIDER, clock_id, div_id, val);
-	return pm_ipi_send_sync(primary_proc, payload, NULL, 0);
+	status = pm_ipi_send_sync(primary_proc, payload, NULL, 0);
+
+exit_label:
+	return status;
 }
 
 /**
@@ -1280,7 +1338,7 @@ enum pm_ret_status pm_clock_setdivider(uint32_t clock_id,
 enum pm_ret_status pm_clock_getdivider(uint32_t clock_id,
 				       uint32_t *divider)
 {
-	enum pm_ret_status status;
+	enum pm_ret_status status = PM_RET_SUCCESS;
 	enum pm_node_id nid;
 	uint32_t payload[PAYLOAD_ARG_CNT];
 	uint32_t val;
@@ -1288,22 +1346,23 @@ enum pm_ret_status pm_clock_getdivider(uint32_t clock_id,
 	/* Get PLL node ID using PLL clock ID */
 	status = pm_clock_get_pll_node_id(clock_id, &nid);
 	if (status == PM_RET_SUCCESS) {
-		return pm_pll_get_parameter(nid, PM_PLL_PARAM_FBDIV, divider);
+		status = pm_pll_get_parameter(nid, PM_PLL_PARAM_FBDIV, divider);
+		goto exit_label;
 	}
 
 	/* Check if clock ID is a valid on-chip clock */
 	status = pm_clock_id_is_valid(clock_id);
 	if (status != PM_RET_SUCCESS) {
-		return status;
+		goto exit_label;
 	}
 
 	if ((pm_clock_has_div(clock_id, PM_CLOCK_DIV0_ID)) != 0U) {
 		/* Send request to the PMU to get div0 */
 		PM_PACK_PAYLOAD3(payload, PM_CLOCK_GETDIVIDER, clock_id,
-				 PM_CLOCK_DIV0_ID);
+				PM_CLOCK_DIV0_ID);
 		status = pm_ipi_send_sync(primary_proc, payload, &val, 1);
 		if (status != PM_RET_SUCCESS) {
-			return status;
+			goto exit_label;
 		}
 		*divider = val;
 	}
@@ -1311,14 +1370,14 @@ enum pm_ret_status pm_clock_getdivider(uint32_t clock_id,
 	if ((pm_clock_has_div(clock_id, PM_CLOCK_DIV1_ID)) != 0U) {
 		/* Send request to the PMU to get div1 */
 		PM_PACK_PAYLOAD3(payload, PM_CLOCK_GETDIVIDER, clock_id,
-				 PM_CLOCK_DIV1_ID);
+				PM_CLOCK_DIV1_ID);
 		status = pm_ipi_send_sync(primary_proc, payload, &val, 1);
 		if (status != PM_RET_SUCCESS) {
-			return status;
+			goto exit_label;
 		}
 		*divider |= val << 16;
 	}
-
+exit_label:
 	return status;
 }
 
@@ -1342,18 +1401,22 @@ enum pm_ret_status pm_clock_setparent(uint32_t clock_id,
 	/* First try to handle it as a PLL */
 	pll = pm_clock_get_pll_by_related_clk(clock_id);
 	if (pll != NULL) {
-		return pm_clock_pll_set_parent(pll, clock_id, parent_index);
+		status = pm_clock_pll_set_parent(pll, clock_id, parent_index);
+		goto exit_label;
 	}
 
 	/* Check if clock ID is a valid on-chip clock */
 	status = pm_clock_id_is_valid(clock_id);
 	if (status != PM_RET_SUCCESS) {
-		return status;
+		goto exit_label;
 	}
 
 	/* Send request to the PMU */
 	PM_PACK_PAYLOAD3(payload, PM_CLOCK_SETPARENT, clock_id, parent_index);
-	return pm_ipi_send_sync(primary_proc, payload, NULL, 0);
+	status = pm_ipi_send_sync(primary_proc, payload, NULL, 0);
+
+exit_label:
+	return status;
 }
 
 /**
@@ -1377,18 +1440,22 @@ enum pm_ret_status pm_clock_getparent(uint32_t clock_id,
 	/* First try to handle it as a PLL */
 	pll = pm_clock_get_pll_by_related_clk(clock_id);
 	if (pll != NULL) {
-		return pm_clock_pll_get_parent(pll, clock_id, parent_index);
+		status = pm_clock_pll_get_parent(pll, clock_id, parent_index);
+		goto exit_label;
 	}
 
 	/* Check if clock ID is a valid on-chip clock */
 	status = pm_clock_id_is_valid(clock_id);
 	if (status != PM_RET_SUCCESS) {
-		return status;
+		goto exit_label;
 	}
 
 	/* Send request to the PMU */
 	PM_PACK_PAYLOAD2(payload, PM_CLOCK_GETPARENT, clock_id);
-	return pm_ipi_send_sync(primary_proc, payload, parent_index, 1);
+	status = pm_ipi_send_sync(primary_proc, payload, parent_index, 1);
+
+exit_label:
+	return status;
 }
 
 /**
@@ -1521,47 +1588,47 @@ void pm_query_data(enum pm_query_ids qid, uint32_t arg1, uint32_t arg2,
 		pm_clock_get_name(arg1, (char *)data);
 		break;
 	case PM_QID_CLOCK_GET_TOPOLOGY:
-		data[0] = pm_clock_get_topology(arg1, arg2, &data[1]);
+		data[0] = (uint32_t)pm_clock_get_topology(arg1, arg2, &data[1]);
 		break;
 	case PM_QID_CLOCK_GET_FIXEDFACTOR_PARAMS:
-		data[0] = pm_clock_get_fixedfactor_params(arg1, &data[1],
+		data[0] = (uint32_t)pm_clock_get_fixedfactor_params(arg1, &data[1],
 							  &data[2]);
 		break;
 	case PM_QID_CLOCK_GET_PARENTS:
-		data[0] = pm_clock_get_parents(arg1, arg2, &data[1]);
+		data[0] = (uint32_t)pm_clock_get_parents(arg1, arg2, &data[1]);
 		break;
 	case PM_QID_CLOCK_GET_ATTRIBUTES:
-		data[0] = pm_clock_get_attributes(arg1, &data[1]);
+		data[0] = (uint32_t)pm_clock_get_attributes(arg1, &data[1]);
 		break;
 	case PM_QID_PINCTRL_GET_NUM_PINS:
-		data[0] = pm_pinctrl_get_num_pins(&data[1]);
+		data[0] = (uint32_t)pm_pinctrl_get_num_pins(&data[1]);
 		break;
 	case PM_QID_PINCTRL_GET_NUM_FUNCTIONS:
-		data[0] = pm_pinctrl_get_num_functions(&data[1]);
+		data[0] = (uint32_t)pm_pinctrl_get_num_functions(&data[1]);
 		break;
 	case PM_QID_PINCTRL_GET_NUM_FUNCTION_GROUPS:
-		data[0] = pm_pinctrl_get_num_function_groups(arg1, &data[1]);
+		data[0] = (uint32_t)pm_pinctrl_get_num_function_groups(arg1, &data[1]);
 		break;
 	case PM_QID_PINCTRL_GET_FUNCTION_NAME:
 		pm_pinctrl_get_function_name(arg1, (char *)data);
 		break;
 	case PM_QID_PINCTRL_GET_FUNCTION_GROUPS:
-		data[0] = pm_pinctrl_get_function_groups(arg1, arg2,
+		data[0] = (uint32_t)pm_pinctrl_get_function_groups(arg1, arg2,
 							 (uint16_t *)&data[1]);
 		break;
 	case PM_QID_PINCTRL_GET_PIN_GROUPS:
-		data[0] = pm_pinctrl_get_pin_groups(arg1, arg2,
+		data[0] = (uint32_t)pm_pinctrl_get_pin_groups(arg1, arg2,
 						    (uint16_t *)&data[1]);
 		break;
 	case PM_QID_CLOCK_GET_NUM_CLOCKS:
-		data[0] = pm_clock_get_num_clocks(&data[1]);
+		data[0] = (uint32_t)pm_clock_get_num_clocks(&data[1]);
 		break;
 
 	case PM_QID_CLOCK_GET_MAX_DIVISOR:
-		data[0] = pm_clock_get_max_divisor(arg1, arg2, &data[1]);
+		data[0] = (uint32_t)pm_clock_get_max_divisor(arg1, (uint8_t)arg2, &data[1]);
 		break;
 	default:
-		data[0] = PM_RET_ERROR_ARGS;
+		data[0] = (uint32_t)PM_RET_ERROR_ARGS;
 		WARN("Unimplemented query service call: 0x%x\n", qid);
 		break;
 	}
@@ -1655,20 +1722,26 @@ enum pm_ret_status pm_pll_set_parameter(enum pm_node_id nid,
 					uint32_t value)
 {
 	uint32_t payload[PAYLOAD_ARG_CNT];
+	enum pm_ret_status ret = 0;
 
 	/* Check if given node ID is a PLL node */
 	if ((nid < NODE_APLL) || (nid > NODE_IOPLL)) {
-		return PM_RET_ERROR_ARGS;
+		ret = PM_RET_ERROR_ARGS;
+		goto exit_label;
 	}
 
 	/* Check if parameter ID is valid and return an error if it's not */
 	if (param_id >= PM_PLL_PARAM_MAX) {
-		return PM_RET_ERROR_ARGS;
+		ret = PM_RET_ERROR_ARGS;
+		goto exit_label;
 	}
 
 	/* Send request to the PMU */
 	PM_PACK_PAYLOAD4(payload, PM_PLL_SET_PARAMETER, nid, param_id, value);
-	return pm_ipi_send_sync(primary_proc, payload, NULL, 0);
+	ret = pm_ipi_send_sync(primary_proc, payload, NULL, 0);
+
+exit_label:
+	return ret;
 }
 
 /**
@@ -1686,20 +1759,26 @@ enum pm_ret_status pm_pll_get_parameter(enum pm_node_id nid,
 					uint32_t *value)
 {
 	uint32_t payload[PAYLOAD_ARG_CNT];
+	enum pm_ret_status ret = PM_RET_SUCCESS;
 
 	/* Check if given node ID is a PLL node */
 	if ((nid < NODE_APLL) || (nid > NODE_IOPLL)) {
-		return PM_RET_ERROR_ARGS;
+		ret = PM_RET_ERROR_ARGS;
+		goto exit_label;
 	}
 
 	/* Check if parameter ID is valid and return an error if it's not */
 	if (param_id >= PM_PLL_PARAM_MAX) {
-		return PM_RET_ERROR_ARGS;
+		ret = PM_RET_ERROR_ARGS;
+		goto exit_label;
 	}
 
 	/* Send request to the PMU */
 	PM_PACK_PAYLOAD3(payload, PM_PLL_GET_PARAMETER, nid, param_id);
-	return pm_ipi_send_sync(primary_proc, payload, value, 1);
+	ret = pm_ipi_send_sync(primary_proc, payload, value, 1);
+
+exit_label:
+	return ret;
 }
 
 /**
@@ -1719,20 +1798,26 @@ enum pm_ret_status pm_pll_get_parameter(enum pm_node_id nid,
 enum pm_ret_status pm_pll_set_mode(enum pm_node_id nid, enum pm_pll_mode mode)
 {
 	uint32_t payload[PAYLOAD_ARG_CNT];
+	enum pm_ret_status ret = PM_RET_SUCCESS;
 
 	/* Check if given node ID is a PLL node */
 	if ((nid < NODE_APLL) || (nid > NODE_IOPLL)) {
-		return PM_RET_ERROR_ARGS;
+		ret = PM_RET_ERROR_ARGS;
+		goto exit_label;
 	}
 
 	/* Check if PLL mode is valid */
 	if (mode >= PM_PLL_MODE_MAX) {
-		return PM_RET_ERROR_ARGS;
+		ret = PM_RET_ERROR_ARGS;
+		goto exit_label;
 	}
 
 	/* Send request to the PMU */
 	PM_PACK_PAYLOAD3(payload, PM_PLL_SET_MODE, nid, mode);
-	return pm_ipi_send_sync(primary_proc, payload, NULL, 0);
+	ret = pm_ipi_send_sync(primary_proc, payload, NULL, 0);
+
+exit_label:
+	return ret;
 }
 
 /**
@@ -1747,15 +1832,18 @@ enum pm_ret_status pm_pll_set_mode(enum pm_node_id nid, enum pm_pll_mode mode)
 enum pm_ret_status pm_pll_get_mode(enum pm_node_id nid, enum pm_pll_mode *mode)
 {
 	uint32_t payload[PAYLOAD_ARG_CNT];
+	enum pm_ret_status ret = PM_RET_SUCCESS;
 
 	/* Check if given node ID is a PLL node */
 	if ((nid < NODE_APLL) || (nid > NODE_IOPLL)) {
-		return PM_RET_ERROR_ARGS;
+		ret = PM_RET_ERROR_ARGS;
+	} else {
+		/* Send request to the PMU */
+		PM_PACK_PAYLOAD2(payload, PM_PLL_GET_MODE, nid);
+		ret = pm_ipi_send_sync(primary_proc, payload, mode, 1);
 	}
 
-	/* Send request to the PMU */
-	PM_PACK_PAYLOAD2(payload, PM_PLL_GET_MODE, nid);
-	return pm_ipi_send_sync(primary_proc, payload, mode, 1);
+	return ret;
 }
 
 /**
@@ -1783,7 +1871,8 @@ enum pm_ret_status pm_register_access(uint32_t register_access_id,
 			((CSUDMA_BASE & address) != CSUDMA_BASE) &&
 			((RSA_CORE_BASE & address) != RSA_CORE_BASE) &&
 			((PMU_GLOBAL_BASE & address) != PMU_GLOBAL_BASE)) {
-		return PM_RET_ERROR_ACCESS;
+		ret = PM_RET_ERROR_ACCESS;
+		goto exit_label;
 	}
 
 	switch (register_access_id) {
@@ -1798,6 +1887,8 @@ enum pm_ret_status pm_register_access(uint32_t register_access_id,
 		WARN("Unimplemented register_access call\n\r");
 		break;
 	}
+
+exit_label:
 	return ret;
 }
 

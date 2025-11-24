@@ -691,6 +691,8 @@ static uint64_t ffa_error_handler(uint32_t smc_fid,
 {
 	struct secure_partition_desc *sp;
 	unsigned int idx;
+	uint16_t dst_id = ffa_endpoint_destination(x1);
+	bool cancel_dir_req = false;
 
 	/* Check that the response did not originate from the Normal world. */
 	if (!secure_origin) {
@@ -716,6 +718,32 @@ static uint64_t ffa_error_handler(uint32_t smc_fid,
 		spmc_sp_synchronous_exit(&sp->ec[idx], x2);
 		/* Should not get here. */
 		panic();
+	}
+
+	if (sp->runtime_el == S_EL0) {
+		spin_lock(&sp->rt_state_lock);
+	}
+
+	if (sp->ec[idx].rt_state == RT_STATE_RUNNING &&
+			sp->ec[idx].rt_model == RT_MODEL_DIR_REQ) {
+		sp->ec[idx].rt_state = RT_STATE_WAITING;
+		sp->ec[idx].dir_req_origin_id = INV_SP_ID;
+		sp->ec[idx].dir_req_funcid = 0x00;
+		cancel_dir_req = true;
+	}
+
+	if (sp->runtime_el == S_EL0) {
+		spin_unlock(&sp->rt_state_lock);
+	}
+
+	if (cancel_dir_req) {
+		if (dst_id == FFA_SPMC_ID) {
+			spmc_sp_synchronous_exit(&sp->ec[idx], x4);
+			/* Should not get here. */
+			panic();
+		} else
+			return spmc_smc_return(smc_fid, secure_origin, x1, x2, x3, x4,
+					       handle, cookie, flags, dst_id);
 	}
 
 	return spmc_ffa_error_return(handle, FFA_ERROR_NOT_SUPPORTED);
@@ -1356,6 +1384,16 @@ static uint64_t ffa_features_handler(uint32_t smc_fid,
 		/* Execution stops here. */
 
 	/* Supported ABIs only from the secure world. */
+	case FFA_MEM_PERM_GET_SMC32:
+	case FFA_MEM_PERM_GET_SMC64:
+	case FFA_MEM_PERM_SET_SMC32:
+	case FFA_MEM_PERM_SET_SMC64:
+	/* these ABIs are only supported from S-EL0 SPs */
+	#if !(SPMC_AT_EL3_SEL0_SP)
+		return spmc_ffa_error_return(handle, FFA_ERROR_NOT_SUPPORTED);
+	#endif
+	/* fall through */
+
 	case FFA_SECONDARY_EP_REGISTER_SMC64:
 	case FFA_MSG_SEND_DIRECT_RESP_SMC32:
 	case FFA_MSG_SEND_DIRECT_RESP_SMC64:
@@ -1364,7 +1402,6 @@ static uint64_t ffa_features_handler(uint32_t smc_fid,
 	case FFA_MSG_WAIT:
 	case FFA_CONSOLE_LOG_SMC32:
 	case FFA_CONSOLE_LOG_SMC64:
-
 		if (!secure_origin) {
 			return spmc_ffa_error_return(handle,
 				FFA_ERROR_NOT_SUPPORTED);
@@ -2203,39 +2240,34 @@ static int find_and_prepare_sp_context(void)
 		return ret;
 	}
 
-	/* Check that the runtime EL in the manifest was correct. */
-	if (sp->runtime_el != S_EL0 && sp->runtime_el != S_EL1) {
-		ERROR("Unexpected runtime EL: %d\n", sp->runtime_el);
-		return -EINVAL;
-	}
-
 	/* Perform any common initialisation. */
 	spmc_sp_common_setup(sp, next_image_ep_info, boot_info_reg);
 
 	/* Perform any initialisation specific to S-EL1 SPs. */
 	if (sp->runtime_el == S_EL1) {
 		spmc_el1_sp_setup(sp, next_image_ep_info);
+		spmc_sp_common_ep_commit(sp, next_image_ep_info);
 	}
-
 #if SPMC_AT_EL3_SEL0_SP
-	/* Setup spsr in endpoint info for common context management routine. */
-	if (sp->runtime_el == S_EL0) {
+	/* Perform any initialisation specific to S-EL0 SPs. */
+	else if (sp->runtime_el == S_EL0) {
+		/* Setup spsr in endpoint info for common context management routine. */
 		spmc_el0_sp_spsr_setup(next_image_ep_info);
-	}
-#endif /* SPMC_AT_EL3_SEL0_SP */
 
-	/* Initialize the SP context with the required ep info. */
-	spmc_sp_common_ep_commit(sp, next_image_ep_info);
+		spmc_sp_common_ep_commit(sp, next_image_ep_info);
 
-#if SPMC_AT_EL3_SEL0_SP
-	/*
-	 * Perform any initialisation specific to S-EL0 not set by common
-	 * context management routine.
-	 */
-	if (sp->runtime_el == S_EL0) {
+		/*
+		 * Perform any initialisation specific to S-EL0 not set by common
+		 * context management routine.
+		 */
 		spmc_el0_sp_setup(sp, boot_info_reg, sp_manifest);
 	}
 #endif /* SPMC_AT_EL3_SEL0_SP */
+	else {
+		ERROR("Unexpected runtime EL: %u\n", sp->runtime_el);
+		return -EINVAL;
+	}
+
 	return 0;
 }
 
@@ -2555,11 +2587,13 @@ uint64_t spmc_smc_handler(uint32_t smc_fid,
 		return spmc_ffa_console_log(smc_fid, secure_origin, x1, x2, x3,
 						x4, cookie, handle, flags);
 
-	case FFA_MEM_PERM_GET:
+	case FFA_MEM_PERM_GET_SMC32:
+	case FFA_MEM_PERM_GET_SMC64:
 		return ffa_mem_perm_get_handler(smc_fid, secure_origin, x1, x2,
 						x3, x4, cookie, handle, flags);
 
-	case FFA_MEM_PERM_SET:
+	case FFA_MEM_PERM_SET_SMC32:
+	case FFA_MEM_PERM_SET_SMC64:
 		return ffa_mem_perm_set_handler(smc_fid, secure_origin, x1, x2,
 						x3, x4, cookie, handle, flags);
 

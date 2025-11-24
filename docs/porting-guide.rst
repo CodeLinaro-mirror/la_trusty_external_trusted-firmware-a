@@ -1001,7 +1001,7 @@ Function : plat_drtm_get_min_size_normal_world_dce()
 This function returns the size normal-world DCE of the platform.
 
 Function : plat_drtm_get_imp_def_dlme_region_size()
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ::
 
@@ -1012,7 +1012,7 @@ This function returns the size of implementation defined DLME region
 of the platform.
 
 Function : plat_drtm_get_tcb_hash_table_size()
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ::
 
@@ -1021,8 +1021,18 @@ Function : plat_drtm_get_tcb_hash_table_size()
 
 This function returns the size of TCB hash table of the platform.
 
+Function : plat_drtm_get_acpi_tables_region_size()
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+    Argument : void
+    Return   : uint64_t
+
+This function returns the size of ACPI tables region of the platform.
+
 Function : plat_drtm_get_tcb_hash_features()
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ::
 
@@ -1031,6 +1041,17 @@ Function : plat_drtm_get_tcb_hash_features()
 
 This function returns the Maximum number of TCB hashes recorded by the
 platform.
+For more details see section 3.3 Table 6 of `DRTM`_ specification.
+
+Function : plat_drtm_get_dlme_img_auth_features()
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+    Argument : void
+    Return   : uint64_t
+
+This function returns the DLME image authentication features.
 For more details see section 3.3 Table 6 of `DRTM`_ specification.
 
 Function : plat_drtm_validate_ns_region()
@@ -2220,10 +2241,10 @@ Function : bl31_plat_runtime_setup() [optional]
     Argument : void
     Return   : void
 
-The purpose of this function is allow the platform to perform any BL31 runtime
-setup just prior to BL31 exit during cold boot. The default weak
-implementation of this function will invoke ``console_switch_state()`` to switch
-console output to consoles marked for use in the ``runtime`` state.
+The purpose of this function is to allow the platform to perform any BL31 runtime
+setup just prior to BL31 exit during cold boot. The default weak implementation
+of this function is empty. Any platform that needs to perform additional runtime
+setup, before BL31 exits, will need to override this function.
 
 Function : bl31_plat_get_next_image_ep_info() [mandatory]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2329,6 +2350,24 @@ RMM image and stores it in the area specified by manifest.
 
 When ENABLE_RME is disabled, this function is not used.
 
+Function : plat_rmm_mecid_key_update() [when ENABLE_RME == 1]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+    Argument : uint16_t
+    Return   : int
+
+This function is invoked by BL31's RMMD when there is a request from the RMM
+monitor to update the tweak for the encryption key associated to a MECID.
+
+The first parameter (``uint16_t mecid``) contains the MECID for which the
+encryption key is to be updated.
+
+Return value is 0 upon success and -EFAULT otherwise.
+
+This function needs to be implemented by a platform if it enables RME.
+
 Function : plat_rmmd_el3_token_sign_push_req() [mandatory when RMMD_ENABLE_EL3_TOKEN_SIGN == 1]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -2421,6 +2460,163 @@ The parameters of the function are:
 The function returns E_RMM_OK on success, RMM_E_INVAL if arguments are invalid and
 E_RMM_UNK if the SMC is not implemented or if interface version is < 0.4.
 
+Function : plat_rmmd_el3_ide_key_program() [mandatory when RMMD_ENABLE_IDE_KEY_PROG == 1]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+    Argument : uint64_t, uint64_t, uint64_t, struct rp_ide_key_info_t *, uint64_t, uint64_t
+    Return   : int
+
+This function sets the key/IV info for an IDE stream at the Root port. The key is 256 bits
+and IV is 96 bits. The caller calls this SMC to program this key to the Rx and Tx ports
+and for each substream corresponding to a single keyset. The platform should validate
+the arguments `Ecam address` and `Rootport ID` before acting on it. The arguments `request ID`
+and `cookie` are to be ignored for blocking mode and are pass-through to the response for
+non-blocking mode.
+
+The platform needs to ensure proper exclusives are in place when accessed from multiple CPUs.
+Depending on the expected latency for IDE-KM interface, the platform should choose blocking
+or non-blocking semantics. More details about IDE Setup flow can be found
+in this `RFC <https://github.com/TF-RMM/tf-rmm/wiki/RFC:-EL3-RMM-IDE-KM-Interface>`_.
+
+The parameters of the function are:
+
+    arg0 - The ecam address, to access and configure PCI devices in a system.
+
+    arg1 - The rootport ID used to identify the PCIe rootport of a connected device.
+
+    arg2 - The IDE stream info associated with a physical device, this parameter packs the
+    the keyset, direction, substream and stream ID info.
+
+    arg3 - Structure with key and IV info.
+
+    arg4 - The request ID, is used in non-blocking mode only and can be ignored in blocking mode.
+
+    arg5 - The cookie variable, is used in non-blocking mode only and can be ignored in blocking
+    mode.
+
+The function returns E_RMM_OK on success, E_RMM_INVAL if arguments are invalid, E_RMM_FAULT
+if the key programming is unsuccesful, E_RMM_UNK for an unknown error, E_RMM_AGAIN returned
+only for non-blocking mode if the IDE-KM interface is busy or the request queue is full.
+E_RMM_INPROGRESS returned if the request is queued successfully and used only in non-blocking
+mode.
+
+Function : plat_rmmd_el3_ide_key_set_go() [mandatory when RMMD_ENABLE_IDE_KEY_PROG == 1]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+    Argument : uint64_t, uint64_t, uint64_t, uint64_t, uint64_t
+    Return   : int
+
+This function activates the IDE stream at the Root Port once all the keys have been
+programmed. The platform should validate the arguments `Ecam address` and `Rootport ID`
+before acting on it. The arguments `request ID` and `cookie` are to be ignored for blocking
+mode and are pass-through to the response for non-blocking mode.
+
+The platform needs to ensure proper exclusives are in place when accessed from multiple CPUs.
+Depending on the expected latency for IDE-KM interface, the platform should choose blocking
+or non-blocking semantics. More details about IDE Setup flow can be found
+in this `RFC <https://github.com/TF-RMM/tf-rmm/wiki/RFC:-EL3-RMM-IDE-KM-Interface>`_.
+
+The parameters of the function are:
+
+    arg0 - The ecam address, to access and configure PCI devices in a system.
+
+    arg1 - The rootport ID used to identify the PCIe rootport of a connected device.
+
+    arg2 - The IDE stream info associated with a physical device, this parameter packs the
+    the keyset, direction, substream and stream ID info.
+
+    arg3 - The request ID, is used in non-blocking mode only and can be ignored in blocking mode.
+
+    arg4 - The cookie variable, is used in non-blocking mode only and can be ignored in blocking
+    mode.
+
+The function returns E_RMM_OK on success, E_RMM_INVAL if arguments are invalid, E_RMM_FAULT
+if the key programming is unsuccesful, E_RMM_UNK for an unknown error, E_RMM_AGAIN returned
+only for non-blocking mode if the IDE-KM interface is busy or the request queue is full.
+E_RMM_INPROGRESS returned if the request is queued successfully and used only in non-blocking
+mode.
+
+Function : plat_rmmd_el3_ide_key_set_stop() [mandatory when RMMD_ENABLE_IDE_KEY_PROG == 1]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+    Argument : uint64_t, uint64_t, uint64_t, uint64_t, uint64_t
+    Return   : int
+
+This function stops the IDE stream and is used to tear down the IDE stream at Root Port.
+The platform should validate the arguments `Ecam address` and `Rootport ID` before acting
+on it. The arguments `request ID` and `cookie` are to be ignored for blocking
+mode and are pass-through to the response for non-blocking mode.
+
+The platform needs to ensure proper exclusives are in place when accessed from multiple CPUs.
+Depending on the expected latency for IDE-KM interface, the platform should choose blocking
+or non-blocking semantics. More details about IDE Setup flow can be found
+in this `RFC <https://github.com/TF-RMM/tf-rmm/wiki/RFC:-EL3-RMM-IDE-KM-Interface>`_.
+
+The parameters of the function are:
+
+    arg0 - The ecam address, to access and configure PCI devices in a system.
+
+    arg1 - The rootport ID used to identify the PCIe rootport of a connected device.
+
+    arg2 - The IDE stream info associated with a physical device, this parameter packs the
+    the keyset, direction, substream and stream ID info.
+
+    arg3 - The request ID, is used in non-blocking mode only and can be ignored in blocking mode.
+
+    arg4 - The cookie variable, is used in non-blocking mode only and can be ignored in blocking
+    mode.
+
+The function returns E_RMM_OK on success, E_RMM_INVAL if arguments are invalid, E_RMM_FAULT
+if the key programming is unsuccesful, E_RMM_UNK for an unknown error, E_RMM_AGAIN returned
+only for non-blocking mode if the IDE-KM interface is busy or the request queue is full.
+E_RMM_INPROGRESS returned if the request is queued successfully and used only in non-blocking
+mode.
+
+Function : plat_rmmd_el3_ide_km_pull_response() [mandatory when RMMD_ENABLE_IDE_KEY_PROG == 1]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+    Argument : uint64_t, uint64_t, uint64_t *, uint64_t *, uint64_t *
+    Return   : int
+
+This function retrieves a reponse for any of the prior non-blocking IDE-KM requests. The
+caller has to identify the request and populate the accurate response. For blocking calls,
+this function always returns E_RMM_UNK.
+
+The platform needs to ensure proper exclusives are in place when accessed from multiple CPUs.
+Depending on the expected latency for IDE-KM interface, the platform should choose blocking
+or non-blocking semantics. More details about IDE Setup flow can be found
+in this `RFC <https://github.com/TF-RMM/tf-rmm/wiki/RFC:-EL3-RMM-IDE-KM-Interface>`_.
+
+The parameters of the function are:
+
+    arg0 - The ecam address, to access and configure PCI devices in a system.
+
+    arg1 - The rootport ID used to identify the PCIe rootport of a connected device.
+
+    arg2 - Retrieved response corresponding to the previous IDE_KM request.
+
+    arg3 - returns the passthrough request ID of the retrieved response.
+
+    arg4 - returns the passthrough cookie of the retrieved response.
+
+The function returns E_RMM_OK if response is retrieved successfully, E_RMM_INVAL if arguments
+to this function are invalid, E_RMM_UNK if response retrieval failed for an unknown error or
+IDE-KM interface is having blocking semantics, E_RMM_AGAIN if the response queue is empty.
+
+The `arg2` return parameter can return the following values:
+E_RMM_OK - The previous request was successful.
+E_RMM_FAULT - The previous request was not successful.
+E_RMM_INVAL - Arguments to previous request were incorrect.
+E_RMM_UNK - Previous request returned Unknown error.
+
 Function : bl31_plat_enable_mmu [optional]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -2454,7 +2650,7 @@ pointer authentication keys.
 The value should be obtained from a reliable source of randomness.
 
 This function is only needed if ARMv8.3 pointer authentication is used in the
-Trusted Firmware by building with ``BRANCH_PROTECTION`` option set to non-zero.
+Trusted Firmware by building with ``BRANCH_PROTECTION`` option set to 1, 2 or 3.
 
 Function : plat_get_syscnt_freq2() [mandatory]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2897,23 +3093,27 @@ allocated in a special area if it cannot fit in the platform's global static
 data, for example in DRAM. The Distributor can then be powered down using an
 implementation-defined sequence.
 
-plat_psci_ops.pwr_domain_pwr_down_wfi()
+plat_psci_ops.pwr_domain_pwr_down()
 .......................................
 
 This is an optional function and, if implemented, is expected to perform
-platform specific actions including the ``wfi`` invocation which allows the
-CPU to powerdown. Since this function is invoked outside the PSCI locks,
-the actions performed in this hook must be local to the CPU or the platform
-must ensure that races between multiple CPUs cannot occur.
+platform specific actions before the CPU is powered down. Since this function is
+invoked outside the PSCI locks, the actions performed in this hook must be local
+to the CPU or the platform must ensure that races between multiple CPUs cannot
+occur.
 
 The ``target_state`` has a similar meaning as described in the ``pwr_domain_off()``
 operation and it encodes the platform coordinated target local power states for
-the CPU power domain and its parent power domain levels. This function must
-not return back to the caller (by calling wfi in an infinite loop to ensure
-some CPUs power down mitigations work properly).
+the CPU power domain and its parent power domain levels.
 
-If this function is not implemented by the platform, PSCI generic
-implementation invokes ``psci_power_down_wfi()`` for power down.
+It is preferred that this function returns. The caller will invoke
+``psci_power_down_wfi()`` to powerdown the CPU, mitigate any powerdown errata,
+and handle any wakeups that may arise. Previously, this function did not return
+and instead called ``wfi`` (in an infinite loop) directly. This is still
+possible on platforms where this is guaranteed to be terminal, however, it is
+strongly discouraged going forward.
+
+Previously this function was called ``pwr_domain_pwr_down_wfi()``.
 
 plat_psci_ops.pwr_domain_on_finish()
 ....................................
@@ -2965,14 +3165,16 @@ plat_psci_ops.system_off()
 
 This function is called by PSCI implementation in response to a ``SYSTEM_OFF``
 call. It performs the platform-specific system poweroff sequence after
-notifying the Secure Payload Dispatcher.
+notifying the Secure Payload Dispatcher. The caller will call ``wfi`` if this
+function returns, similar to `plat_psci_ops.pwr_domain_pwr_down()`_.
 
 plat_psci_ops.system_reset()
 ............................
 
 This function is called by PSCI implementation in response to a ``SYSTEM_RESET``
 call. It performs the platform-specific system reset sequence after
-notifying the Secure Payload Dispatcher.
+notifying the Secure Payload Dispatcher. The caller will call ``wfi`` if this
+function returns, similar to `plat_psci_ops.pwr_domain_pwr_down()`_.
 
 plat_psci_ops.validate_power_state()
 ....................................
@@ -3060,7 +3262,8 @@ reset information. If the ``reset_type`` is not supported, the
 function must return ``PSCI_E_NOT_SUPPORTED``. For architectural
 resets, all failures must return ``PSCI_E_INVALID_PARAMETERS``
 and vendor reset can return other PSCI error codes as defined
-in `PSCI`_. On success this function will not return.
+in `PSCI`_. If this function returns success, the caller will call
+``wfi`` similar to `plat_psci_ops.pwr_domain_pwr_down()`_.
 
 plat_psci_ops.write_mem_protect()
 .................................
@@ -3296,6 +3499,21 @@ Register* (``GICD_IGROUPRn``) and *Interrupt Group Modifier Register*
 (``GICD_IGRPMODRn``) is read to figure out whether the interrupt is configured
 as Group 0 secure interrupt, Group 1 secure interrupt or Group 1 NS interrupt.
 
+Registering a console
+---------------------
+
+Platforms will need to implement the TF-A console framework to register and use
+a console for visual data output in TF-A. These can be used for data output during
+the different stages of the firmware boot process and also for debugging purposes.
+
+The console framework can be used to output data on to a console using a number of
+TF-A supported UARTs. Multiple consoles can be registered at the same time with
+different output scopes (BOOT, RUNTIME, CRASH) so that data can be displayed on
+their respective consoles without unnecessary cluttering of a single console.
+
+Information for registering a console can be found in the :ref:`Console Framework` section
+of the :ref:`System Design` documentation.
+
 Common helper functions
 -----------------------
 Function : elx_panic()
@@ -3415,6 +3633,18 @@ This API is used to setup the early console, it is required only if the flag
 
 External Abort handling and RAS Support
 ---------------------------------------
+
+If any cores on the platform support powerdown abandon (i.e. ``FEAT_PABANDON``
+is set, check the "Core powerup and powerdown sequence" in their TRMs), then
+these functions should be able to handle being called with power domains off and
+after the powerdown ``wfi``. In other words it may run after a call to
+``pwr_domain_suspend()`` and before a call to ``pwr_domain_suspend_finish()``
+(and their power off counterparts).
+
+Should this not be desirable, or if there is no powerdown abandon support, then
+RAS errors should be masked by writing any relevant error records in any
+powerdown hooks to prevent deadlocks due to a RAS error after the point of no
+return. See the core's TRM for further information.
 
 Function : plat_ea_handler
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -3553,7 +3783,10 @@ Function : plat_handle_impdef_trap
 This function is invoked by BL31's exception handler when there is a synchronous
 system register trap caused by access to the implementation defined registers.
 It allows platforms enabling ``IMPDEF_SYSREG_TRAP`` to emulate those system
-registers choosing to program bits of their choice.
+registers choosing to program bits of their choice. If using in combination with
+``ARCH_FEATURE_AVAILABILITY``, the macros
+{SCR,MDCR,CPTR}_PLAT_{BITS,IGNORED,FLIPPED} should be defined to report correct
+results.
 
 The first parameter (``uint64_t esr_el3``) contains the content of the ESR_EL3
 syndrome register, which encodes the instruction that was trapped.
@@ -3697,7 +3930,7 @@ to :ref:`Measured Boot Design` for more details.
 
 --------------
 
-*Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.*
+*Copyright (c) 2013-2025, Arm Limited and Contributors. All rights reserved.*
 
 .. _PSCI: https://developer.arm.com/documentation/den0022/latest/
 .. _Arm Generic Interrupt Controller version 2.0 (GICv2): http://infocenter.arm.com/help/topic/com.arm.doc.ihi0048b/index.html

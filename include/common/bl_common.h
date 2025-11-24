@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2025, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -168,6 +168,15 @@ typedef struct meminfo {
 } meminfo_t;
 
 /*******************************************************************************
+ * Structure used for conveying the location and size of the heap allocated for
+ * use by the cryptography library.
+ * *****************************************************************************/
+struct crypto_heap_info {
+	void *addr;
+	size_t size;
+};
+
+/*******************************************************************************
  * Function & variable prototypes
  ******************************************************************************/
 int load_auth_image(unsigned int image_id, image_info_t *image_data);
@@ -189,8 +198,6 @@ struct mmap_region;
 
 void setup_page_tables(const struct mmap_region *bl_regions,
 			   const struct mmap_region *plat_regions);
-
-void bl_handle_pauth(void);
 
 #endif /*__ASSEMBLER__*/
 

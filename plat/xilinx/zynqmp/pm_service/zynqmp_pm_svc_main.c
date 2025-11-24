@@ -220,6 +220,7 @@ err:
 int32_t pm_setup(void)
 {
 	enum pm_ret_status err;
+	int32_t ret = -EINVAL;
 
 	pm_ipi_init(primary_proc);
 
@@ -227,17 +228,17 @@ int32_t pm_setup(void)
 	if (err != PM_RET_SUCCESS) {
 		ERROR("BL31: Failed to read Platform Management API version. "
 		      "Return: %d\n", err);
-		return -EINVAL;
+		goto exit_label;
 	}
 	if (pm_ctx.api_version < PM_VERSION) {
 		ERROR("BL31: Platform Management API version error. Expected: "
 		      "v%d.%d - Found: v%d.%d\n", PM_VERSION_MAJOR,
 		      PM_VERSION_MINOR, pm_ctx.api_version >> 16,
 		      pm_ctx.api_version & 0xFFFFU);
-		return -EINVAL;
+		goto exit_label;
 	}
 
-	int32_t status = 0, ret = 0;
+	int32_t status = 0;
 #if ZYNQMP_WDT_RESTART
 	status = pm_wdt_restart_setup();
 	if (status)
@@ -253,8 +254,9 @@ int32_t pm_setup(void)
 		ret = status;
 	}
 
-	pm_up = !status;
+	pm_up = (status == 0);
 
+exit_label:
 	return ret;
 }
 
@@ -322,7 +324,7 @@ uint64_t pm_smc_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2, uint64_t x3,
 		uint32_t set_addr = pm_arg[1] & 0x1U;
 		uint64_t address = (uint64_t)pm_arg[2] << 32U;
 
-		address |= pm_arg[1] & (~0x1U);
+		address |= (uint64_t)(pm_arg[1] & (~0x1U));
 		ret = pm_req_wakeup(pm_arg[0], set_addr, address,
 				    pm_arg[3]);
 		SMC_RET1(handle, (uint64_t)ret);
@@ -354,7 +356,7 @@ uint64_t pm_smc_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2, uint64_t x3,
 		SMC_RET1(handle, (uint64_t)ret);
 
 	case PM_GET_API_VERSION:
-		if (ipi_irq_flag == 0U) {
+		if ((uint32_t)ipi_irq_flag == 0U) {
 			/*
 			 * Enable IPI IRQ
 			 * assume the rich OS is OK to handle callback IRQs now.
@@ -560,7 +562,7 @@ uint64_t pm_smc_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2, uint64_t x3,
 		uint32_t bit_mask[2] = {0};
 
 		ret = pm_feature_check(pm_arg[0], &version_type, bit_mask,
-				       ARRAY_SIZE(bit_mask));
+				       (uint8_t)ARRAY_SIZE(bit_mask));
 		SMC_RET2(handle, ((uint64_t)ret | ((uint64_t)version_type << 32U)),
 			 ((uint64_t)bit_mask[0] | ((uint64_t)bit_mask[1] << 32U)));
 	}

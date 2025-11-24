@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2024, Arm Limited. All rights reserved.
+ * Copyright (c) 2021-2025, Arm Limited. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -22,9 +22,13 @@
 #error "Cortex-A715 supports only AArch64. Compile with CTX_INCLUDE_AARCH32_REGS=0"
 #endif
 
+.global check_erratum_cortex_a715_3699560
+
 #if WORKAROUND_CVE_2022_23960
 	wa_cve_2022_23960_bhb_vector_table CORTEX_A715_BHB_LOOP_COUNT, cortex_a715
 #endif /* WORKAROUND_CVE_2022_23960 */
+
+cpu_reset_prologue cortex_a715
 
 workaround_reset_start cortex_a715, ERRATUM(2331818), ERRATA_A715_2331818
         sysreg_bit_set CORTEX_A715_CPUACTLR2_EL1, BIT(20)
@@ -115,6 +119,29 @@ workaround_reset_end cortex_a715, ERRATUM(2728106)
 
 check_erratum_ls cortex_a715, ERRATUM(2728106), CPU_REV(1, 1)
 
+workaround_reset_start cortex_a715, ERRATUM(2804830), ERRATA_A715_2804830
+	/* Workaround changes based on CORE_CACHE_PROTECTIONS field (bit 1) */
+	mrs x0, CORTEX_A715_CPUCFR_EL1
+	tbz x0, #1, wa_2804830_core_cache_prot_false
+
+	/* CORE_CACHE_PROTECTIONS==true */
+	sysreg_bit_set CORTEX_A715_CPUACTLR3_EL1, BIT(2)
+	sysreg_bit_set CORTEX_A715_CPUECTLR_EL1, BIT(23)
+	b wa_2804830_done
+
+	/* CORE_CACHE_PROTECTIONS==false */
+wa_2804830_core_cache_prot_false:
+	sysreg_bit_set CORTEX_A715_CPUECTLR2_EL1, BIT(7)
+
+wa_2804830_done:
+workaround_reset_end cortex_a715, ERRATUM(2804830)
+
+check_erratum_ls cortex_a715, ERRATUM(2804830), CPU_REV(1, 2)
+
+add_erratum_entry cortex_a715, ERRATUM(3699560), ERRATA_A715_3699560
+
+check_erratum_ls cortex_a715, ERRATUM(3699560), CPU_REV(1, 3)
+
 workaround_reset_start cortex_a715, CVE(2022, 23960), WORKAROUND_CVE_2022_23960
 #if IMAGE_BL31
 	/*
@@ -130,6 +157,7 @@ check_erratum_chosen cortex_a715, CVE(2022, 23960), WORKAROUND_CVE_2022_23960
 cpu_reset_func_start cortex_a715
 	/* Disable speculative loads */
 	msr	SSBS, xzr
+	enable_mpmm
 cpu_reset_func_end cortex_a715
 
 	/* ----------------------------------------------------
