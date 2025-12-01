@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2022, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2025, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -11,6 +11,7 @@
 #include <arch_helpers.h>
 #include <common/bl_common.h>
 #include <common/debug.h>
+#include <drivers/arm/gic.h>
 #include <lib/el3_runtime/context_mgmt.h>
 #include <lib/el3_runtime/pubsub_events.h>
 #include <plat/common/platform.h>
@@ -93,15 +94,16 @@ int psci_cpu_on_start(u_register_t target_cpu,
 				psci_svc_cpu_data.aff_info_state);
 	rc = cpu_on_validate_state(psci_get_aff_info_state_by_idx(target_idx));
 	if (rc != PSCI_E_SUCCESS)
-		goto exit;
+		goto on_exit;
 
 	/*
 	 * Call the cpu on handler registered by the Secure Payload Dispatcher
 	 * to let it do any bookeeping. If the handler encounters an error, it's
 	 * expected to assert within
 	 */
-	if ((psci_spd_pm != NULL) && (psci_spd_pm->svc_on != NULL))
+	if ((psci_spd_pm != NULL) && (psci_spd_pm->svc_on != NULL)) {
 		psci_spd_pm->svc_on(target_cpu);
+	}
 
 	/*
 	 * Set the Affinity info state of the target cpu to ON_PENDING.
@@ -140,17 +142,14 @@ int psci_cpu_on_start(u_register_t target_cpu,
 	rc = psci_plat_pm_ops->pwr_domain_on(target_cpu);
 	assert((rc == PSCI_E_SUCCESS) || (rc == PSCI_E_INTERN_FAIL));
 
-	if (rc == PSCI_E_SUCCESS)
-		/* Store the re-entry information for the non-secure world. */
-		cm_init_context_by_index(target_idx, ep);
-	else {
+	if (rc != PSCI_E_SUCCESS) {
 		/* Restore the state on error. */
 		psci_set_aff_info_state_by_idx(target_idx, AFF_STATE_OFF);
 		flush_cpu_data_by_index(target_idx,
 					psci_svc_cpu_data.aff_info_state);
 	}
 
-exit:
+on_exit:
 	psci_spin_unlock_cpu(target_idx);
 	return rc;
 }
@@ -182,8 +181,15 @@ void psci_cpu_on_finish(unsigned int cpu_idx, const psci_power_state_t *state_in
 	 * can only be done with the cpu and the cluster guaranteed to
 	 * be coherent.
 	 */
-	if (psci_plat_pm_ops->pwr_domain_on_finish_late != NULL)
+	if (psci_plat_pm_ops->pwr_domain_on_finish_late != NULL) {
 		psci_plat_pm_ops->pwr_domain_on_finish_late(state_info);
+	}
+
+#if USE_GIC_DRIVER
+	/* GIC init after platform has had a say with MMU on */
+	gic_pcpu_init(cpu_idx);
+	gic_cpuif_enable(cpu_idx);
+#endif /* USE_GIC_DRIVER */
 
 	/*
 	 * All the platform specific actions for turning this cpu
@@ -209,9 +215,9 @@ void psci_cpu_on_finish(unsigned int cpu_idx, const psci_power_state_t *state_in
 	 * Dispatcher to let it do any bookeeping. If the handler encounters an
 	 * error, it's expected to assert within
 	 */
-	if ((psci_spd_pm != NULL) && (psci_spd_pm->svc_on_finish != NULL))
+	if ((psci_spd_pm != NULL) && (psci_spd_pm->svc_on_finish != NULL)) {
 		psci_spd_pm->svc_on_finish(0);
-
+	}
 	PUBLISH_EVENT(psci_cpu_on_finish);
 
 	/* Populate the mpidr field within the cpu node array */

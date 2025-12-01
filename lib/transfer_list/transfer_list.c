@@ -35,7 +35,15 @@ void transfer_list_dump(struct transfer_list_header *tl)
 		if (!te) {
 			break;
 		}
+
 		INFO("Entry %d:\n", i++);
+		transfer_entry_dump(te);
+	}
+}
+
+void transfer_entry_dump(struct transfer_list_entry *te)
+{
+	if (te) {
 		INFO("tag_id     0x%x\n", te->tag_id);
 		INFO("hdr_size   0x%x\n", te->hdr_size);
 		INFO("data_size  0x%x\n", te->data_size);
@@ -168,36 +176,32 @@ transfer_list_check_header(const struct transfer_list_header *tl)
 	}
 
 	if (tl->signature != TRANSFER_LIST_SIGNATURE) {
-		ERROR("Bad transfer list signature %#" PRIx32 "\n",
-		      tl->signature);
+		VERBOSE("Bad transfer list signature 0x%x\n", tl->signature);
 		return TL_OPS_NON;
 	}
 
 	if (!tl->max_size) {
-		ERROR("Bad transfer list max size %#" PRIx32 "\n",
-		      tl->max_size);
+		VERBOSE("Bad transfer list max size 0x%x\n", tl->max_size);
 		return TL_OPS_NON;
 	}
 
 	if (tl->size > tl->max_size) {
-		ERROR("Bad transfer list size %#" PRIx32 "\n", tl->size);
+		VERBOSE("Bad transfer list size 0x%x\n", tl->size);
 		return TL_OPS_NON;
 	}
 
 	if (tl->hdr_size != sizeof(struct transfer_list_header)) {
-		ERROR("Bad transfer list header size %#" PRIx32 "\n",
-		      tl->hdr_size);
+		VERBOSE("Bad transfer list header size 0x%x\n", tl->hdr_size);
 		return TL_OPS_NON;
 	}
 
 	if (!transfer_list_verify_checksum(tl)) {
-		ERROR("Bad transfer list checksum %#" PRIx32 "\n",
-		      tl->checksum);
+		VERBOSE("Bad transfer list checksum 0x%x\n", tl->checksum);
 		return TL_OPS_NON;
 	}
 
 	if (tl->version == 0) {
-		ERROR("Transfer list version is invalid\n");
+		VERBOSE("Transfer list version is invalid\n");
 		return TL_OPS_NON;
 	} else if (tl->version == TRANSFER_LIST_VERSION) {
 		INFO("Transfer list version is valid for all operations\n");
@@ -520,4 +524,23 @@ void *transfer_list_entry_data(struct transfer_list_entry *entry)
 		return NULL;
 	}
 	return (uint8_t *)entry + entry->hdr_size;
+}
+
+/*******************************************************************************
+ * Verifies that the transfer list has not already been initialized, then
+ * initializes it at the specified memory location.
+ *
+ * Return pointer to the transfer list or NULL on error
+ * *****************************************************************************/
+struct transfer_list_header *transfer_list_ensure(void *addr, size_t size)
+{
+	struct transfer_list_header *tl = NULL;
+
+	if (transfer_list_check_header(addr) == TL_OPS_ALL) {
+		return (struct transfer_list_header *)addr;
+	}
+
+	tl = transfer_list_init((void *)addr, size);
+
+	return tl;
 }

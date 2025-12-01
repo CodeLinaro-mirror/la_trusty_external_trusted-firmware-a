@@ -13,6 +13,7 @@
 #include <common/debug.h>
 #include <common/fdt_fixup.h>
 #include <common/fdt_wrappers.h>
+#include <drivers/generic_delay_timer.h>
 #include <lib/mmio.h>
 #include <lib/xlat_tables/xlat_tables_v2.h>
 #include <libfdt.h>
@@ -59,7 +60,7 @@ static inline void bl31_set_default_config(void)
 	bl32_image_ep_info.pc = BL32_BASE;
 	bl32_image_ep_info.spsr = arm_get_spsr_for_bl32_entry();
 	bl33_image_ep_info.pc = plat_get_ns_image_entrypoint();
-	bl33_image_ep_info.spsr = SPSR_64(MODE_EL2, MODE_SP_ELX,
+	bl33_image_ep_info.spsr = (uint32_t)SPSR_64(MODE_EL2, MODE_SP_ELX,
 					  DISABLE_ALL_EXCEPTIONS);
 }
 
@@ -77,6 +78,15 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 	(void)arg2;
 	(void)arg3;
 	uint64_t tfa_handoff_addr;
+	uint64_t counter_freq;
+
+	/* Configure counter frequency */
+	counter_freq = read_cntfrq_el0();
+	if (counter_freq == ZYNQMP_DEFAULT_COUNTER_FREQ) {
+		write_cntfrq_el0(plat_get_syscnt_freq2());
+	}
+
+	generic_delay_timer_init();
 
 	setup_console();
 
@@ -96,7 +106,7 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 	SET_PARAM_HEAD(&bl33_image_ep_info, PARAM_EP, VERSION_1, 0);
 	SET_SECURITY_STATE(bl33_image_ep_info.h.attr, NON_SECURE);
 
-	tfa_handoff_addr = mmio_read_32(PMU_GLOBAL_GEN_STORAGE6);
+	tfa_handoff_addr = (uint64_t)mmio_read_32(PMU_GLOBAL_GEN_STORAGE6);
 
 	if (zynqmp_get_bootmode() == ZYNQMP_BOOTMODE_JTAG) {
 		bl31_set_default_config();
@@ -109,10 +119,10 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 			panic();
 		}
 	}
-	if (bl32_image_ep_info.pc != 0) {
+	if (bl32_image_ep_info.pc != 0U) {
 		NOTICE("BL31: Secure code at 0x%lx\n", bl32_image_ep_info.pc);
 	}
-	if (bl33_image_ep_info.pc != 0) {
+	if (bl33_image_ep_info.pc != 0U) {
 		NOTICE("BL31: Non secure code at 0x%lx\n", bl33_image_ep_info.pc);
 	}
 

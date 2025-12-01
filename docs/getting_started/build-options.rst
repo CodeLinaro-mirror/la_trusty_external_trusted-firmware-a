@@ -113,12 +113,16 @@ Common build options
 -  ``BRANCH_PROTECTION``: Numeric value to enable ARMv8.3 Pointer Authentication
    and ARMv8.5 Branch Target Identification support for TF-A BL images themselves.
    If enabled, it is needed to use a compiler that supports the option
-   ``-mbranch-protection``. Selects the branch protection features to use:
--  0: Default value turns off all types of branch protection
+   ``-mbranch-protection``. The value of the ``-march`` (via ``ARM_ARCH_MINOR``
+   and ``ARM_ARCH_MAJOR``) option will control which instructions will be
+   emitted (HINT space or not). Selects the branch protection features to use:
+-  0: Default value turns off all types of branch protection (FEAT_STATE_DISABLED)
 -  1: Enables all types of branch protection features
 -  2: Return address signing to its standard level
 -  3: Extend the signing to include leaf functions
 -  4: Turn on branch target identification mechanism
+-  5: Enables all types of branch protection features, only if present in
+   hardware (FEAT_STATE_CHECK).
 
    The table below summarizes ``BRANCH_PROTECTION`` values, GCC compilation options
    and resulting PAuth/BTI features.
@@ -135,6 +139,8 @@ Common build options
    |   3   | pac-ret+leaf |   Y   |  N  |
    +-------+--------------+-------+-----+
    |   4   |     bti      |   N   |  Y  |
+   +-------+--------------+-------+-----+
+   |   5   |   dynamic    |   Y   |  Y  |
    +-------+--------------+-------+-----+
 
    This option defaults to 0.
@@ -198,11 +204,13 @@ Common build options
 -  ``CTX_INCLUDE_PAUTH_REGS``: Numeric value to enable the Pointer
    Authentication for Secure world. This will cause the ARMv8.3-PAuth registers
    to be included when saving and restoring the CPU context as part of world
-   switch. This flag can take values 0 to 2, to align with ``ENABLE_FEAT``
-   mechanism. Default value is 0.
+   switch. Automatically enabled when ``BRANCH_PROTECTION`` is enabled. This flag
+   can take values 0 to 2, to align with ``ENABLE_FEAT`` mechanism. Default value
+   is 0.
 
    Note that Pointer Authentication is enabled for Non-secure world irrespective
-   of the value of this flag if the CPU supports it.
+   of the value of this flag if the CPU supports it. Alternatively, when
+   ``BRANCH_PROTECTION`` is enabled, this flag is superseded.
 
 -  ``CTX_INCLUDE_SVE_REGS``: Boolean option that, when set to 1, will cause the
    SVE registers to be included when saving and restoring the CPU context. Note
@@ -257,10 +265,6 @@ Common build options
 -  ``ENABLE_AMU_AUXILIARY_COUNTERS``: Enables support for AMU auxiliary counters
    (also known as group 1 counters). These are implementation-defined counters,
    and as such require additional platform configuration. Default is 0.
-
--  ``ENABLE_AMU_FCONF``: Enables configuration of the AMU through FCONF, which
-   allows platforms with auxiliary counters to describe them via the
-   ``HW_CONFIG`` device tree blob. Default is 0.
 
 -  ``ENABLE_ASSERTIONS``: This option controls whether or not calls to ``assert()``
    are compiled out. For debug builds, this option defaults to 1, and calls to
@@ -351,6 +355,12 @@ Common build options
    This flag can take the values 0 to 2, to align  with the ``ENABLE_FEAT``
    mechanism. Default value is ``0``.
 
+-  ``ENABLE_FEAT_FPMR``: Numerical value to enable support for Floating Point
+   Mode Register feature, allowing access to the FPMR register. FPMR register
+   controls the behaviors of FP8 instructions. It is an optional architectural
+   feature from v9.2 and upwards. This flag can take value of 0 to 2, to align
+   with the ``FEATURE_DETECTION`` mechanism. Default value is ``0``.
+
 -  ``ENABLE_FEAT_FGT``: Numeric value to enable support for FGT (Fine Grain Traps)
    feature allowing for access to the HDFGRTR_EL2 (Hypervisor Debug Fine-Grained
    Read Trap Register) during EL2 to EL3 context save/restore operations.
@@ -372,6 +382,16 @@ Common build options
    flag can take the values 0 to 2, to align  with the ``ENABLE_FEAT``
    mechanism. Default value is ``0``.
 
+- ``ENABLE_FEAT_MOPS``: Numeric value to enable FEAT_MOPS (Standardization
+   of memory operations) when INIT_UNUSED_NS_EL2=1.
+   This feature is mandatory from v8.8 and enabling of FEAT_MOPS does not
+   require any settings from EL3 as the controls are present in EL2 registers
+   (HCRX_EL2.{MSCEn,MCE2} and SCTLR_EL2.MSCEn) and in most configurations
+   we expect EL2 to be present. But in case of INIT_UNUSED_NS_EL2=1 ,
+   EL3 should configure the EL2 registers. This flag
+   can take values 0 to 2, to align with the ``ENABLE_FEAT`` mechanism.
+   Default value is ``0``.
+
 -  ``ENABLE_FEAT_MTE2``: Numeric value to enable Memory Tagging Extension2
    if the platform wants to use this feature and MTE2 is enabled at ELX.
    This flag can take values 0 to 2, to align with the ``ENABLE_FEAT``
@@ -384,6 +404,12 @@ Common build options
    mandatory architectural feature and is enabled from v8.1 and upwards. This
    flag can take values 0 to 2, to align  with the ``ENABLE_FEAT``
    mechanism. Default value is ``0``.
+
+-  ``ENABLE_FEAT_PAUTH_LR``: Numeric value to enable the ``FEAT_PAUTH_LR``
+   extension. ``FEAT_PAUTH_LR`` is an optional feature available from Arm v9.4
+   onwards. This feature requires PAUTH to be enabled via the
+   ``BRANCH_PROTECTION`` flag. This flag can take the values 0 to 2, to align
+   with the ``ENABLE_FEAT`` mechanism. Default value is ``0``.
 
 -  ``ENABLE_FEAT_RNG``: Numeric value to enable the ``FEAT_RNG`` extension.
    ``FEAT_RNG`` is an optional feature available on Arm v8.5 onwards. This
@@ -510,9 +536,11 @@ Common build options
    power domain dynamic power budgeting and limit the triggering of whole-rail
    (i.e. clock chopping) responses to overcurrent conditions. Defaults to ``0``.
 
--  ``ENABLE_MPMM_FCONF``: Enables configuration of MPMM through FCONF, which
-   allows platforms with cores supporting MPMM to describe them via the
-   ``HW_CONFIG`` device tree blob. Default is 0.
+ - ``FEAT_PABANDON``: Boolean option to enable support for powerdown abandon on
+   Arm cores that support it (currently Gelas and Travis). Extends the PSCI
+   implementation to expect waking up after the terminal ``wfi``. Currently,
+   introduces a performance penalty. Once this is removed, this option will be
+   removed and the feature will be enabled by default. Defaults to ``0``.
 
 -  ``ENABLE_PIE``: Boolean option to enable Position Independent Executable(PIE)
    support within generic code in TF-A. This option is currently only supported
@@ -570,6 +598,11 @@ Common build options
    all values other than "none", the ``plat_get_stack_protector_canary()``
    platform hook needs to be implemented. The value is passed as the last
    component of the option ``-fstack-protector-$ENABLE_STACK_PROTECTOR``.
+
+- ``ENABLE_ERRATA_ALL``: This option is used only for testing purposes, Boolean
+   option to enable the workarounds for all errata that TF-A implements. Normally
+   they should be explicitly enabled depending on each platform's needs. Not
+   recommended for release builds. This option is default set to 0.
 
 -  ``ENCRYPT_BL31``: Binary flag to enable encryption of BL31 firmware. This
    flag depends on ``DECRYPTION_SUPPORT`` build flag.
@@ -708,6 +741,10 @@ Common build options
    invert this behavior. Lower addresses will be printed at the top and higher
    addresses at the bottom.
 
+-  ``INIT_UNUSED_NS_EL2``: This build flag guards code that disables EL2
+   safely in scenario where NS-EL2 is present but unused. This flag is set to 0
+   by default. Platforms without NS-EL2 in use must enable this flag.
+
 -  ``KEY_ALG``: This build flag enables the user to select the algorithm to be
    used for generating the PKCS keys and subsequent signing of the certificate.
    It accepts 5 values: ``rsa``, ``rsa_1_5``, ``ecdsa``, ``ecdsa-brainpool-regular``
@@ -727,9 +764,9 @@ Common build options
    +---------------------------+------------------------------------+
    |          ecdsa            |         256 (default), 384         |
    +---------------------------+------------------------------------+
-   |  ecdsa-brainpool-regular  |            unavailable             |
+   |  ecdsa-brainpool-regular  |            256 (default)           |
    +---------------------------+------------------------------------+
-   |  ecdsa-brainpool-twisted  |            unavailable             |
+   |  ecdsa-brainpool-twisted  |            256 (default)           |
    +---------------------------+------------------------------------+
 
 -  ``HASH_ALG``: This build flag enables the user to select the secure hash
@@ -760,6 +797,20 @@ Common build options
    not been tampered with.
 
    This option defaults to 0.
+
+-  ``DISCRETE_TPM``: Boolean flag to include support for a Discrete TPM.
+
+   This option defaults to 0.
+
+-  ``TPM_INTERFACE``: When ``DISCRETE_TPM=1``, this is a required flag to
+   select the TPM interface. Currently only one interface is supported:
+
+   ::
+
+      FIFO_SPI
+
+-  ``MBOOT_TPM_HASH_ALG``: Build flag to select the TPM hash algorithm used during
+   Measured Boot. Currently only accepts ``sha256`` as a valid algorithm.
 
 -  ``MARCH_DIRECTIVE``: used to pass a -march option from the platform build
    options to the compiler. An example usage:
@@ -847,6 +898,11 @@ Common build options
 
 -  ``PSCI_OS_INIT_MODE``: Boolean flag to enable support for optional PSCI
    OS-initiated mode. This option defaults to 0.
+
+-  ``ARCH_FEATURE_AVAILABILITY``: Boolean flag to enable support for the
+   optional SMCCC_ARCH_FEATURE_AVAILABILITY call. This option implicitly
+   interacts with IMPDEF_SYSREG_TRAP and software emulation. This option
+   defaults to 0.
 
 -  ``ENABLE_FEAT_RAS``: Boolean flag to enable Armv8.2 RAS features. RAS features
    are an optional extension for pre-Armv8.2 CPUs, but are mandatory for Armv8.2
@@ -1176,6 +1232,12 @@ Common build options
       implement this workaround due to the behaviour of the errata mentioned
       in new SDEN document which will get published soon.
 
+- ``ERRATA_SME_POWER_DOWN``: Boolean option to disable SME (PSTATE.{ZA,SM}=0)
+  before power down and downgrade a suspend to power down request to a normal
+  suspend request. This is necessary when software running at lower ELs requests
+  power down without first clearing these bits. On affected cores, the CME
+  connected to it will reject its power down request. The default value is 0.
+
 - ``RAS_TRAP_NS_ERR_REC_ACCESS``: This flag enables/disables the SCR_EL3.TERR
   bit, to trap access to the RAS ERR and RAS ERX registers from lower ELs.
   This flag is disabled by default.
@@ -1232,11 +1294,37 @@ Common build options
   This option should only be enabled on a need basis if there is a use case for
   reading characters from the console.
 
-GICv3 driver options
+GIC driver options
 --------------------
 
-GICv3 driver files are included using directive:
+The generic GIC driver can be included with the ``USE_GIC_DRIVER`` option. It is
+a numeric option that can take the following values:
 
+ - ``0``: generic GIC driver not enabled. Any support is entirely in platform
+   code. Strongly discouraged for GIC based interrupt controllers.
+
+ - ``1``: enable the use of the generic GIC driver but do not include any files
+   or function definitions. It is then the platform's responsibility to provide
+   these. This is useful if the platform either has a custom GIC implementation
+   or an alternative interrupt controller design. Use of this option is strongly
+   discouraged for standard GIC implementations.
+
+ - ``2``: use the GICv2 driver
+
+ - ``3``: use the GICv3 driver. See the next section on how to further configure
+   it. Use this option for GICv4 implementations.
+
+ For GIC driver versions other than ``1``, deciding when to save and restore GIC
+ context on a power domain state transition, as well as any GIC actions outside
+ of the PSCI library's visibility are the platform's responsibility. The driver
+ provides implementations of all necessary subroutines, they only need to be
+ called as appropriate.
+
+GICv3 driver options
+~~~~~~~~~~~~~~~~~~~~
+
+``USE_GIC_DRIVER=3`` is the preferred way of including GICv3 driver files. The
+old (deprecated) way of included them is using the directive:
 ``include drivers/arm/gic/v3/gicv3.mk``
 
 The driver can be configured with the following options set in the platform
@@ -1348,6 +1436,12 @@ Common build options
    Management Extension. This flag can take the values 0 to 2, to align with
    the ``ENABLE_FEAT`` mechanism. Default value is 0.
 
+-  ``ENABLE_FEAT_MEC``: Numeric value to enable support for the ARMv9.2 Memory
+   Encryption Contexts (MEC). This flag can take the values 0 to 2, to align
+   with the ``ENABLE_FEAT`` mechanism. MEC supports multiple encryption
+   contexts for Realm security state and only one encryption context for the
+   rest of the security states. Default value is 0.
+
 -  ``RMMD_ENABLE_EL3_TOKEN_SIGN``: Numeric value to enable support for singing
    realm attestation token signing requests in EL3. This flag can take the
    values 0 and 1. The default value is ``0``. When set to ``1``, this option
@@ -1411,6 +1505,10 @@ Common build options
    interface through BL31 as a SiP SMC function.
    Default is disabled (0).
 
+-  ``HOB_LIST``: Setting this to ``1`` enables support for passing boot
+   information using HOB defined in `Platform Initialization specification`_.
+   This defaults to ``0``.
+
 Firmware update options
 ~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1445,7 +1543,7 @@ Firmware update options
 
 --------------
 
-*Copyright (c) 2019-2024, Arm Limited. All rights reserved.*
+*Copyright (c) 2019-2025, Arm Limited. All rights reserved.*
 
 .. _DEN0115: https://developer.arm.com/docs/den0115/latest
 .. _PSA FW update specification: https://developer.arm.com/documentation/den0118/latest/
@@ -1454,3 +1552,4 @@ Firmware update options
 .. _Clang: https://clang.llvm.org/docs/DiagnosticsReference.html
 .. _Firmware Handoff specification: https://github.com/FirmwareHandoff/firmware_handoff/releases/tag/v0.9
 .. _PSA Crypto API specification: https://armmbed.github.io/mbed-crypto/html/
+.. _Platform Initialization specification: https://uefi.org/specs/PI/1.8/index.html

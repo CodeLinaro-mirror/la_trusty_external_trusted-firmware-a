@@ -26,26 +26,10 @@
 #include "pm_client.h"
 #include <versal_net_def.h>
 
-#define UNDEFINED_CPUID		(~0)
+#define UNDEFINED_CPUID		(~0U)
 
 DEFINE_RENAME_SYSREG_RW_FUNCS(cpu_pwrctrl_val, S3_0_C15_C2_7)
 
-/*
- * ARM v8.2, the cache will turn off automatically when cpu
- * power down. Therefore, there is no doubt to use the spin_lock here.
- */
-#if !HW_ASSISTED_COHERENCY
-DEFINE_BAKERY_LOCK(pm_client_secure_lock);
-static inline void pm_client_lock_get(void)
-{
-	bakery_lock_get(&pm_client_secure_lock);
-}
-
-static inline void pm_client_lock_release(void)
-{
-	bakery_lock_release(&pm_client_secure_lock);
-}
-#else
 spinlock_t pm_client_secure_lock;
 static inline void pm_client_lock_get(void)
 {
@@ -56,7 +40,6 @@ static inline void pm_client_lock_release(void)
 {
 	spin_unlock(&pm_client_secure_lock);
 }
-#endif
 
 static const struct pm_ipi apu_ipi = {
 	.local_ipi_id = IPI_LOCAL_ID,
@@ -340,12 +323,16 @@ void pm_client_suspend(const struct pm_proc *proc, uint32_t state)
  */
 static uint32_t pm_get_cpuid(uint32_t nid)
 {
-	for (size_t i = 0; i < ARRAY_SIZE(pm_procs_all); i++) {
+	uint32_t ret = UNDEFINED_CPUID;
+	uint32_t i;
+
+	for (i = 0; i < ARRAY_SIZE(pm_procs_all); i++) {
 		if (pm_procs_all[i].node_id == nid) {
-			return i;
+			ret = i;
+			break;
 		}
 	}
-	return UNDEFINED_CPUID;
+	return ret;
 }
 
 /**

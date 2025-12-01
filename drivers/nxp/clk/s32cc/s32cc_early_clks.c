@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 NXP
+ * Copyright 2024-2025 NXP
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -18,6 +18,8 @@
 #define S32CC_PERIPH_PLL_PHI3_FREQ	UART_CLOCK_HZ
 #define S32CC_DDR_PLL_VCO_FREQ		(1600U * MHZ)
 #define S32CC_DDR_PLL_PHI0_FREQ		(800U * MHZ)
+#define S32CC_PERIPH_DFS_PHI3_FREQ	(800U * MHZ)
+#define S32CC_USDHC_FREQ		(200U * MHZ)
 
 static int setup_fxosc(void)
 {
@@ -180,11 +182,43 @@ static int enable_ddr_clk(void)
 	return ret;
 }
 
-int s32cc_init_early_clks(void)
+static int enable_usdhc_clk(void)
 {
 	int ret;
 
-	s32cc_clk_register_drv();
+	ret = clk_set_parent(S32CC_CLK_MC_CGM0_MUX14,
+			     S32CC_CLK_PERIPH_PLL_DFS3);
+	if (ret != 0) {
+		return ret;
+	}
+
+	ret = clk_set_rate(S32CC_CLK_PERIPH_PLL_DFS3,
+			   S32CC_PERIPH_DFS_PHI3_FREQ, NULL);
+	if (ret != 0) {
+		return ret;
+	}
+
+	ret = clk_set_rate(S32CC_CLK_USDHC, S32CC_USDHC_FREQ, NULL);
+	if (ret != 0) {
+		return ret;
+	}
+
+	ret = clk_enable(S32CC_CLK_USDHC);
+	if (ret != 0) {
+		return ret;
+	}
+
+	return ret;
+}
+
+int s32cc_init_core_clocks(void)
+{
+	int ret;
+
+	ret = s32cc_clk_register_drv(false);
+	if (ret != 0) {
+		return ret;
+	}
 
 	ret = setup_fxosc();
 	if (ret != 0) {
@@ -206,6 +240,18 @@ int s32cc_init_early_clks(void)
 		return ret;
 	}
 
+	return ret;
+}
+
+int s32cc_init_early_clks(void)
+{
+	int ret;
+
+	ret = s32cc_clk_register_drv(true);
+	if (ret != 0) {
+		return ret;
+	}
+
 	ret = setup_periph_pll();
 	if (ret != 0) {
 		return ret;
@@ -222,6 +268,11 @@ int s32cc_init_early_clks(void)
 	}
 
 	ret = enable_ddr_clk();
+	if (ret != 0) {
+		return ret;
+	}
+
+	ret = enable_usdhc_clk();
 	if (ret != 0) {
 		return ret;
 	}

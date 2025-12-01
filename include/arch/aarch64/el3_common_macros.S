@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2024, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2025, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -32,13 +32,28 @@
 	 *  load or store one or more registers have an alignment check that the
 	 *  address being accessed is aligned to the size of the data element(s)
 	 *  being accessed.
+	 *
+	 * SCTLR_EL3.BT: PAuth instructions are compatible with bti jc
 	 * ---------------------------------------------------------------------
 	 */
-	mov	x1, #(SCTLR_I_BIT | SCTLR_A_BIT | SCTLR_SA_BIT)
+	mov_imm	x1, (SCTLR_I_BIT | SCTLR_A_BIT | SCTLR_SA_BIT)
 	mrs	x0, sctlr_el3
+#if ENABLE_BTI
+	bic	x0, x0, #SCTLR_BT_BIT
+#endif
 	orr	x0, x0, x1
 	msr	sctlr_el3, x0
 	isb
+
+#if ENABLE_FEAT_SCTLR2
+#if ENABLE_FEAT_SCTLR2 > 1
+	is_feat_sctlr2_present_asm x1
+	beq	feat_sctlr2_not_supported\@
+#endif
+	mov	x1, #SCTLR2_RESET_VAL
+	msr	SCTLR2_EL3, x1
+feat_sctlr2_not_supported\@:
+#endif
 
 #ifdef IMAGE_BL31
 	/* ---------------------------------------------------------------------
@@ -49,7 +64,9 @@
 	 * due to a NULL TPIDR_EL3.
 	 * ---------------------------------------------------------------------
 	 */
-	bl	init_cpu_data_ptr
+	bl	plat_my_core_pos
+	bl	_cpu_data_by_index
+	msr	tpidr_el3, x0
 #endif /* IMAGE_BL31 */
 
 	/* ---------------------------------------------------------------------
@@ -219,15 +236,7 @@
 	msr	vbar_el3, x0
 	isb
 
-#if !(defined(IMAGE_BL2) && ENABLE_RME)
-	/* ---------------------------------------------------------------------
-	 * It is a cold boot.
-	 * Perform any processor specific actions upon reset e.g. cache, TLB
-	 * invalidations etc.
-	 * ---------------------------------------------------------------------
-	 */
-	bl	reset_handler
-#endif
+	call_reset_handler
 
 	el3_arch_init_common
 
@@ -460,6 +469,10 @@
 	 *  Necessary on PMUv3 <= p7 where MDCR_EL3.{SCCD,MCCD} are not
 	 *  available.
 	 *
+	 * CPTR_EL3.EZ: Set to one so that accesses to ZCR_EL3 do not trap
+	 * CPTR_EL3.TFP: Set to zero so that advanced SIMD operations don't trap
+	 * CPTR_EL3.ESM: Set to one so that SME related registers don't trap
+	 *
 	 * PSTATE.DIT: Set to one to enable the Data Independent Timing (DIT)
 	 *  functionality, if implemented in EL3.
 	 * ---------------------------------------------------------------------
@@ -478,6 +491,12 @@
 		mrs 	x15, pmcr_el0
 		orr	x15, x15, #PMCR_EL0_DP_BIT
 		msr	pmcr_el0, x15
+
+		mrs	x15, cptr_el3
+		orr	x15, x15, #CPTR_EZ_BIT
+		orr	x15, x15, #ESM_BIT
+		bic	x15, x15, #TFP_BIT
+		msr	cptr_el3, x15
 
 #if ENABLE_FEAT_DIT
 #if ENABLE_FEAT_DIT > 1

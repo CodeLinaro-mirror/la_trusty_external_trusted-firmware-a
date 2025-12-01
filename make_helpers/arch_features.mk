@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2022-2024, Arm Limited. All rights reserved.
+# Copyright (c) 2022-2025, Arm Limited. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -83,6 +83,7 @@ endif
 
 # Enable the features which are mandatory from ARCH version 8.8 and upwards.
 ifeq "8.8" "$(word 1, $(sort 8.8 $(ARM_ARCH_MAJOR).$(ARM_ARCH_MINOR)))"
+armv8-8-a-feats		:= ENABLE_FEAT_MOPS
 # 8.7 Compliant
 armv8-8-a-feats         += ${armv8-7-a-feats}
 FEAT_LIST               := ${armv8-8-a-feats}
@@ -159,6 +160,11 @@ ENABLE_FEAT_RAS			?=	0
 # direct setting. Use BRANCH_PROTECTION to enable PAUTH.
 ENABLE_PAUTH			?=	0
 
+# FEAT_PAUTH_LR is an optional architectural feature, so this flag must be set
+# manually in addition to the BRANCH_PROTECTION flag which is used for other
+# branch protection and pointer authentication features.
+ENABLE_FEAT_PAUTH_LR		?=	0
+
 # Include pointer authentication (ARMv8.3-PAuth) registers in cpu context. This
 # must be set to 1 if the platform wants to use this feature in the Secure
 # world. It is not necessary for use in the Non-secure world.
@@ -211,6 +217,14 @@ ENABLE_FEAT_FGT			?=	0
 
 # Flag to enable access to the HCRX_EL2 register by setting SCR_EL3.HXEn.
 ENABLE_FEAT_HCX			?=	0
+
+#----
+# 8.8
+#----
+
+# Flag to enable FEAT_MOPS (Standardization of Memory operations)
+# when INIT_UNUSED_NS_EL2 = 1
+ENABLE_FEAT_MOPS		?=	0
 
 #----
 # 8.9
@@ -282,7 +296,6 @@ endif
 # Feature flags for supporting Activity monitor extensions.
 ENABLE_FEAT_AMU				?=	0
 ENABLE_AMU_AUXILIARY_COUNTERS		?=	0
-ENABLE_AMU_FCONF			?=	0
 AMU_RESTRICT_COUNTERS			?=	1
 
 # Build option to enable MPAM for lower ELs.
@@ -407,6 +420,12 @@ ENABLE_SME_FOR_SWD			?=	0
 # lower ELs i.e. NS-EL2, or NS-EL1 if NS-EL2 implemented but unused
 # if FEAT_BRBE is implemented.
 ENABLE_BRBE_FOR_NS			?=	0
+
+# Flag to enable Floating point exception Mode Register Feature (FEAT_FPMR)
+ENABLE_FEAT_FPMR			?=	0
+
+# Flag to enable Memory Encryption Contexts (FEAT_MEC).
+ENABLE_FEAT_MEC				?=	0
 
 #----
 # 9.3

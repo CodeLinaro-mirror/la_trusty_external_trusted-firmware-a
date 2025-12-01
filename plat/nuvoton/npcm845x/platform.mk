@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2015-2023, Arm Limited and Contributors. All rights reserved.
+# Copyright (c) 2015-2025, Arm Limited and Contributors. All rights reserved.
 #
 # Copyright (c) 2017-2023 Nuvoton Ltd.
 #
@@ -201,7 +201,7 @@ BL31_SOURCES	+=lib/cpus/aarch64/cortex_a35.S \
 PLAT_BL_COMMON_SOURCES	:=	drivers/delay_timer/delay_timer.c \
 		drivers/delay_timer/generic_delay_timer.c \
 		plat/common/plat_gicv2.c \
-		plat/arm/common/arm_gicv2.c \
+		plat/common/plat_gicv2_base.c \
 		plat/nuvoton/common/plat_nuvoton_gic.c \
 		${NPCM850_GIC_SOURCES} \
 		plat/nuvoton/npcm845x/npcm845x_common.c \
@@ -318,9 +318,8 @@ BL31_SOURCES	+=	lib/extensions/ras/std_err_record.c \
 endif
 
 # Pointer Authentication sources
-ifeq (${ENABLE_PAUTH}, 1)
-PLAT_BL_COMMON_SOURCES	+=	plat/arm/common/aarch64/arm_pauth.c \
-		lib/extensions/pauth/pauth_helpers.S
+ifeq ($(BRANCH_PROTECTION),$(filter $(BRANCH_PROTECTION),1 2 3))
+PLAT_BL_COMMON_SOURCES	+=	plat/arm/common/aarch64/arm_pauth.c
 endif
 
 ifeq (${SPD},spmd)
@@ -331,10 +330,11 @@ endif
 
 ifneq (${TRUSTED_BOARD_BOOT},0)
 # Include common TBB sources
-AUTH_SOURCES	:=	drivers/auth/auth_mod.c \
-		drivers/auth/crypto_mod.c \
-		drivers/auth/img_parser_mod.c \
-		lib/fconf/fconf_tbbr_getter.c
+AUTH_MK := drivers/auth/auth.mk
+$(info Including ${AUTH_MK})
+include ${AUTH_MK}
+
+AUTH_SOURCES	+=	lib/fconf/fconf_tbbr_getter.c
 
 # Include the selected chain of trust sources.
 ifeq (${COT},tbbr)

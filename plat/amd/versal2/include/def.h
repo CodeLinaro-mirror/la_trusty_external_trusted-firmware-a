@@ -12,17 +12,17 @@
 #include <plat/arm/common/smccc_def.h>
 #include <plat/common/common_def.h>
 
-#define MAX_INTR_EL3			2
+#define MAX_INTR_EL3			2U
 
 /* List all consoles */
-#define VERSAL2_CONSOLE_ID_none		0
-#define VERSAL2_CONSOLE_ID_pl011	1
-#define VERSAL2_CONSOLE_ID_pl011_0       1
-#define VERSAL2_CONSOLE_ID_pl011_1       2
-#define VERSAL2_CONSOLE_ID_dcc           3
-#define VERSAL2_CONSOLE_ID_dtb           4
+#define CONSOLE_ID_none		0
+#define CONSOLE_ID_pl011	1
+#define CONSOLE_ID_pl011_0       1
+#define CONSOLE_ID_pl011_1       2
+#define CONSOLE_ID_dcc           3
+#define CONSOLE_ID_dtb           4
 
-#define CONSOLE_IS(con) (VERSAL2_CONSOLE_ID_ ## con == VERSAL2_CONSOLE)
+#define CONSOLE_IS(con) (CONSOLE_ID_ ## con == CONSOLE)
 
 /* Runtime console */
 #define RT_CONSOLE_ID_pl011   1
@@ -45,6 +45,9 @@
 /* For platform detection */
 #define PMC_TAP				U(0xF11A0000)
 #define PMC_TAP_VERSION			(PMC_TAP + 0x4U)
+# define PMC_VERSION			GENMASK(7U, 0U)
+# define PS_VERSION			GENMASK(15U, 8U)
+# define RTL_VERSION			GENMASK(23U, 16U)
 # define PLATFORM_MASK			GENMASK(27U, 24U)
 # define PLATFORM_VERSION_MASK		GENMASK(31U, 28U)
 

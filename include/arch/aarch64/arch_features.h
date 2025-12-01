@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2024, Arm Limited. All rights reserved.
+ * Copyright (c) 2019-2025, Arm Limited. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -142,6 +142,12 @@ CREATE_FEATURE_SUPPORTED(name, is_ ## name ## _present, guard)
  * +----------------------------+
  * |	FEAT_LS64_ACCDATA	|
  * +----------------------------+
+ * |	FEAT_FPMR		|
+ * +----------------------------+
+ * |	FEAT_MOPS		|
+ * +----------------------------+
+ * |	FEAT_PAUTH_LR		|
+ * +----------------------------+
  */
 
 __attribute__((always_inline))
@@ -172,9 +178,9 @@ CREATE_FEATURE_PRESENT(feat_pacqarma3, id_aa64isar2_el1, 0,
 			((ID_AA64ISAR2_GPA3_MASK << ID_AA64ISAR2_GPA3_SHIFT) |
 			(ID_AA64ISAR2_APA3_MASK << ID_AA64ISAR2_APA3_SHIFT)), 1U)
 
-/* PAUTH */
+/* FEAT_PAUTH: Pointer Authentication */
 __attribute__((always_inline))
-static inline bool is_armv8_3_pauth_present(void)
+static inline bool is_feat_pauth_present(void)
 {
 	uint64_t mask_id_aa64isar1 =
 		(ID_AA64ISAR1_GPI_MASK << ID_AA64ISAR1_GPI_SHIFT) |
@@ -189,14 +195,45 @@ static inline bool is_armv8_3_pauth_present(void)
 	return ((read_id_aa64isar1_el1() & mask_id_aa64isar1) != 0U ||
 		is_feat_pacqarma3_present());
 }
+CREATE_FEATURE_SUPPORTED(feat_pauth, is_feat_pauth_present, ENABLE_PAUTH)
+CREATE_FEATURE_SUPPORTED(ctx_pauth, is_feat_pauth_present, CTX_INCLUDE_PAUTH_REGS)
+
+/*
+ * FEAT_PAUTH_LR
+ * This feature has a non-standard discovery method so define this function
+ * manually then call use the CREATE_FEATURE_SUPPORTED macro with it. This
+ * feature is enabled with ENABLE_PAUTH when present.
+ */
+__attribute__((always_inline))
+static inline bool is_feat_pauth_lr_present(void)
+{
+	/*
+	 * FEAT_PAUTH_LR support is indicated by up to 3 fields, if one or more
+	 * of these is 0b0110 then the feature is present.
+	 *   1) id_aa64isr1_el1.api
+	 *   2) id_aa64isr1_el1.apa
+	 *   3) id_aa64isr2_el1.apa3
+	 */
+	if (ISOLATE_FIELD(read_id_aa64isar1_el1(), ID_AA64ISAR1_API_SHIFT, ID_AA64ISAR1_API_MASK) == 0b0110) {
+		return true;
+	}
+	if (ISOLATE_FIELD(read_id_aa64isar1_el1(), ID_AA64ISAR1_APA_SHIFT, ID_AA64ISAR1_APA_MASK) == 0b0110) {
+		return true;
+	}
+	if (ISOLATE_FIELD(read_id_aa64isar2_el1(), ID_AA64ISAR2_APA3_SHIFT, ID_AA64ISAR2_APA3_MASK) == 0b0110) {
+		return true;
+	}
+	return false;
+}
+CREATE_FEATURE_SUPPORTED(feat_pauth_lr, is_feat_pauth_lr_present, ENABLE_FEAT_PAUTH_LR)
 
 /* FEAT_TTST: Small translation tables */
 CREATE_FEATURE_PRESENT(feat_ttst, id_aa64mmfr2_el1, ID_AA64MMFR2_EL1_ST_SHIFT,
 			ID_AA64MMFR2_EL1_ST_MASK, 1U)
 
 /* FEAT_BTI: Branch target identification */
-CREATE_FEATURE_PRESENT(feat_bti, id_aa64pfr1_el1, ID_AA64PFR1_EL1_BT_SHIFT,
-			ID_AA64PFR1_EL1_BT_MASK, BTI_IMPLEMENTED)
+CREATE_FEATURE_FUNCS(feat_bti, id_aa64pfr1_el1, ID_AA64PFR1_EL1_BT_SHIFT,
+			ID_AA64PFR1_EL1_BT_MASK, BTI_IMPLEMENTED, ENABLE_BTI)
 
 /* FEAT_MTE2: Memory tagging extension */
 CREATE_FEATURE_FUNCS(feat_mte2, id_aa64pfr1_el1, ID_AA64PFR1_EL1_MTE_SHIFT,
@@ -284,6 +321,15 @@ CREATE_FEATURE_FUNCS(feat_d128, id_aa64mmfr3_el1, ID_AA64MMFR3_EL1_D128_SHIFT,
 		     ID_AA64MMFR3_EL1_D128_MASK, D128_IMPLEMENTED,
 		     ENABLE_FEAT_D128)
 
+/* FEAT_FPMR */
+CREATE_FEATURE_FUNCS(feat_fpmr, id_aa64pfr2_el1, ID_AA64PFR2_EL1_FPMR_SHIFT,
+		     ID_AA64PFR2_EL1_FPMR_MASK, FPMR_IMPLEMENTED,
+		     ENABLE_FEAT_FPMR)
+/* FEAT_MOPS */
+CREATE_FEATURE_FUNCS(feat_mops, id_aa64isar2_el1, ID_AA64ISAR2_EL1_MOPS_SHIFT,
+		     ID_AA64ISAR2_EL1_MOPS_MASK, MOPS_IMPLEMENTED,
+		     ENABLE_FEAT_MOPS)
+
 __attribute__((always_inline))
 static inline bool is_feat_sxpie_supported(void)
 {
@@ -297,6 +343,10 @@ CREATE_FEATURE_FUNCS(feat_gcs, id_aa64pfr1_el1, ID_AA64PFR1_EL1_GCS_SHIFT,
 /* FEAT_AMU: Activity Monitors Extension */
 CREATE_FEATURE_FUNCS(feat_amu, id_aa64pfr0_el1, ID_AA64PFR0_AMU_SHIFT,
 		     ID_AA64PFR0_AMU_MASK, 1U, ENABLE_FEAT_AMU)
+
+/* Auxiliary counters for FEAT_AMU */
+CREATE_FEATURE_FUNCS(feat_amu_aux, amcfgr_el0, AMCFGR_EL0_NCG_SHIFT,
+		     AMCFGR_EL0_NCG_MASK, 1U, ENABLE_AMU_AUXILIARY_COUNTERS)
 
 /* FEAT_AMUV1P1: AMU Extension v1.1 */
 CREATE_FEATURE_FUNCS(feat_amuv1p1, id_aa64pfr0_el1, ID_AA64PFR0_AMU_SHIFT,
@@ -345,8 +395,8 @@ CREATE_FEATURE_FUNCS(feat_hcx, id_aa64mmfr1_el1, ID_AA64MMFR1_EL1_HCX_SHIFT,
 		     ID_AA64MMFR1_EL1_HCX_MASK, 1U, ENABLE_FEAT_HCX)
 
 /* FEAT_RNG_TRAP: Trapping support */
-CREATE_FEATURE_PRESENT(feat_rng_trap, id_aa64pfr1_el1, ID_AA64PFR1_EL1_RNDR_TRAP_SHIFT,
-		      ID_AA64PFR1_EL1_RNDR_TRAP_MASK, RNG_TRAP_IMPLEMENTED)
+CREATE_FEATURE_FUNCS(feat_rng_trap, id_aa64pfr1_el1, ID_AA64PFR1_EL1_RNDR_TRAP_SHIFT,
+		      ID_AA64PFR1_EL1_RNDR_TRAP_MASK, RNG_TRAP_IMPLEMENTED, ENABLE_FEAT_RNG_TRAP)
 
 /* Return the RME version, zero if not supported. */
 CREATE_FEATURE_FUNCS(feat_rme, id_aa64pfr0_el1, ID_AA64PFR0_FEAT_RME_SHIFT,
@@ -355,6 +405,10 @@ CREATE_FEATURE_FUNCS(feat_rme, id_aa64pfr0_el1, ID_AA64PFR0_FEAT_RME_SHIFT,
 /* FEAT_SB: Speculation barrier instruction */
 CREATE_FEATURE_PRESENT(feat_sb, id_aa64isar1_el1, ID_AA64ISAR1_SB_SHIFT,
 		       ID_AA64ISAR1_SB_MASK, 1U)
+
+/* FEAT_MEC: Memory Encryption Contexts */
+CREATE_FEATURE_FUNCS(feat_mec, id_aa64mmfr3_el1, ID_AA64MMFR3_EL1_MEC_SHIFT,
+		ID_AA64MMFR3_EL1_MEC_MASK, 1U, ENABLE_FEAT_MEC)
 
 /*
  * FEAT_CSV2: Cache Speculation Variant 2. This checks bit fields[56-59]

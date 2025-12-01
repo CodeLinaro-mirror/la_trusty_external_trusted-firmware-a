@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024, Arm Limited. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited. All rights reserved.
  * Copyright (c) 2022-2023, Linaro.
  *
  * SPDX-License-Identifier: BSD-3-Clause
@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <common/debug.h>
 #include <drivers/measured_boot/event_log/event_log.h>
 #include <drivers/measured_boot/metadata.h>
 #include <plat/common/common_def.h>
@@ -65,6 +66,14 @@ void bl2_plat_mboot_finish(void)
 
 	event_log_cur_size = event_log_get_cur_size((uint8_t *)event_log_base);
 
+	event_log_dump((uint8_t *)event_log_base, event_log_cur_size);
+
+#if TRANSFER_LIST
+	if (!plat_handoff_mboot((void *)event_log_base, event_log_cur_size,
+				(void *)(uintptr_t)FW_HANDOFF_BASE))
+		return;
+#endif
+
 	rc = qemu_set_nt_fw_info(
 #ifdef SPD_opteed
 			    (uintptr_t)event_log_base,
@@ -74,13 +83,17 @@ void bl2_plat_mboot_finish(void)
 		ERROR("%s(): Unable to update %s_FW_CONFIG\n",
 		      __func__, "NT");
 		/*
-		 * It is a fatal error because on QEMU secure world software
+		 * It is a non-fatal error because on QEMU secure world software
 		 * assumes that a valid event log exists and will use it to
-		 * record the measurements into the fTPM or sw-tpm.
+		 * record the measurements into the fTPM or sw-tpm, but the boot
+		 * can also happen without TPM on the platform. It's up to
+		 * higher layer in boot sequence to decide if this is fatal or
+		 * not, e.g. by not providing access to TPM encrypted storage.
 		 * Note: In QEMU platform, OP-TEE uses nt_fw_config to get the
 		 * secure Event Log buffer address.
 		 */
-		panic();
+		WARN("Ignoring TPM errors, continuing without\n");
+		return;
 	}
 
 	/* Copy Event Log to Non-secure memory */
@@ -101,7 +114,6 @@ void bl2_plat_mboot_finish(void)
 	}
 #endif /* defined(SPD_tspd) || defined(SPD_spmd) */
 
-	dump_event_log((uint8_t *)event_log_base, event_log_cur_size);
 }
 
 int plat_mboot_measure_image(unsigned int image_id, image_info_t *image_data)
