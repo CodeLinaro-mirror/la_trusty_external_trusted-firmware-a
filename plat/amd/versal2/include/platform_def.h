@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018-2020, Arm Limited and Contributors. All rights reserved.
  * Copyright (c) 2021-2022, Xilinx, Inc. All rights reserved.
- * Copyright (c) 2022-2024, Advanced Micro Devices, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Advanced Micro Devices, Inc. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -11,6 +11,7 @@
 
 #include <arch.h>
 #include "def.h"
+#include <plat_common.h>
 
 /*******************************************************************************
  * Generic platform constants
@@ -23,6 +24,9 @@
 #define PLATFORM_CORE_COUNT_PER_CLUSTER	U(2) /* 2 CPUs per cluster */
 
 #define PLATFORM_CORE_COUNT		(PLATFORM_CLUSTER_COUNT * PLATFORM_CORE_COUNT_PER_CLUSTER)
+
+#define E_INVALID_CORE_COUNT		-1
+#define E_INVALID_CLUSTER_COUNT		-3
 
 #define PLAT_MAX_PWR_LVL		U(2)
 #define PLAT_MAX_RET_STATE		U(1)
@@ -52,8 +56,8 @@
  * BL32 specific defines.
  ******************************************************************************/
 #ifndef BL32_MEM_BASE
-# define BL32_BASE			U(0x60000000)
-# define BL32_LIMIT			U(0x80000000)
+# define BL32_BASE			U(0x01800000)
+# define BL32_LIMIT			U(0x09800000)
 #else
 # define BL32_BASE			U(BL32_MEM_BASE)
 # define BL32_LIMIT			U(BL32_MEM_BASE + BL32_MEM_SIZE)
@@ -63,7 +67,7 @@
  * BL33 specific defines.
  ******************************************************************************/
 #ifndef PRELOADED_BL33_BASE
-# define PLAT_ARM_NS_IMAGE_BASE		U(0x8000000)
+# define PLAT_ARM_NS_IMAGE_BASE		U(0x40000000)
 #else
 # define PLAT_ARM_NS_IMAGE_BASE		U(PRELOADED_BL33_BASE)
 #endif
@@ -96,8 +100,8 @@
  * FIXME: This address should come from firmware before TF-A
  * Having this to make sure the transfer list functionality works
  */
-#define FW_HANDOFF_BASE         U(0x70000000)
-#define FW_HANDOFF_SIZE         U(0x10000)
+#define FW_HANDOFF_BASE         U(0x1000000)
+#define FW_HANDOFF_SIZE         U(0x600000)
 #endif
 
 #define IS_TFA_IN_OCM(x)	((x >= PLAT_OCM_BASE) && (x < PLAT_OCM_LIMIT))
@@ -119,6 +123,8 @@
 
 #define PLAT_GICD_BASE_VALUE	U(0xE2000000)
 #define PLAT_GICR_BASE_VALUE	U(0xE2060000)
+#define PLAT_ARM_GICR_BASE	PLAT_GICR_BASE_VALUE
+#define PLAT_ARM_GICD_BASE	PLAT_GICD_BASE_VALUE
 
 /*
  * Define a list of Group 1 Secure and Group 0 interrupts as per GICv3
@@ -135,6 +141,8 @@
 #define PLAT_G0_IRQ_PROPS(grp) \
 	INTR_PROP_DESC(PLAT_VERSAL_IPI_IRQ, GIC_HIGHEST_SEC_PRIORITY, grp, \
 			GIC_INTR_CFG_EDGE), \
+	INTR_PROP_DESC(CPU_PWR_DOWN_REQ_INTR, GIC_HIGHEST_SEC_PRIORITY, grp, \
+			GIC_INTR_CFG_EDGE)
 
 #define IRQ_MAX		200U
 

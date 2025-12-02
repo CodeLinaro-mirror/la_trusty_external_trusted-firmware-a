@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2017-2019, Arm Limited and Contributors. All rights reserved.
- * Copyright (c) 2022-2023, Advanced Micro Devices, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Advanced Micro Devices, Inc. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -78,8 +78,8 @@ uint64_t ipi_smc_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2,
 	uint32_t ipi_remote_id;
 	uint32_t is_secure;
 
-	ipi_local_id = x1 & UNSIGNED32_MASK;
-	ipi_remote_id = x2 & UNSIGNED32_MASK;
+	ipi_local_id = (uint32_t)(x1 & UNSIGNED32_MASK);
+	ipi_remote_id = (uint32_t)(x2 & UNSIGNED32_MASK);
 
 	/* OEN Number 48 to 63 is for Trusted App and OS
 	 * GET_SMC_OEN limits the return value of OEN number to 63 by bitwise
@@ -106,30 +106,32 @@ uint64_t ipi_smc_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2,
 		SMC_RET1(handle, 0);
 	case IPI_MAILBOX_STATUS_ENQUIRY:
 	{
-		int32_t disable_interrupt;
+		bool disable_interrupt;
 
-		disable_interrupt = (x3 & IPI_SMC_ENQUIRY_DIRQ_MASK) ? 1 : 0;
-		ret = ipi_mb_enquire_status(ipi_local_id, ipi_remote_id);
-		if ((ret & IPI_MB_STATUS_RECV_PENDING) && disable_interrupt)
+		disable_interrupt = ((x3 & IPI_SMC_ENQUIRY_DIRQ_MASK) != 0U);
+		ret = (int32_t)ipi_mb_enquire_status(ipi_local_id, ipi_remote_id);
+		if ((((uint32_t)ret & IPI_MB_STATUS_RECV_PENDING) > 0U) && disable_interrupt) {
 			ipi_mb_disable_irq(ipi_local_id, ipi_remote_id);
+		}
 		SMC_RET1(handle, ret);
 	}
 	case IPI_MAILBOX_NOTIFY:
 	{
 		uint32_t is_blocking;
 
-		is_blocking = (x3 & IPI_SMC_NOTIFY_BLOCK_MASK) ? 1 : 0;
+		is_blocking = ((x3 & IPI_SMC_NOTIFY_BLOCK_MASK) != 0U);
 		ipi_mb_notify(ipi_local_id, ipi_remote_id, is_blocking);
 		SMC_RET1(handle, 0);
 	}
 	case IPI_MAILBOX_ACK:
 	{
-		int32_t enable_interrupt;
+		bool enable_interrupt;
 
-		enable_interrupt = (x3 & IPI_SMC_ACK_EIRQ_MASK) ? 1 : 0;
+		enable_interrupt = ((x3 & IPI_SMC_ACK_EIRQ_MASK) != 0U);
 		ipi_mb_ack(ipi_local_id, ipi_remote_id);
-		if (enable_interrupt != 0)
+		if (enable_interrupt != 0) {
 			ipi_mb_enable_irq(ipi_local_id, ipi_remote_id);
+		}
 		SMC_RET1(handle, 0);
 	}
 	case IPI_MAILBOX_ENABLE_IRQ:

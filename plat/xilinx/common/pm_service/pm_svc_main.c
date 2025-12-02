@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2019-2022, Xilinx, Inc. All rights reserved.
- * Copyright (c) 2022-2024, Advanced Micro Devices, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Advanced Micro Devices, Inc. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -64,7 +64,6 @@
 
 /* 1 sec of wait timeout for secondary core down */
 #define PWRDWN_WAIT_TIMEOUT	(1000U)
-DEFINE_RENAME_SYSREG_RW_FUNCS(icc_asgi1r_el1, S3_0_C12_C11_6)
 
 /* pm_up = true - UP, pm_up = false - DOWN */
 static bool pm_up;
@@ -73,7 +72,7 @@ bool pwrdwn_req_received;
 
 static void notify_os(void)
 {
-	plat_ic_raise_ns_sgi(sgi, read_mpidr_el1());
+	plat_ic_raise_ns_sgi((int)sgi, read_mpidr_el1());
 }
 
 static uint64_t cpu_pwrdwn_req_handler(uint32_t id, uint32_t flags,
@@ -90,7 +89,7 @@ static uint64_t cpu_pwrdwn_req_handler(uint32_t id, uint32_t flags,
 	/* Deactivate CPU power down SGI */
 	plat_ic_end_of_interrupt(CPU_PWR_DOWN_REQ_INTR);
 
-	return psci_cpu_off();
+	return (uint64_t)psci_cpu_off();
 }
 
 /**
@@ -102,17 +101,18 @@ static uint64_t cpu_pwrdwn_req_handler(uint32_t id, uint32_t flags,
  */
 static void raise_pwr_down_interrupt(u_register_t mpidr)
 {
-	plat_ic_raise_el3_sgi(CPU_PWR_DOWN_REQ_INTR, mpidr);
+	plat_ic_raise_el3_sgi((int)CPU_PWR_DOWN_REQ_INTR, mpidr);
 }
 
 void request_cpu_pwrdwn(void)
 {
-	enum pm_ret_status ret;
+	int ret;
 
 	VERBOSE("CPU power down request received\n");
 
 	/* Send powerdown request to online secondary core(s) */
-	ret = psci_stop_other_cores(PWRDWN_WAIT_TIMEOUT, raise_pwr_down_interrupt);
+	ret = psci_stop_other_cores(plat_my_core_pos(), PWRDWN_WAIT_TIMEOUT,
+				    raise_pwr_down_interrupt);
 	if (ret != PSCI_E_SUCCESS) {
 		ERROR("Failed to powerdown secondary core(s)\n");
 	}
@@ -132,7 +132,7 @@ static uint64_t ipi_fiq_handler(uint32_t id, uint32_t flags, void *handle,
 	(void)cookie;
 	uint32_t payload[4] = {0};
 	enum pm_ret_status ret;
-	int ipi_status, i;
+	uint32_t ipi_status, i;
 
 	VERBOSE("Received IPI FIQ from firmware\n");
 
@@ -144,23 +144,23 @@ static uint64_t ipi_fiq_handler(uint32_t id, uint32_t flags, void *handle,
 		ipi_status = ipi_mb_enquire_status(IPI_ID_APU, i);
 
 		/* If any agent other than PMC has generated IPI FIQ then send SGI to mbox driver */
-		if (ipi_status & IPI_MB_STATUS_RECV_PENDING) {
-			plat_ic_raise_ns_sgi(MBOX_SGI_SHARED_IPI, read_mpidr_el1());
+		if ((ipi_status & IPI_MB_STATUS_RECV_PENDING) != 0U) {
+			plat_ic_raise_ns_sgi((int)MBOX_SGI_SHARED_IPI, read_mpidr_el1());
 			break;
 		}
 	}
 
 	/* If PMC has not generated interrupt then end ISR */
 	ipi_status = ipi_mb_enquire_status(IPI_ID_APU, IPI_ID_PMC);
-	if ((ipi_status & IPI_MB_STATUS_RECV_PENDING) == 0) {
+	if ((ipi_status & IPI_MB_STATUS_RECV_PENDING) == 0U) {
 		plat_ic_end_of_interrupt(id);
-		return 0;
+		goto exit_label;
 	}
 
 	/* Handle PMC case */
 	ret = pm_get_callbackdata(payload, ARRAY_SIZE(payload), 0, 0);
 	if (ret != PM_RET_SUCCESS) {
-		payload[0] = ret;
+		payload[0] = (uint32_t)ret;
 	}
 
 	switch (payload[0]) {
@@ -182,12 +182,14 @@ static uint64_t ipi_fiq_handler(uint32_t id, uint32_t flags, void *handle,
 				}
 			}
 			notify_os();
-		} else if (payload[2] == EVENT_CPU_PWRDWN) {
-			request_cpu_pwrdwn();
-			(void)psci_cpu_off();
+		} else {
+			if (payload[2] == EVENT_CPU_PWRDWN) {
+				request_cpu_pwrdwn();
+				(void)psci_cpu_off();
+			}
 		}
 		break;
-	case PM_RET_ERROR_INVALID_CRC:
+	case (uint32_t)PM_RET_ERROR_INVALID_CRC:
 		pm_ipi_irq_clear(primary_proc);
 		WARN("Invalid CRC in the payload\n");
 		break;
@@ -201,6 +203,7 @@ static uint64_t ipi_fiq_handler(uint32_t id, uint32_t flags, void *handle,
 	/* Clear FIQ */
 	plat_ic_end_of_interrupt(id);
 
+exit_label:
 	return 0;
 }
 
@@ -218,21 +221,19 @@ static uint64_t ipi_fiq_handler(uint32_t id, uint32_t flags, void *handle,
  */
 int32_t pm_register_sgi(uint32_t sgi_num, uint32_t reset)
 {
+	int32_t ret = 0;
+
 	if (reset == 1U) {
 		sgi = INVALID_SGI;
-		return 0;
+	} else if (sgi != INVALID_SGI) {
+		ret = -EBUSY;
+	} else if (sgi_num >= GICV3_MAX_SGI_TARGETS) {
+		ret = -EINVAL;
+	} else {
+		sgi = (uint32_t)sgi_num;
 	}
 
-	if (sgi != INVALID_SGI) {
-		return -EBUSY;
-	}
-
-	if (sgi_num >= GICV3_MAX_SGI_TARGETS) {
-		return -EINVAL;
-	}
-
-	sgi = (uint32_t)sgi_num;
-	return 0;
+	return ret;
 }
 
 /**
@@ -278,7 +279,7 @@ int32_t pm_setup(void)
 	gicd_write_irouter(gicv3_driver_data->gicd_base, PLAT_VERSAL_IPI_IRQ, MODE);
 
 	/* Register for idle callback during force power down/restart */
-	ret = pm_register_notifier(primary_proc->node_id, EVENT_CPU_PWRDWN,
+	ret = (int32_t)pm_register_notifier(primary_proc->node_id, EVENT_CPU_PWRDWN,
 				   0x0U, 0x1U, SECURE_FLAG);
 	if (ret != 0) {
 		WARN("BL31: registering idle callback for restart/force power down failed\n");
@@ -360,16 +361,16 @@ static uintptr_t eemi_psci_debugfs_handler(uint32_t api_id, uint32_t *pm_arg,
 		SMC_RET1(handle, (u_register_t)ret);
 
 	case (uint32_t)PM_FORCE_POWERDOWN:
-		ret = pm_force_powerdown(pm_arg[0], pm_arg[1], security_flag);
+		ret = pm_force_powerdown(pm_arg[0], (uint8_t)pm_arg[1], security_flag);
 		SMC_RET1(handle, (u_register_t)ret);
 
 	case (uint32_t)PM_REQ_SUSPEND:
-		ret = pm_req_suspend(pm_arg[0], pm_arg[1], pm_arg[2],
+		ret = pm_req_suspend(pm_arg[0], (uint8_t)pm_arg[1], pm_arg[2],
 				     pm_arg[3], security_flag);
 		SMC_RET1(handle, (u_register_t)ret);
 
 	case (uint32_t)PM_ABORT_SUSPEND:
-		ret = pm_abort_suspend(pm_arg[0], security_flag);
+		ret = pm_abort_suspend((enum pm_abort_reason)pm_arg[0], security_flag);
 		SMC_RET1(handle, (u_register_t)ret);
 
 	case (uint32_t)PM_SYSTEM_SHUTDOWN:
@@ -427,8 +428,8 @@ static uintptr_t TF_A_specific_handler(uint32_t api_id, uint32_t *pm_arg,
 		enum pm_ret_status ret;
 
 		ret = pm_get_callbackdata(result, ARRAY_SIZE(result), security_flag, 1U);
-		if (ret != 0) {
-			result[0] = ret;
+		if (ret != PM_RET_SUCCESS) {
+			result[0] = (uint32_t)ret;
 		}
 
 		SMC_RET2(handle,
@@ -469,8 +470,7 @@ static uintptr_t eemi_handler(uint32_t api_id, uint32_t *pm_arg,
 	uint32_t buf[RET_PAYLOAD_ARG_CNT] = {0};
 
 	ret = pm_handle_eemi_call(security_flag, api_id, pm_arg[0], pm_arg[1],
-				  pm_arg[2], pm_arg[3], pm_arg[4],
-				  (uint64_t *)buf);
+				  pm_arg[2], pm_arg[3], pm_arg[4], buf);
 	/*
 	 * Two IOCTLs, to get clock name and pinctrl name of pm_query_data API
 	 * receives 5 words of respoonse from firmware. Currently linux driver can
@@ -478,8 +478,8 @@ static uintptr_t eemi_handler(uint32_t api_id, uint32_t *pm_arg,
 	 * than other eemi calls.
 	 */
 	if (api_id == (uint32_t)PM_QUERY_DATA) {
-		if (((pm_arg[0] == XPM_QID_CLOCK_GET_NAME) ||
-		    (pm_arg[0] == XPM_QID_PINCTRL_GET_FUNCTION_NAME)) &&
+		if (((pm_arg[0] == (uint32_t)XPM_QID_CLOCK_GET_NAME) ||
+		    (pm_arg[0] == (uint32_t)XPM_QID_PINCTRL_GET_FUNCTION_NAME)) &&
 		    (ret == PM_RET_SUCCESS)) {
 			SMC_RET2(handle, (uint64_t)buf[0] | ((uint64_t)buf[1] << 32U),
 				(uint64_t)buf[2] | ((uint64_t)buf[3] << 32U));
@@ -598,7 +598,8 @@ uint64_t pm_smc_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2, uint64_t x3,
 		return ret;
 	}
 
-	ret = eemi_psci_debugfs_handler(api_id, pm_arg, handle, flags);
+	ret = eemi_psci_debugfs_handler(api_id, pm_arg, handle,
+					(uint32_t)flags);
 	if (ret !=  (uintptr_t)0) {
 		return ret;
 	}

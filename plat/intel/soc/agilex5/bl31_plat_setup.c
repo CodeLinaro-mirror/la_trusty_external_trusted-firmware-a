@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2019-2024, ARM Limited and Contributors. All rights reserved.
  * Copyright (c) 2019-2023, Intel Corporation. All rights reserved.
- * Copyright (c) 2024, Altera Corporation. All rights reserved.
+ * Copyright (c) 2024-2025, Altera Corporation. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -21,6 +21,7 @@
 #include "agilex5_cache.h"
 #include "agilex5_power_manager.h"
 #include "ccu/ncore_ccu.h"
+#include "socfpga_dt.h"
 #include "socfpga_mailbox.h"
 #include "socfpga_private.h"
 #include "socfpga_reset_manager.h"
@@ -59,6 +60,10 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 
 	console_16550_register(PLAT_INTEL_UART_BASE, PLAT_UART_CLOCK,
 			       PLAT_BAUDRATE, &console);
+
+	/* Enable TF-A BL31 logs when running from non-secure world also. */
+	console_set_scope(&console,
+		(CONSOLE_FLAG_BOOT | CONSOLE_FLAG_RUNTIME | CONSOLE_FLAG_CRASH));
 
 	setup_smmu_stream_id();
 
@@ -146,7 +151,7 @@ static const interrupt_prop_t agx5_interrupt_props[] = {
 	PLAT_INTEL_SOCFPGA_G0_IRQ_PROPS(INTR_GROUP0)
 };
 
-static const gicv3_driver_data_t plat_gicv3_gic_data = {
+gicv3_driver_data_t plat_gicv3_gic_data = {
 	.gicd_base = PLAT_INTEL_SOCFPGA_GICD_BASE,
 	.gicr_base = PLAT_INTEL_SOCFPGA_GICR_BASE,
 	.interrupt_props = agx5_interrupt_props,
@@ -162,11 +167,27 @@ void bl31_platform_setup(void)
 {
 	socfpga_delay_timer_init();
 
+	/* TODO: DTB not available */
+	// socfpga_dt_populate_gicv3_config(SOCFPGA_DTB_BASE, &plat_gicv3_gic_data);
+	// NOTICE("SOCFPGA: GIC GICD base address 0x%lx\n", plat_gicv3_gic_data.gicd_base);
+	// NOTICE("SOCFPGA: GIC GICR base address 0x%lx\n", plat_gicv3_gic_data.gicr_base);
+
 	/* Initialize the gic cpu and distributor interfaces */
 	gicv3_driver_init(&plat_gicv3_gic_data);
 	gicv3_distif_init();
 	gicv3_rdistif_init(plat_my_core_pos());
 	gicv3_cpuif_enable(plat_my_core_pos());
+
+#if SIP_SVC_V3
+	/*
+	 * Re-initialize the mailbox to include V3 specific routines.
+	 * In V3, this re-initialize is required because prior to BL31, U-Boot
+	 * SPL has its own mailbox settings and this initialization will
+	 * override to those settings as required by the V3 framework.
+	 */
+	mailbox_init();
+#endif
+
 	mailbox_hps_stage_notify(HPS_EXECUTION_STATE_SSBL);
 }
 
@@ -192,10 +213,13 @@ void bl31_plat_arch_setup(void)
 
 	cpuid = MPIDR_AFFLVL1_VAL(read_mpidr());
 	boot_core = ((mmio_read_32(AGX5_PWRMGR(MPU_BOOTCONFIG)) & 0xC00) >> 10);
-	NOTICE("BL31: Boot Core = %x\n", boot_core);
-	NOTICE("BL31: CPU ID = %x\n", cpuid);
-	INFO("BL31: Invalidate Data cache\n");
+	NOTICE("SOCFPGA: Boot Core = %x\n", boot_core);
+	NOTICE("SOCFPGA: CPU ID = %x\n", cpuid);
+	INFO("SOCFPGA: Invalidate Data cache\n");
 	invalidate_dcache_all();
+
+	/* Invalidate for NS EL2 and EL1 */
+	invalidate_cache_low_el();
 }
 
 /* Get non-secure image entrypoint for BL33. Zephyr and Linux */
@@ -234,9 +258,9 @@ void bl31_plat_set_secondary_cpu_entrypoint(unsigned int cpu_id)
 	unsigned int pchctlr_new = 0x00;
 	uint32_t boot_core = 0x00;
 
-	/* Store magic number for SMP secondary cores boot */
-	mmio_write_32(L2_RESET_DONE_REG, SMP_SEC_CORE_BOOT_REQ);
-
+	/* Set bit for SMP secondary cores boot */
+	mmio_clrsetbits_32(L2_RESET_DONE_REG, BS_REG_MAGIC_KEYS_MASK,
+			   SMP_SEC_CORE_BOOT_REQ);
 	boot_core = (mmio_read_32(AGX5_PWRMGR(MPU_BOOTCONFIG)) & 0xC00);
 	/* Update the p-channel based on cpu id */
 	pch_cpu = 1 << cpu_id;
@@ -277,6 +301,11 @@ void bl31_plat_set_secondary_cpu_off(void)
 	pch_cpu = pch_cpu & ~(pch_cpu_off << 1);
 
 	mmio_write_32(AGX5_PWRMGR(MPU_PCHCTLR), pch_cpu);
+}
+
+void bl31_plat_runtime_setup(void)
+{
+	/* Dummy override function. */
 }
 
 void bl31_plat_enable_mmu(uint32_t flags)

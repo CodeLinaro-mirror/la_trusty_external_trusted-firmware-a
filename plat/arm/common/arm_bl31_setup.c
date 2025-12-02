@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2024, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2025, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -25,8 +25,8 @@
 #include <plat/common/platform.h>
 #include <platform_def.h>
 
-static struct transfer_list_header *secure_tl __unused;
-static struct transfer_list_header *ns_tl __unused;
+struct transfer_list_header *secure_tl;
+struct transfer_list_header *ns_tl __unused;
 
 /*
  * Placeholder variables for copying the arguments that have been passed to
@@ -34,9 +34,31 @@ static struct transfer_list_header *ns_tl __unused;
  */
 static entry_point_info_t bl32_image_ep_info;
 static entry_point_info_t bl33_image_ep_info;
+
 #if ENABLE_RME
 static entry_point_info_t rmm_image_ep_info;
+#if (RME_GPT_BITLOCK_BLOCK == 0)
+#define BITLOCK_BASE	UL(0)
+#define BITLOCK_SIZE	UL(0)
+#else
+/*
+ * Number of bitlock_t entries in bitlocks array for PLAT_ARM_PPS
+ * with RME_GPT_BITLOCK_BLOCK * 512MB per bitlock.
+ */
+#if (PLAT_ARM_PPS > (RME_GPT_BITLOCK_BLOCK * SZ_512M * UL(8)))
+#define BITLOCKS_NUM	(PLAT_ARM_PPS) /	\
+			(RME_GPT_BITLOCK_BLOCK * SZ_512M * UL(8))
+#else
+#define BITLOCKS_NUM	U(1)
 #endif
+/*
+ * Bitlocks array
+ */
+static bitlock_t gpt_bitlock[BITLOCKS_NUM];
+#define BITLOCK_BASE	(uintptr_t)gpt_bitlock
+#define BITLOCK_SIZE	sizeof(gpt_bitlock)
+#endif /* RME_GPT_BITLOCK_BLOCK */
+#endif /* ENABLE_RME */
 
 #if !RESET_TO_BL31
 /*
@@ -111,7 +133,12 @@ struct entry_point_info *bl31_plat_get_next_image_ep_info(uint32_t type)
 	}
 #endif
 	else {
+#if TRANSFER_LIST && !RESET_TO_BL31
+		next_image_info = transfer_list_set_handoff_args(
+			secure_tl, &bl32_image_ep_info);
+#else
 		next_image_info = &bl32_image_ep_info;
+#endif
 	}
 
 	/*
@@ -132,10 +159,10 @@ struct entry_point_info *bl31_plat_get_next_image_ep_info(uint32_t type)
  * while creating page tables. BL2 has flushed this information to memory, so
  * we are guaranteed to pick up good data.
  ******************************************************************************/
-#if TRANSFER_LIST
 void __init arm_bl31_early_platform_setup(u_register_t arg0, u_register_t arg1,
 					  u_register_t arg2, u_register_t arg3)
 {
+#if TRANSFER_LIST
 #if RESET_TO_BL31
 	/* Populate entry point information for BL33 */
 	SET_PARAM_HEAD(&bl33_image_ep_info, PARAM_EP, VERSION_1, 0);
@@ -186,18 +213,11 @@ void __init arm_bl31_early_platform_setup(u_register_t arg0, u_register_t arg1,
 		}
 	}
 #endif /* RESET_TO_BL31 */
-}
-#else
-void __init arm_bl31_early_platform_setup(void *from_bl2, uintptr_t soc_fw_config,
-				uintptr_t hw_config, void *plat_params_from_bl2)
-{
-	/* Initialize the console to provide early debug support */
-	arm_console_boot_init();
-
+#else /* (!TRANSFER_LIST) */
 #if RESET_TO_BL31
 	/* There are no parameters from BL2 if BL31 is a reset vector */
-	assert(from_bl2 == NULL);
-	assert(plat_params_from_bl2 == NULL);
+	assert((uintptr_t)arg0 == 0U);
+	assert((uintptr_t)arg3 == 0U);
 
 # ifdef BL32_BASE
 	/* Populate entry point information for BL32 */
@@ -210,14 +230,7 @@ void __init arm_bl31_early_platform_setup(void *from_bl2, uintptr_t soc_fw_confi
 	bl32_image_ep_info.spsr = arm_get_spsr_for_bl32_entry();
 
 #if defined(SPD_spmd)
-	/* SPM (hafnium in secure world) expects SPM Core manifest base address
-	 * in x0, which in !RESET_TO_BL31 case loaded after base of non shared
-	 * SRAM(after 4KB offset of SRAM). But in RESET_TO_BL31 case all non
-	 * shared SRAM is allocated to BL31, so to avoid overwriting of manifest
-	 * keep it in the last page.
-	 */
-	bl32_image_ep_info.args.arg0 = ARM_TRUSTED_SRAM_BASE +
-				PLAT_ARM_TRUSTED_SRAM_SIZE - PAGE_SIZE;
+	bl32_image_ep_info.args.arg0 = ARM_SPMC_MANIFEST_BASE;
 #endif
 
 # endif /* BL32_BASE */
@@ -243,21 +256,20 @@ void __init arm_bl31_early_platform_setup(void *from_bl2, uintptr_t soc_fw_confi
 	 */
 	rmm_image_ep_info.pc = RMM_BASE;
 #endif /* ENABLE_RME */
-
 #else /* RESET_TO_BL31 */
-
 	/*
-	 * In debug builds, we pass a special value in 'plat_params_from_bl2'
+	 * In debug builds, we pass a special value in 'arg3'
 	 * to verify platform parameters from BL2 to BL31.
 	 * In release builds, it's not used.
 	 */
-	assert(((unsigned long long)plat_params_from_bl2) ==
-		ARM_BL31_PLAT_PARAM_VAL);
+#if DEBUG
+	assert(((uintptr_t)arg3) == ARM_BL31_PLAT_PARAM_VAL);
+#endif
 
 	/*
 	 * Check params passed from BL2 should not be NULL,
 	 */
-	bl_params_t *params_from_bl2 = (bl_params_t *)from_bl2;
+	bl_params_t *params_from_bl2 = (bl_params_t *)(uintptr_t)arg0;
 	assert(params_from_bl2 != NULL);
 	assert(params_from_bl2->h.type == PARAM_BL_PARAMS);
 	assert(params_from_bl2->h.version >= VERSION_2);
@@ -310,7 +322,7 @@ void __init arm_bl31_early_platform_setup(void *from_bl2, uintptr_t soc_fw_confi
 #endif
 #endif /* RESET_TO_BL31 */
 
-# if ARM_LINUX_KERNEL_AS_BL33
+#if ARM_LINUX_KERNEL_AS_BL33
 	/*
 	 * According to the file ``Documentation/arm64/booting.txt`` of the
 	 * Linux kernel tree, Linux expects the physical address of the device
@@ -324,23 +336,19 @@ void __init arm_bl31_early_platform_setup(void *from_bl2, uintptr_t soc_fw_confi
 #if RESET_TO_BL31
 	bl33_image_ep_info.args.arg0 = (u_register_t)ARM_PRELOADED_DTB_BASE;
 #else
-	bl33_image_ep_info.args.arg0 = (u_register_t)hw_config;
-#endif
+	bl33_image_ep_info.args.arg0 = arg2;
+#endif /* RESET_TO_BL31 */
 	bl33_image_ep_info.args.arg1 = 0U;
 	bl33_image_ep_info.args.arg2 = 0U;
 	bl33_image_ep_info.args.arg3 = 0U;
-# endif
+#endif /* ARM_LINUX_KERNEL_AS_BL33 */
+#endif /* TRANSFER_LIST */
 }
-#endif
 
 void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 		u_register_t arg2, u_register_t arg3)
 {
-#if TRANSFER_LIST
 	arm_bl31_early_platform_setup(arg0, arg1, arg2, arg3);
-#else
-	arm_bl31_early_platform_setup((void *)arg0, arg1, arg2, (void *)arg3);
-#endif
 
 	/*
 	 * Initialize Interconnect for this cluster during cold boot.
@@ -369,12 +377,11 @@ void arm_bl31_platform_setup(void)
 #if TRANSFER_LIST && !RESET_TO_BL31
 	ns_tl = transfer_list_init((void *)FW_NS_HANDOFF_BASE,
 				   PLAT_ARM_FW_HANDOFF_SIZE);
-
 	if (ns_tl == NULL) {
-		ERROR("Non-secure transfer list initialisation failed!");
+		ERROR("Non-secure transfer list initialisation failed!\n");
 		panic();
 	}
-
+	/* BL31 may modify the HW_CONFIG so defer copying it until later. */
 	te = transfer_list_find(secure_tl, TL_TAG_FDT);
 	assert(te != NULL);
 
@@ -392,11 +399,17 @@ void arm_bl31_platform_setup(void)
 	te = transfer_list_add(ns_tl, TL_TAG_FDT, te->data_size,
 			       transfer_list_entry_data(te));
 	assert(te != NULL);
-#endif /* TRANSFER_LIST */
 
-	/* Initialize the GIC driver, cpu and distributor interfaces */
-	plat_arm_gic_driver_init();
-	plat_arm_gic_init();
+	te = transfer_list_find(secure_tl, TL_TAG_TPM_EVLOG);
+	if (te != NULL) {
+		te = transfer_list_add(ns_tl, TL_TAG_TPM_EVLOG, te->data_size,
+				  transfer_list_entry_data(te));
+		if (te == NULL) {
+			ERROR("Failed to load event log in Non-Secure transfer list\n");
+			panic();
+		}
+	}
+#endif /* TRANSFER_LIST && !RESET_TO_BL31 */
 
 #if RESET_TO_BL31
 	/*
@@ -447,7 +460,7 @@ void arm_bl31_plat_runtime_setup(void)
 	 * they can access the updated data even if caching is not enabled.
 	 */
 	flush_dcache_range((uintptr_t)ns_tl, ns_tl->size);
-#endif /* TRANSFER_LIST && !(RESET_TO_BL2 || RESET_TO_BL31) */
+#endif /* TRANSFER_LIST && !RESET_TO_BL31 */
 
 #if RECLAIM_INIT_CODE
 	arm_free_init_memory();
@@ -559,7 +572,7 @@ void __init arm_bl31_plat_arch_setup(void)
 	 * stage, so there is no need to provide any PAS here. This function
 	 * sets up pointers to those tables.
 	 */
-	if (gpt_runtime_init() < 0) {
+	if (gpt_runtime_init(BITLOCK_BASE, BITLOCK_SIZE) < 0) {
 		ERROR("gpt_runtime_init() failed!\n");
 		panic();
 	}

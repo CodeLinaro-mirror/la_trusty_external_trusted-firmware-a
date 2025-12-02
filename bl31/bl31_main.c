@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2025, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -17,6 +17,7 @@
 #include <common/debug.h>
 #include <common/feat_detect.h>
 #include <common/runtime_svc.h>
+#include <drivers/arm/gic.h>
 #include <drivers/console.h>
 #include <lib/bootmarker_capture.h>
 #include <lib/el3_runtime/context_debug.h>
@@ -104,14 +105,6 @@ void bl31_setup(u_register_t arg0, u_register_t arg1, u_register_t arg2,
 	/* Perform late platform-specific setup */
 	bl31_plat_arch_setup();
 
-#if CTX_INCLUDE_PAUTH_REGS
-	/*
-	 * Assert that the ARMv8.3-PAuth registers are present or an access
-	 * fault will be triggered when they are being saved or restored.
-	 */
-	assert(is_armv8_3_pauth_present());
-#endif /* CTX_INCLUDE_PAUTH_REGS */
-
 	/* Prints context_memory allocated for all the security states */
 	report_ctx_memory_usage();
 }
@@ -127,7 +120,7 @@ void bl31_setup(u_register_t arg0, u_register_t arg1, u_register_t arg2,
 void bl31_main(void)
 {
 	/* Init registers that never change for the lifetime of TF-A */
-	cm_manage_extensions_el3();
+	cm_manage_extensions_el3(plat_my_core_pos());
 
 	/* Init per-world context registers for non-secure world */
 	manage_extensions_nonsecure_per_world();
@@ -152,6 +145,18 @@ void bl31_main(void)
 
 	/* Perform platform setup in BL31 */
 	bl31_platform_setup();
+
+#if USE_GIC_DRIVER
+	/*
+	 * Initialize the GIC driver as well as per-cpu and global interfaces.
+	 * Platform has had an opportunity to initialise specifics.
+	 */
+	unsigned int core_pos = plat_my_core_pos();
+
+	gic_init(core_pos);
+	gic_pcpu_init(core_pos);
+	gic_cpuif_enable(core_pos);
+#endif /* USE_GIC_DRIVER */
 
 	/* Initialise helper libraries */
 	bl31_lib_init();
@@ -255,7 +260,7 @@ uint32_t bl31_get_next_image_type(void)
  ******************************************************************************/
 void __init bl31_prepare_next_image_entry(void)
 {
-	entry_point_info_t *next_image_info;
+	const entry_point_info_t *next_image_info;
 	uint32_t image_type;
 
 #if CTX_INCLUDE_AARCH32_REGS

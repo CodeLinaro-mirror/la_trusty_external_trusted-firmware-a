@@ -9,7 +9,6 @@
 #include <string.h>
 
 #include <common/debug.h>
-#include <drivers/generic_delay_timer.h>
 #include <lib/mmio.h>
 #include <lib/smccc.h>
 #include <lib/xlat_tables/xlat_tables_v2.h>
@@ -42,9 +41,9 @@ const mmap_region_t *plat_get_mmap(void)
 
 static uint32_t zynqmp_get_silicon_ver(void)
 {
-	static unsigned int ver;
+	static uint32_t ver;
 
-	if (!ver) {
+	if (ver == 0U) {
 		ver = mmio_read_32(ZYNQMP_CSU_BASEADDR +
 				   ZYNQMP_CSU_VERSION_OFFSET);
 		ver &= ZYNQMP_SILICON_VER_MASK;
@@ -57,12 +56,15 @@ static uint32_t zynqmp_get_silicon_ver(void)
 uint32_t get_uart_clk(void)
 {
 	unsigned int ver = zynqmp_get_silicon_ver();
+	uint32_t uart_clk = 0U;
 
 	if (ver == ZYNQMP_CSU_VERSION_QEMU) {
-		return 133000000;
+		uart_clk = 133000000U;
 	} else {
-		return 100000000;
+		uart_clk = 100000000U;
 	}
+
+	return uart_clk;
 }
 
 #if LOG_LEVEL >= LOG_LEVEL_NOTICE
@@ -270,7 +272,7 @@ static char *zynqmp_get_silicon_idcode_name(void)
 		return zynqmp_devices[i].name;
 	}
 
-	len = strlen(zynqmp_devices[i].name) - 2;
+	len = strlen(zynqmp_devices[i].name) - 2U;
 	for (j = 0; j < strlen(name); j++) {
 		zynqmp_devices[i].name[len] = name[j];
 		len++;
@@ -312,27 +314,31 @@ static char *zynqmp_print_silicon_idcode(void)
 
 int32_t plat_is_smccc_feature_available(u_register_t fid)
 {
+	int32_t ret = SMC_ARCH_CALL_NOT_SUPPORTED;
+
 	switch (fid) {
 	case SMCCC_ARCH_SOC_ID:
-		return SMC_ARCH_CALL_SUCCESS;
+		ret = SMC_ARCH_CALL_SUCCESS;
+		break;
 	default:
-		return SMC_ARCH_CALL_NOT_SUPPORTED;
+		break;
 	}
 
-	return SMC_ARCH_CALL_NOT_SUPPORTED;
+	return ret;
 }
 
 int32_t plat_get_soc_version(void)
 {
 	uint32_t chip_id = zynqmp_get_silicon_ver();
 	uint32_t manfid = SOC_ID_SET_JEP_106(JEDEC_XILINX_BKID, JEDEC_XILINX_MFID);
+	uint32_t result = (manfid | (chip_id & 0xFFFFU));
 
-	return (int32_t)(manfid | (chip_id & 0xFFFF));
+	return (int32_t)result;
 }
 
 int32_t plat_get_soc_revision(void)
 {
-	return mmio_read_32(ZYNQMP_CSU_BASEADDR + ZYNQMP_CSU_IDCODE_OFFSET);
+	return (int32_t)mmio_read_32(ZYNQMP_CSU_BASEADDR + ZYNQMP_CSU_IDCODE_OFFSET);
 }
 
 static uint32_t zynqmp_get_ps_ver(void)
@@ -366,7 +372,7 @@ static void zynqmp_print_platform_name(void)
 	VERBOSE("TF-A running on %s/%s at 0x%x\n",
 		zynqmp_print_silicon_idcode(), label, BL31_BASE);
 	VERBOSE("TF-A running on v%d/RTL%d.%d\n",
-	       zynqmp_get_ps_ver(), (rtl & 0xf0) >> 4, rtl & 0xf);
+	       zynqmp_get_ps_ver(), (rtl & 0xf0U) >> 4U, rtl & 0xfU);
 }
 #else
 static inline void zynqmp_print_platform_name(void) { }
@@ -375,7 +381,7 @@ static inline void zynqmp_print_platform_name(void) { }
 uint32_t zynqmp_get_bootmode(void)
 {
 	uint32_t r;
-	unsigned int ret;
+	enum pm_ret_status ret;
 
 	ret = pm_mmio_read(CRL_APB_BOOT_MODE_USER, &r);
 
@@ -388,29 +394,22 @@ uint32_t zynqmp_get_bootmode(void)
 
 void zynqmp_config_setup(void)
 {
-	uint64_t counter_freq;
-
 	/* Configure IPI data for ZynqMP */
 	zynqmp_ipi_config_table_init();
 
 	zynqmp_print_platform_name();
-
-	/* Configure counter frequency */
-	counter_freq = read_cntfrq_el0();
-	if (counter_freq == ZYNQMP_DEFAULT_COUNTER_FREQ) {
-		write_cntfrq_el0(plat_get_syscnt_freq2());
-	}
-
-	generic_delay_timer_init();
 }
 
 uint32_t plat_get_syscnt_freq2(void)
 {
 	uint32_t ver = zynqmp_get_silicon_ver();
+	uint32_t ret = 0U;
 
 	if (ver == ZYNQMP_CSU_VERSION_QEMU) {
-		return 65000000;
+		ret = 62500000U;
 	} else {
-		return mmio_read_32(IOU_SCNTRS_BASEFREQ);
+		ret = mmio_read_32((uint64_t)IOU_SCNTRS_BASEFREQ);
 	}
+
+	return ret;
 }

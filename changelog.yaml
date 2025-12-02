@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2021-2024, Arm Limited. All rights reserved.
+# Copyright (c) 2021-2025, Arm Limited. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -86,92 +86,43 @@ subsections:
   - title: Architecture
 
     subsections:
-      - title: Activity Monitors Extension (FEAT_AMU)
-        scope: amu
-
-      - title: Branch Record Buffer Extension (FEAT_BRBE)
-        scope: brbe
-
-      - title: Branch Target Identification Extension
-        scope: bti
-
-      - title: Confidential Compute Architecture (CCA)
-        scope: cca
-
-      - title: Extended Cache Index (FEAT_CCIDX)
-        scope: ccidx
-
-      - title: Extended Translation Control Register (FEAT_TCR2).
-        scope: tcr2
-
-      - title: Fine-grained Traps 2 (FEAT_FGT2).
-        scope: fgt2
-
-      - title: CPU feature / ID register handling in general
+      - title: CPU feature like FEAT_XXXX / ID register handling in general
         scope: cpufeat
 
-      - title: Debug Extension (FEAT_Debugv8p9)
-        scope: debugv8p9
-
-      - title: Guarded Control Stack (FEAT_GCS)
-        scope: gcs
-
-      - title: Support for the `HCRX_EL2` register (FEAT_HCX)
-        scope: hcx
-
-      - title: Memory Partitioning and Monitoring (MPAM) Extension (FEAT_MPAM)
-        scope: mpam
-
-      - title: Memory Tagging Extension2
-        scope: mte2
-
         deprecated:
+          - amu
+          - brbe
+          - bti
+          - cca
+          - ccidx
+          - d128
+          - debugv8p9
+          - fgt2
+          - fpmr
+          - gcs
+          - hcx
+          - mops
+          - mpam
           - mte
-
-      - title: Pointer Authentication Extension
-        scope: pauth
-
-      - title: Performance Monitors Extension (FEAT_PMUv3)
-        scope: pmu
-
-      - title: Trapping support for RNDR/RNDRRS (FEAT_RNG_TRAP)
-        scope: rng-trap
-
-      - title: Scalable Matrix Extension (FEAT_SME, FEAT_SME2)
-        scope: sme
-
-      - title: Statistical profiling Extension (FEAT_SPE)
-        scope: spe
-
-      - title: Scalable Vector Extension (FEAT_SVE)
-        scope: sve
-
-      - title: System Register Trace Extensions (FEAT_ETMv4, FEAT_ETE and FEAT_ETEv1.1)
-        scope: sys-reg-trace
-
-        deprecated:
+          - mte2
+          - pauth
+          - pmu
+          - pmuv3
+          - rng-trap
+          - sctlr2
+          - feat_sctlr2
+          - sme
+          - spe
+          - sve
+          - sys-reg-trace
           - sys_reg_trace
-
-      - title: Trace Buffer Extension (FEAT_TRBE)
-        scope: trbe
-
-      - title: Self-hosted Trace Extensions (FEAT_TRF)
-        scope: trf
+          - tcr2
+          - trbe
+          - trf
+          - the
 
       - title: DynamIQ Shared Unit (DSU)
         scope: dsu
-
-      - title: Extension to SCTLR_ELx (FEAT_SCTLR2)
-        scope: sctlr2
-
-        deprecated:
-          - feat_sctlr2
-
-      - title: 128-bit Translation Tables (FEAT_D128)
-        scope: d128
-
-      - title: Translation Hardening Extension (FEAT_THE)
-        scope: the
 
   - title: Platforms
     scope: platforms
@@ -186,6 +137,13 @@ subsections:
 
         deprecated:
           - plat/allwinner
+
+      - title: AMLogic
+        scope: amlogic
+
+        subsections:
+          - title: GXL
+            scope: gxl
 
       - title: Arm
         scope: arm
@@ -222,12 +180,6 @@ subsections:
               - plat/fvp
               - fvp/tsp_manifest
 
-          - title: FVP-R
-            scope: fvp-r
-
-            deprecated:
-              - fvp_r
-
           - title: FVP Versatile Express
             scope: fvp_ve
 
@@ -244,21 +196,6 @@ subsections:
             scope: neoverse-rd
 
             subsections:
-              - title: SGI-575
-                scope: sgi575
-
-              - title: RD-E1-Edge
-                scope: rde1edge
-
-              - title: RD-N1-Edge
-                scope: rdn1edge
-
-              - title: RD-V1
-                scope: rdv1
-
-              - title: RD-V1-MC
-                scope: rdv1mc
-
               - title: RD-N2
                 scope: rdn2
 
@@ -271,19 +208,13 @@ subsections:
 
             deprecated:
               - neoverse
+              - neoverse_rd
 
           - title: TC
             scope: tc
 
             deprecated:
               - plat/tc
-
-            subsections:
-              - title: TC0
-                scope: tc0
-
-                deprecated:
-                  - plat/tc0
 
           - title: Corstone-1000
             scope: corstone-1000
@@ -381,6 +312,9 @@ subsections:
           - title: MT8188
             scope: mt8188
 
+          - title: MT8189
+            scope: mt8189
+
           - title: MT8192
             scope: mt8192
 
@@ -394,6 +328,9 @@ subsections:
               - plat/mediatek/me8195
               - plat/mediatek/mt8195
               - plat/mdeiatek/mt8195
+
+          - title: MT8196
+            scope: mt8196
 
       - title: NVIDIA
         scope: nvidia
@@ -628,6 +565,12 @@ subsections:
         scope: rockchip
 
         subsections:
+          - title: PX30
+            scope: px30
+
+          - title: RK3288
+            scope: rk3288
+
           - title: RK3399
             scope: rk3399
 
@@ -637,6 +580,9 @@ subsections:
 
           - title: RK3328
             scope: rk3328
+
+          - title: RK3576
+            scope: rk3576
 
           - title: RK3588
             scope: rk3588
@@ -796,6 +742,7 @@ subsections:
             scope: el3-spmc
 
             deprecated:
+              - el3_spmc
               - spmc
 
           - title: SPMD
@@ -803,6 +750,9 @@ subsections:
 
           - title: SPM MM
             scope: spm-mm
+
+            deprecated:
+              - spm_mm
 
       - title: DRTM
         scope: drtm
@@ -872,6 +822,9 @@ subsections:
       - title: FCONF
         scope: fconf
 
+      - title: HOB
+        scope: hob
+
       - title: MPMM
         scope: mpmm
 
@@ -892,6 +845,9 @@ subsections:
 
       - title: Translation Tables
         scope: xlat
+
+        deprecated:
+          - xlat_tables_v2
 
       - title: C Standard Library
         scope: libc
@@ -1013,6 +969,9 @@ subsections:
           - scmi_common
           - drivers/scmi-msg
           - scmi-msg
+
+      - title: TPM
+        scope: tpm
 
       - title: UFS
         scope: ufs
@@ -1325,6 +1284,9 @@ subsections:
       - title: AArch64
         scope: aarch64
 
+      - title: AArch32
+        scope: aarch32
+
       - title: Debug
         scope: debug
 
@@ -1361,31 +1323,37 @@ subsections:
           - fdt
 
         subsections:
-          - title: Morello
-            scope: morello-fdts
-
-            deprecated:
-              - fdts/morello
-
-          - title: STM32MP1
-            scope: stm32mp1-fdts
-
-            deprecated:
-              - fdts stm32mp1
+          - title: Arm
 
             subsections:
-              - title: STM32MP13
-                scope: stm32mp13-fdts
+              - title: Morello
+                scope: morello-fdts
 
-              - title: STM32MP15
-                scope: stm32mp15-fdts
+                deprecated:
+                  - fdts/morello
 
-          - title: STM32MP2
-            scope: stm32mp2-fdts
+          - title: ST
 
             subsections:
-              - title: STM32MP25
-                scope: stm32mp25-fdts
+              - title: STM32MP1
+                scope: stm32mp1-fdts
+
+                deprecated:
+                - fdts stm32mp1
+
+                subsections:
+                  - title: STM32MP13
+                    scope: stm32mp13-fdts
+
+                  - title: STM32MP15
+                    scope: stm32mp15-fdts
+
+              - title: STM32MP2
+                scope: stm32mp2-fdts
+
+                subsections:
+                  - title: STM32MP25
+                    scope: stm32mp25-fdts
 
       - title: PIE
         scope: pie
@@ -1470,6 +1438,12 @@ subsections:
     scope: tools
 
     subsections:
+      - title: Clang-Format
+        scope: clang-format
+
+      - title: Dependabot
+        scope: dependabot
+
       - title: STM32 Image
         scope: stm32image
 
@@ -1528,6 +1502,9 @@ subsections:
 
       - title: Compiler runtime libraries
         scope: compiler-rt
+
+      - title: Development dependencies
+        scope: dev-deps
 
       - title: libfdt
         scope: libfdt

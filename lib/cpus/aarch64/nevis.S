@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2024, Arm Limited. All rights reserved.
+ * Copyright (c) 2023-2025, Arm Limited. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -21,12 +21,15 @@
 #error "Nevis supports only AArch64. Compile with CTX_INCLUDE_AARCH32_REGS=0"
 #endif
 
+cpu_reset_prologue nevis
+
 cpu_reset_func_start nevis
 	/* ----------------------------------------------------
 	 * Disable speculative loads
 	 * ----------------------------------------------------
 	 */
 	msr	SSBS, xzr
+	enable_mpmm
 cpu_reset_func_end nevis
 
 func nevis_core_pwr_dwn

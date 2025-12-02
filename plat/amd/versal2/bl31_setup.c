@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018-2020, Arm Limited and Contributors. All rights reserved.
  * Copyright (c) 2018-2022, Xilinx, Inc. All rights reserved.
- * Copyright (c) 2022-2024, Advanced Micro Devices, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Advanced Micro Devices, Inc. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -31,6 +31,8 @@
 #include <pm_api_sys.h>
 #include <pm_client.h>
 
+#include <plat_ocm_coherency.h>
+
 static entry_point_info_t bl32_image_ep_info;
 static entry_point_info_t bl33_image_ep_info;
 
@@ -59,11 +61,13 @@ static inline void bl31_set_default_config(void)
 	bl32_image_ep_info.pc = BL32_BASE;
 	bl32_image_ep_info.spsr = arm_get_spsr_for_bl32_entry();
 #if defined(SPD_opteed)
+#if (TRANSFER_LIST == 0)
 	/* NS dtb addr passed to optee_os */
 	bl32_image_ep_info.args.arg3 = XILINX_OF_BOARD_DTB_ADDR;
 #endif
+#endif
 	bl33_image_ep_info.pc = plat_get_ns_image_entrypoint();
-	bl33_image_ep_info.spsr = SPSR_64(MODE_EL2, MODE_SP_ELX,
+	bl33_image_ep_info.spsr = (uint32_t)SPSR_64(MODE_EL2, MODE_SP_ELX,
 					  DISABLE_ALL_EXCEPTIONS);
 }
 
@@ -81,7 +85,10 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 	(void)arg2;
 	(void)arg3;
 	uint32_t uart_clock;
+#if (TRANSFER_LIST == 1)
 	int32_t rc;
+	bool tl_status = false;
+#endif
 
 	board_detection();
 
@@ -115,25 +122,36 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 		cpu_clock = 112203;
 		break;
 	case QEMU:
-		/* Random values now */
-		cpu_clock = 3333333;
-		break;
 	case SILICON:
 		cpu_clock = 100000000;
 		break;
 	default:
 		panic();
 	}
+#if (TRANSFER_LIST == 1)
+	tl_status = populate_data_from_xfer_list();
+	if (tl_status != true) {
+		WARN("Invalid transfer list\n");
+	}
+#endif
 
 	uart_clock = get_uart_clk();
 
-	setup_console();
-
-	NOTICE("TF-A running on %s %d.%d\n", board_name_decode(),
-	       platform_version / 10U, platform_version % 10U);
-
 	/* Initialize the platform config for future decision making */
 	config_setup();
+
+	setup_console();
+
+	if (IS_TFA_IN_OCM(BL31_BASE) && (check_ocm_coherency() < 0)) {
+		NOTICE("OCM coherency check not supported\n");
+	}
+
+	NOTICE("TF-A running on %s v%d.%d, RTL v%d.%d, PS v%d.%d, PMC v%d.%d\n",
+		board_name_decode(),
+		(platform_version >> 1), platform_version % 10U,
+		(rtlversion >> 1), rtlversion % 10U,
+		(psversion >> 1), psversion % 10U,
+		(pmcversion >> 1), pmcversion % 10U);
 
 	/*
 	 * Do initial security configuration to allow DRAM/device access. On
@@ -148,18 +166,24 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 	SET_PARAM_HEAD(&bl33_image_ep_info, PARAM_EP, VERSION_1, 0);
 	SET_SECURITY_STATE(bl33_image_ep_info.h.attr, NON_SECURE);
 
+#if (TRANSFER_LIST == 1)
 	rc = transfer_list_populate_ep_info(&bl32_image_ep_info, &bl33_image_ep_info);
 	if (rc == TL_OPS_NON || rc == TL_OPS_CUS) {
 		NOTICE("BL31: TL not found, using default config\n");
 		bl31_set_default_config();
 	}
+#else
+	bl31_set_default_config();
+#endif
 
 	long rev_var = cpu_get_rev_var();
 
 	INFO("CPU Revision = 0x%lx\n", rev_var);
 	INFO("cpu_clock = %dHz, uart_clock = %dHz\n", cpu_clock, uart_clock);
 	NOTICE("BL31: Executing from 0x%x\n", BL31_BASE);
+#if (defined(SPD_tspd) || defined(SPD_opteed))
 	NOTICE("BL31: Secure code at 0x%lx\n", bl32_image_ep_info.pc);
+#endif /* SPD_tspd || SPD_opteed */
 	NOTICE("BL31: Non secure code at 0x%lx\n", bl33_image_ep_info.pc);
 
 }
@@ -170,16 +194,19 @@ int request_intr_type_el3(uint32_t id, interrupt_type_handler_t handler)
 {
 	static uint32_t index;
 	uint32_t i;
+	int32_t ret = 0;
 
 	/* Validate 'handler' and 'id' parameters */
 	if ((handler == NULL) || (index >= MAX_INTR_EL3)) {
-		return -EINVAL;
+		ret = -EINVAL;
+		goto exit_label;
 	}
 
 	/* Check if a handler has already been registered */
 	for (i = 0; i < index; i++) {
 		if (id == type_el3_interrupt_table[i].id) {
-			return -EALREADY;
+			ret = -EALREADY;
+			goto exit_label;
 		}
 	}
 
@@ -188,7 +215,8 @@ int request_intr_type_el3(uint32_t id, interrupt_type_handler_t handler)
 
 	index++;
 
-	return 0;
+exit_label:
+	return ret;
 }
 
 static uint64_t rdo_el3_interrupt_handler(uint32_t id, uint32_t flags,
@@ -229,7 +257,7 @@ void bl31_platform_setup(void)
 
 void bl31_plat_runtime_setup(void)
 {
-	uint64_t flags = 0;
+	uint32_t flags = 0;
 	int32_t rc;
 
 	set_interrupt_rm_flag(flags, NON_SECURE);

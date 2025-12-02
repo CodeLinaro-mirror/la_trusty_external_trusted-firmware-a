@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2024, Arm Limited. All rights reserved.
+ * Copyright (c) 2023-2025, Arm Limited. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -21,9 +21,18 @@
 #error "Cortex-A725 supports only AArch64. Compile with CTX_INCLUDE_AARCH32_REGS=0"
 #endif
 
+cpu_reset_prologue cortex_a725
+
+.global check_erratum_cortex_a725_3699564
+
+add_erratum_entry cortex_a725, ERRATUM(3699564), ERRATA_A725_3699564
+
+check_erratum_ls cortex_a725, ERRATUM(3699564), CPU_REV(0, 1)
+
 cpu_reset_func_start cortex_a725
 	/* Disable speculative loads */
 	msr	SSBS, xzr
+	enable_mpmm
 cpu_reset_func_end cortex_a725
 
 	/* ----------------------------------------------------
