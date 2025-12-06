@@ -23,6 +23,7 @@
 #include <platform_def.h>
 #include "def.h"
 #include <plat_ipi.h>
+#include <plat_pm_common.h>
 #include "pm_api_sys.h"
 #include "pm_client.h"
 
@@ -244,6 +245,9 @@ enum pm_device_node_idx irq_to_pm_node_idx(uint32_t irq)
 	case 102:
 		dev_idx = XPM_NODEIDX_DEV_I2C_7;
 		break;
+	case 164:
+		dev_idx = XPM_NODEIDX_DEV_MMI_GEM;
+		break;
 	case 200:
 		dev_idx = XPM_NODEIDX_DEV_RTC;
 		break;
@@ -269,8 +273,10 @@ enum pm_device_node_idx irq_to_pm_node_idx(uint32_t irq)
  *                       suspending to.
  * @proc: processor which need to suspend.
  * @state: desired suspend state.
+ * @flag: 0 - Call from secure source.
+ *	  1 - Call from non-secure source.
  */
-void pm_client_suspend(const struct pm_proc *proc, uint32_t state)
+void pm_client_suspend(const struct pm_proc *proc, uint32_t state, uint32_t flag)
 {
 	uint32_t cpu_id = plat_my_core_pos();
 	uintptr_t val;
@@ -283,7 +289,7 @@ void pm_client_suspend(const struct pm_proc *proc, uint32_t state)
 	pm_client_lock_get();
 
 	if (state == PM_STATE_SUSPEND_TO_RAM) {
-		pm_client_set_wakeup_sources((uint32_t)proc->node_id);
+		pm_client_set_wakeup_sources((uint32_t)proc->node_id, flag);
 	}
 
 	val = read_cpu_pwrctrl_val();
@@ -336,6 +342,23 @@ void pm_client_wakeup(const struct pm_proc *proc)
 	uintptr_t val;
 
 	if (cpuid != (uint32_t) UNDEFINED_CPUID) {
+		/*
+		 * Get the core index and use it to calculate offset for
+		 * disabling power down and wakeup interrupts.
+		 * i.e., Convert cpu-id to core_index with the following mapping:
+		 *  cpu-id -> core_index
+		 *       0 -> 0
+		 *       1 -> 1
+		 *       2 -> 4
+		 *       3 -> 5
+		 *       4 -> 8
+		 *       5 -> 9
+		 *       6 -> 12
+		 *       7 -> 13
+		 * to match with register database.
+		 */
+		uint32_t core_index = cpuid + ((cpuid / 2U) * 2U);
+
 		pm_client_lock_get();
 
 		/* Clear powerdown request */
@@ -346,42 +369,12 @@ void pm_client_wakeup(const struct pm_proc *proc)
 		isb();
 
 		/* Disabled power down interrupt */
-		mmio_write_32(APU_PCIL_CORE_X_IDS_POWER_REG(cpuid),
+		mmio_write_32(APU_PCIL_CORE_X_IDS_POWER_REG(core_index),
 			      APU_PCIL_CORE_X_IDS_POWER_MASK);
 		/* Disable wake interrupt */
-		mmio_write_32(APU_PCIL_CORE_X_IDS_WAKE_REG(cpuid),
+		mmio_write_32(APU_PCIL_CORE_X_IDS_WAKE_REG(core_index),
 			      APU_PCIL_CORE_X_IDS_WAKE_MASK);
 
 		pm_client_lock_release();
 	}
-}
-
-/**
- * pm_client_abort_suspend() - Client-specific abort-suspend actions.
- *
- * This function should contain any PU-specific actions
- * required for aborting a prior suspend request.
- */
-void pm_client_abort_suspend(void)
-{
-	uint32_t cpu_id = plat_my_core_pos();
-	uintptr_t val;
-
-	/* Enable interrupts at processor level (for current cpu) */
-	gicv3_cpuif_enable(plat_my_core_pos());
-
-	pm_client_lock_get();
-
-	/* Clear powerdown request */
-	val = read_cpu_pwrctrl_val();
-	val &= ~CORE_PWRDN_EN_BIT_MASK;
-	write_cpu_pwrctrl_val(val);
-
-	isb();
-
-	/* Disabled power down interrupt */
-	mmio_write_32(APU_PCIL_CORE_X_IDS_POWER_REG(cpu_id),
-		      APU_PCIL_CORE_X_IDS_POWER_MASK);
-
-	pm_client_lock_release();
 }

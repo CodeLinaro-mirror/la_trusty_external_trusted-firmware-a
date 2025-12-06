@@ -284,32 +284,6 @@ Common build options
    builds, but this behaviour can be overridden in each platform's Makefile or
    in the build command line.
 
--  ``ENABLE_FEAT``
-   The Arm architecture defines several architecture extension features,
-   named FEAT_xxx in the architecure manual. Some of those features require
-   setup code in higher exception levels, other features might be used by TF-A
-   code itself.
-   Most of the feature flags defined in the TF-A build system permit to take
-   the values 0, 1 or 2, with the following meaning:
-
-   ::
-
-     ENABLE_FEAT_* = 0: Feature is disabled statically at compile time.
-     ENABLE_FEAT_* = 1: Feature is enabled unconditionally at compile time.
-     ENABLE_FEAT_* = 2: Feature is enabled, but checked at runtime.
-
-   When setting the flag to 0, the feature is disabled during compilation,
-   and the compiler's optimisation stage and the linker will try to remove
-   as much of this code as possible.
-   If it is defined to 1, the code will use the feature unconditionally, so the
-   CPU is expected to support that feature. The FEATURE_DETECTION debug
-   feature, if enabled, will verify this.
-   If the feature flag is set to 2, support for the feature will be compiled
-   in, but its existence will be checked at runtime, so it works on CPUs with
-   or without the feature. This is mostly useful for platforms which either
-   support multiple different CPUs, or where the CPU is configured at runtime,
-   like in emulators.
-
 -  ``ENABLE_FEAT_AMU``: Numeric value to enable Activity Monitor Unit
    extensions. This flag can take the values 0 to 2, to align with the
    ``ENABLE_FEAT`` mechanism. This is an optional architectural feature
@@ -321,6 +295,20 @@ Common build options
    extension. ``FEAT_AMUv1p1`` is an optional feature available on Arm v8.6
    onwards. This flag can take the values 0 to 2, to align with the
    ``ENABLE_FEAT`` mechanism. Default value is ``0``.
+
+-  ``ENABLE_FEAT_CLRBHB``: Numeric value to enable the CLRBHB instruction.
+    Clear Branch History clears the branch history for the current context to
+    the extent that branch history information created before the CLRBHB instruction
+    cannot be used by code. This is an optional architectural feature available on v8.0
+    onwards and is a mandatory feature from v8.9 onwards.
+    This flag can take the values of 0 to 2, to align with the ``ENABLE_FEAT`` mechanism.
+    Default value is ``0``.
+
+-  ``ENABLE_FEAT_CPA2``: Numeric value to enable the ``FEAT_CPA2`` extension.
+   It enables checked pointer arithmetic in EL3, which will result in address
+   faults in the event that a pointer arithmetic overflow error occurs. This is
+   an optional feature starting from Arm v9.4 and This flag can take values 0 to
+   2, to align with the ``ENABLE_FEAT`` mechanism. Default value is ``0``.
 
 -  ``ENABLE_FEAT_CSV2_2``: Numeric value to enable the ``FEAT_CSV2_2``
    extension. It allows access to the SCXTNUM_EL2 (Software Context Number)
@@ -375,12 +363,42 @@ Common build options
    This flag can take the values 0 to 2, to align  with the ``ENABLE_FEAT``
    mechanism. Default value is ``0``.
 
+-  ``ENABLE_FEAT_FGWTE3``: Numeric value to enable support for
+   Fine Grained Write Trap EL3 (FEAT_FGWTE3), a feature that allows EL3 to
+   restrict overwriting certain EL3 registers after boot.
+   This lockdown is established by setting individual trap bits for
+   system registers that are not expected to be overwritten after boot.
+   This feature is an optional architectural feature and is available from
+   Armv9.4 onwards. This flag can take values from 0 to 2, aligning with
+   the ``ENABLE_FEAT`` mechanism. The default value is 0.
+
+   .. note::
+      This feature currently traps access to all EL3 registers in
+      ``FGWTE3_EL3``, except for ``MDCR_EL3``, ``MPAM3_EL3``,
+      ``TPIDR_EL3``(when ``CRASH_REPORTING=1``), and
+      ``SCTLR_EL3``(when ``HW_ASSISTED_COHERENCY=0``).
+      If additional traps need to be disabled for specific platforms,
+      please contact the Arm team on `TF-A public mailing list`_.
+
 -  ``ENABLE_FEAT_HCX``: Numeric value to set the bit SCR_EL3.HXEn in EL3 to
    allow access to HCRX_EL2 (extended hypervisor control register) from EL2 as
    well as adding HCRX_EL2 to the EL2 context save/restore operations. Its a
    mandatory architectural feature and is enabled from v8.7 and upwards. This
    flag can take the values 0 to 2, to align  with the ``ENABLE_FEAT``
    mechanism. Default value is ``0``.
+
+-  ``ENABLE_FEAT_IDTE3``: Numeric value to set SCR_EL3.TID3/TID5 bits which
+   enables trapping of ID register reads by lower ELs to EL3. This allows EL3
+   to control the feature visibility to lower ELs by returning a sanitized value
+   based on current feature enablement status. Hypervisors are expected to
+   cache ID register during their boot stage. This flag can take the
+   values 0 to 2, to align with the ``ENABLE_FEAT`` mechanism.
+   Default value is ``0``. This feature is EXPERIMENTAL.
+
+   .. note::
+      This feature traps all lower EL accesses to Group 3 and Group 5
+      ID registers to EL3. This can incur a performance impact and platforms
+      should enable them only if they have a specific need.
 
 - ``ENABLE_FEAT_MOPS``: Numeric value to enable FEAT_MOPS (Standardization
    of memory operations) when INIT_UNUSED_NS_EL2=1.
@@ -481,6 +499,11 @@ Common build options
    the values 0 to 2, to align  with the ``ENABLE_FEAT`` mechanism.
    Default value is ``0``.
 
+ - ``ENABLE_FEAT_GCIE``: Boolean value to enable support for the GICv5 CPU
+   interface (see ``USE_GIC_DRIVER`` for the IRI). GICv5 and GICv3 are mutually
+   exclusive, so the ``ENABLE_FEAT`` mechanism is currently not supported.
+   Default value is ``0``.
+
 -  ``ENABLE_FEAT_THE``: Numeric value to enable support for FEAT_THE
    (Translation Hardening Extension) at EL2 and below, setting the bit
    SCR_EL3.RCWMASKEn in EL3 to allow access to RCWMASK_EL1 and RCWSMASK_EL1
@@ -507,8 +530,10 @@ Common build options
    mechanism. Default value is ``0``.
 
 -  ``ENABLE_LTO``: Boolean option to enable Link Time Optimization (LTO)
-   support in GCC for TF-A. This option is currently only supported for
-   AArch64. Default is 0.
+   support. This option is currently only supported for AArch64. On GCC it only
+   applies to TF-A proper, and not its libraries. If LTO on libraries (except
+   the libc) is desired a platform can pass `-flto -ffat-lto-objects` as long as
+   GCC >= 14 is in use.  Default is 0.
 
 -  ``ENABLE_FEAT_MPAM``: Numeric value to enable lower ELs to use MPAM
    feature. MPAM is an optional Armv8.4 extension that enables various memory
@@ -525,9 +550,24 @@ Common build options
    The flag is automatically disabled when the target
    architecture is AArch32.
 
+-  ``ENABLE_FEAT_MPAM_PE_BW_CTRL``: This option enables Armv9.3 MPAM
+   PE-side bandwidth controls and disables traps to EL3/EL2 (when
+   ``INIT_UNUSED_NS_EL2`` = 1). The flag accepts values from 0 to 2, in
+   line with the ``ENABLE_FEAT`` mechanism, and defaults to ``0``.
+
 -  ``ENABLE_FEAT_LS64_ACCDATA``: Numeric value to enable access and save and
    restore the ACCDATA_EL1 system register, at EL2 and below. This flag can
    take the values 0 to 2, to align  with the ``ENABLE_FEAT`` mechanism.
+   Default value is ``0``.
+
+-  ``ENABLE_FEAT_AIE``: Numeric value to enable access to the (A)MAIR2 system
+   registers from non-secure world. This flag can take the values 0 to 2, to
+   align  with the ``ENABLE_FEAT`` mechanism.
+   Default value is ``0``.
+
+-  ``ENABLE_FEAT_PFAR``: Numeric value to enable access to the PFAR system
+   registers from non-secure world. This flag can take the values 0 to 2, to
+   align  with the ``ENABLE_FEAT`` mechanism.
    Default value is ``0``.
 
 -  ``ENABLE_MPMM``: Boolean option to enable support for the Maximum Power
@@ -535,12 +575,6 @@ Common build options
    firmware to detect and limit high activity events to assist in SoC processor
    power domain dynamic power budgeting and limit the triggering of whole-rail
    (i.e. clock chopping) responses to overcurrent conditions. Defaults to ``0``.
-
- - ``FEAT_PABANDON``: Boolean option to enable support for powerdown abandon on
-   Arm cores that support it (currently Gelas and Travis). Extends the PSCI
-   implementation to expect waking up after the terminal ``wfi``. Currently,
-   introduces a performance penalty. Once this is removed, this option will be
-   removed and the feature will be enabled by default. Defaults to ``0``.
 
 -  ``ENABLE_PIE``: Boolean option to enable Position Independent Executable(PIE)
    support within generic code in TF-A. This option is currently only supported
@@ -773,6 +807,9 @@ Common build options
    algorithm. It accepts 3 values: ``sha256``, ``sha384`` and ``sha512``.
    The default value of this flag is ``sha256``.
 
+- ``HW_CONFIG_BASE``: This option specifies the location in memory where the DTB
+   should either be loaded by BL2 or can be found by later stages.
+
 -  ``LDFLAGS``: Extra user options appended to the linkers' command line in
    addition to the one set by the build system.
 
@@ -841,10 +878,11 @@ Common build options
    optional. It is only needed if the platform makefile specifies that it
    is required in order to build the ``fwu_fip`` target.
 
--  ``NS_TIMER_SWITCH``: Enable save and restore for non-secure timer register
-   contents upon world switch. It can take either 0 (don't save and restore) or
-   1 (do save and restore). 0 is the default. An SPD may set this to 1 if it
-   wants the timer registers to be saved and restored.
+-  ``NS_TIMER_SWITCH``: (deprecated) Enable save and restore for non-secure
+   timer register contents upon world switch. It can take either 0 (don't save
+   and restore) or 1 (do save and restore). 0 is the default. An SPD may set
+   this to 1 if it wants the timer registers to be saved and restored. This
+   option has been deprecated since it breaks Linux preemption model.
 
 -  ``OVERRIDE_LIBC``: This option allows platforms to override the default libc
    for the BL image. It can be either 0 (include) or 1 (remove). The default
@@ -865,6 +903,10 @@ Common build options
    each core as well as the global context. The data includes the memory used
    by each world and each privileged exception level. This build option is
    applicable only for ``ARCH=aarch64`` builds. The default value is 0.
+
+- ``PLAT_EXTRA_LD_SCRIPT``: Allows the platform to include a custom LD script
+   snippet for any custom sections that cannot be expressed otherwise. Defaults
+   to 0.
 
 -  ``PRELOADED_BL33_BASE``: This option enables booting a preloaded BL33 image
    instead of the normal boot flow. When defined, it must specify the entry
@@ -982,6 +1024,10 @@ Common build options
    provide definitions of ``BL2_NOLOAD_START`` and ``BL2_NOLOAD_LIMIT``. This
    flag is disabled by default and NOLOAD sections are placed in RAM immediately
    following the loaded firmware image.
+
+-  ``SEPARATE_BL2_FIP``: This option enables the separation of the BL2 FIP image
+   from the main FIP image. When this option is enabled, the BL2 FIP image is built
+   as a separate FIP image. The default value is 0.
 
 -  ``SEPARATE_SIMD_SECTION``: Setting this option to ``1`` allows the SIMD context
     data structures to be put in a dedicated memory region as decided by platform
@@ -1114,6 +1160,19 @@ Common build options
    (Coherent memory region is included) or 0 (Coherent memory region is
    excluded). Default is 1.
 
+-  ``USE_KERNEL_DT_CONVENTION``: When this option is enabled, the hardware
+   device tree is passed to BL33 using register x0, aligning with the expectations
+   of the Linux kernel on Arm platforms. If this option is disabled, a different
+   register, typically x1, may be used instead. This build option is
+   not necessary when firmware handoff is active (that is, when TRANSFER_LIST=1
+   is set), and it will be removed once all platforms have transitioned to that
+   convention.
+
+-  ``USE_DSU_DRIVER``: This flag enables DSU (DynamIQ Shared Unit) driver.
+   The DSU driver allows save/restore of DSU PMU registers through
+   ``PRESERVE_DSU_PMU_REGS`` build option, provides access to PMU registers at
+   EL1 and allows platforms to configure powerdown and power settings of DSU.
+
 -  ``ARM_IO_IN_DTB``: This flag determines whether to use IO based on the
    firmware configuration framework. This will move the io_policies into a
    configuration device tree, instead of static structure in the code base.
@@ -1195,11 +1254,6 @@ Common build options
    require interconnect programming to enable cache coherency (eg: single
    cluster platforms). If this option is enabled, then warm boot path
    enables D-caches immediately after enabling MMU. This option defaults to 0.
-
--  ``SUPPORT_STACK_MEMTAG``: This flag determines whether to enable memory
-   tagging for stack or not. It accepts 2 values: ``yes`` and ``no``. The
-   default value of this flag is ``no``. Note this option must be enabled only
-   for ARM architecture greater than Armv8.5-A.
 
 -  ``ERRATA_SPECULATIVE_AT``: This flag determines whether to enable ``AT``
    speculative errata workaround or not. It accepts 2 values: ``1`` and ``0``.
@@ -1312,7 +1366,10 @@ a numeric option that can take the following values:
  - ``2``: use the GICv2 driver
 
  - ``3``: use the GICv3 driver. See the next section on how to further configure
-   it. Use this option for GICv4 implementations.
+   it. Use this option for GICv4 implementations. Requires calling
+   ``gic_set_gicr_frames()``.
+
+ - ``5``: use the EXPERIMENTAL GICv5 driver. Requires ``ENABLE_FEAT_GCIE=1``.
 
  For GIC driver versions other than ``1``, deciding when to save and restore GIC
  context on a power domain state transition, as well as any GIC actions outside
@@ -1496,6 +1553,9 @@ Common build options
    per the `PSA Crypto API specification`_. This feature is only supported if
    using MbedTLS 3.x version. It is disabled (``0``) by default.
 
+-  ``LFA_SUPPORT``: Boolean flag to enable support for Live Firmware
+   activation as per the specification. This option defaults to 0.
+
 -  ``TRANSFER_LIST``: Setting this to ``1`` enables support for Firmware
    Handoff using Transfer List defined in `Firmware Handoff specification`_.
    This defaults to ``0``. Current implementation follows the Firmware Handoff
@@ -1508,6 +1568,11 @@ Common build options
 -  ``HOB_LIST``: Setting this to ``1`` enables support for passing boot
    information using HOB defined in `Platform Initialization specification`_.
    This defaults to ``0``.
+
+-  ``ENABLE_ACS_SMC``: When set to ``1``, this enables support for ACS SMC
+   handler code to handle SMC calls from the Architecture Compliance Suite. The
+   handler is intentionally empty to reserve the SMC section and allow
+   project-specific implementations in future ACS use cases.
 
 Firmware update options
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -1553,3 +1618,4 @@ Firmware update options
 .. _Firmware Handoff specification: https://github.com/FirmwareHandoff/firmware_handoff/releases/tag/v0.9
 .. _PSA Crypto API specification: https://armmbed.github.io/mbed-crypto/html/
 .. _Platform Initialization specification: https://uefi.org/specs/PI/1.8/index.html
+.. _TF-A public mailing list: https://lists.trustedfirmware.org/mailman3/lists/tf-a.lists.trustedfirmware.org/

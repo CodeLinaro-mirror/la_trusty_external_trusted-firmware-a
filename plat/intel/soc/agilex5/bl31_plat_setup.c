@@ -217,9 +217,11 @@ void bl31_plat_arch_setup(void)
 	NOTICE("SOCFPGA: CPU ID = %x\n", cpuid);
 	INFO("SOCFPGA: Invalidate Data cache\n");
 	invalidate_dcache_all();
-
 	/* Invalidate for NS EL2 and EL1 */
 	invalidate_cache_low_el();
+
+	NOTICE("SOCFPGA: Setting CLUSTERECTRL_EL1\n");
+	setup_clusterectlr_el1();
 }
 
 /* Get non-secure image entrypoint for BL33. Zephyr and Linux */
@@ -289,6 +291,74 @@ void bl31_plat_set_secondary_cpu_entrypoint(unsigned int cpu_id)
 	mmio_write_32(RSTMGR_CPUSTRELEASE_CPUx, pch_cpu);
 }
 
+void bl31_plat_reset_secondary_cpu(unsigned int cpu_id)
+{
+	uint32_t mask = 0x1;
+	uint32_t value = 0;
+	uint32_t pwrctlr_addr = 0;
+	uint32_t pwrstat_addr = 0;
+	uint32_t ret = 0;
+
+	mask <<= cpu_id;
+
+	switch (cpu_id) {
+	case 0:
+		pwrctlr_addr = AGX5_PWRMGR(CPU_PWRCTLR0);
+		pwrstat_addr = AGX5_PWRMGR(CPU_PWRSTAT0);
+		break;
+	case 1:
+		pwrctlr_addr = AGX5_PWRMGR(CPU_PWRCTLR1);
+		pwrstat_addr = AGX5_PWRMGR(CPU_PWRSTAT1);
+		break;
+	case 2:
+		pwrctlr_addr = AGX5_PWRMGR(CPU_PWRCTLR2);
+		pwrstat_addr = AGX5_PWRMGR(CPU_PWRSTAT2);
+		break;
+	case 3:
+		pwrctlr_addr = AGX5_PWRMGR(CPU_PWRCTLR3);
+		pwrstat_addr = AGX5_PWRMGR(CPU_PWRSTAT3);
+		break;
+	default:
+		ERROR("BL31: %s: Invalid CPU ID\n", __func__);
+		break;
+	}
+
+	/* PSTATE = 0, RUN_PCH = 1 */
+	mmio_write_32(pwrctlr_addr, AGX5_PWRMGR_CPU_RUN_PCH(1));
+
+	/* Poll for CPU OFF */
+	SOCFPGA_POLL(!((AGX5_PWRMGR_CPU_RUN_PCH(
+		     mmio_read_32(pwrstat_addr)) == 0) ||
+		     (AGX5_PWRMGR_CPU_SINGLE_FSM_STATE(
+		     mmio_read_32(pwrstat_addr)) != 0)),
+		     AGX5_PWRMGR_CPU_POLL_COUNT,
+		     AGX5_PWRMGR_CPU_DELAY_10_US, udelay, ret);
+
+	if (ret != 0)
+		ERROR("BL31: %s: Timeout when polling for CPU OFF\n", __func__);
+
+	/* Performs the warm reset CPUx */
+	value = mmio_read_32(SOCFPGA_SYSMGR(BOOT_SCRATCH_WARM_9));
+	mmio_write_32(SOCFPGA_SYSMGR(BOOT_SCRATCH_WARM_9), value | mask);
+	udelay(1);
+	mmio_write_32(SOCFPGA_SYSMGR(BOOT_SCRATCH_WARM_9), value & ~mask);
+	udelay(1);
+
+	/* Power up sequence */
+	mmio_write_32(pwrctlr_addr, AGX5_PWRMGR_CPU_PROG_CPU_ON_STATE |
+		      AGX5_PWRMGR_CPU_RUN_PCH(1));
+
+	/* Poll for CPU ON */
+	SOCFPGA_POLL(!((AGX5_PWRMGR_CPU_RUN_PCH(
+		     mmio_read_32(pwrstat_addr)) == 0) ||
+		     AGX5_PWRMGR_CPU_SINGLE_FSM_STATE(
+		     mmio_read_32(pwrstat_addr)) == 0),
+		     AGX5_PWRMGR_CPU_POLL_COUNT,
+		     AGX5_PWRMGR_CPU_DELAY_10_US, udelay, ret);
+	if (ret !=0 )
+		ERROR("BL31: %s: Timeout when polling for CPU ON\n", __func__);
+}
+
 void bl31_plat_set_secondary_cpu_off(void)
 {
 	unsigned int pch_cpu = 0x00;
@@ -301,6 +371,22 @@ void bl31_plat_set_secondary_cpu_off(void)
 	pch_cpu = pch_cpu & ~(pch_cpu_off << 1);
 
 	mmio_write_32(AGX5_PWRMGR(MPU_PCHCTLR), pch_cpu);
+}
+
+void setup_clusterectlr_el1(void)
+{
+	uint64_t value = 0;
+
+	/* Read CLUSTERECTLR_EL1 */
+	asm volatile("mrs %0, S3_0_C15_C3_4" : "=r"(value));
+
+	/* Disable broadcasting atomics */
+	value |= 0x80; /* set bit 7 */
+	/* Disable sending data with clean evicts */
+	value &= 0xFFFFBFFF; /* Mask out bit 14 */
+
+	/* Write CLUSTERECTLR_EL1 */
+	asm volatile("msr S3_0_C15_C3_4, %0" :: "r"(value));
 }
 
 void bl31_plat_runtime_setup(void)

@@ -9,6 +9,8 @@
 #include <assert_macros.S>
 #include <context.h>
 #include <el3_common_macros.S>
+#include <lib/el3_runtime/cpu_data.h>
+#include <lib/per_cpu/per_cpu_macros.S>
 #include <platform_def.h>
 
 #if CTX_INCLUDE_FPREGS
@@ -274,15 +276,6 @@ endfunc sve_context_restore
 #endif /* CTX_INCLUDE_SVE_REGS */
 
 	/*
-	 * Set SCR_EL3.EA bit to enable SErrors at EL3
-	 */
-	.macro enable_serror_at_el3
-	mrs	x8, scr_el3
-	orr	x8, x8, #SCR_EA_BIT
-	msr	scr_el3, x8
-	.endm
-
-	/*
 	 * Set the PSTATE bits not set when the exception was taken as
 	 * described in the AArch64.TakeException() pseudocode function
 	 * in ARM DDI 0487F.c page J1-7635 to a default value.
@@ -410,9 +403,9 @@ no_mpam:
 #if ENABLE_PAUTH
 #if IMAGE_BL31
 	/* tpidr_el3 contains the address of the cpu_data structure */
-	mrs	x9, tpidr_el3
+	per_cpu_cur	percpu_data, x9, x10
 	/* Load APIAKey from cpu_data */
-	ldp	x10, x11, [x9, #CPU_DATA_APIAKEY_OFFSET]
+	ldp	x10, x11, [x9, #CPU_DATA_APIAKEY]
 #endif /* IMAGE_BL31 */
 
 #if IMAGE_BL1

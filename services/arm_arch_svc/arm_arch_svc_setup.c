@@ -17,7 +17,7 @@
 
 static int32_t smccc_version(void)
 {
-	return MAKE_SMCCC_VERSION(SMCCC_MAJOR_VERSION, SMCCC_MINOR_VERSION);
+	return (int32_t)MAKE_SMCCC_VERSION(SMCCC_MAJOR_VERSION, SMCCC_MINOR_VERSION);
 }
 
 static int32_t smccc_arch_features(u_register_t arg1)
@@ -100,7 +100,7 @@ static int32_t smccc_arch_features(u_register_t arg1)
 #endif
 
 #if ARCH_FEATURE_AVAILABILITY
-	case SMCCC_ARCH_FEATURE_AVAILABILITY:
+	case SMCCC_ARCH_FEATURE_AVAILABILITY | (SMC_64 << FUNCID_CC_SHIFT):
 		return SMC_ARCH_CALL_SUCCESS;
 #endif /* ARCH_FEATURE_AVAILABILITY */
 
@@ -121,17 +121,53 @@ static int32_t smccc_arch_features(u_register_t arg1)
 	}
 }
 
-/* return soc revision or soc version on success otherwise
- * return invalid parameter */
-static int32_t smccc_arch_id(u_register_t arg1)
+/*
+ * Handles SMCCC_ARCH_SOC_ID smc calls.
+ *
+ * - GET_SOC_REVISION: returns SoC revision (AArch32/AArch64)
+ * - GET_SOC_VERSION:  returns SoC version  (AArch32/AArch64)
+ * - GET_SOC_NAME:     returns SoC name string (AArch64 only)
+ *
+ * Returns invalid parameter for unsupported calls.
+ */
+static uintptr_t smccc_arch_id(u_register_t arg1, void *handle, uint32_t is_smc64)
 {
 	if (arg1 == SMCCC_GET_SOC_REVISION) {
-		return plat_get_soc_revision();
+		SMC_RET1(handle, plat_get_soc_revision());
 	}
 	if (arg1 == SMCCC_GET_SOC_VERSION) {
-		return plat_get_soc_version();
+		SMC_RET1(handle, plat_get_soc_version());
 	}
-	return SMC_ARCH_CALL_INVAL_PARAM;
+#if __aarch64__
+	/* SoC Name is only present for SMC64 invocations */
+	if ((arg1 == SMCCC_GET_SOC_NAME) && is_smc64) {
+		uint64_t arg[SMCCC_SOC_NAME_LEN / 8];
+		int32_t ret;
+		char soc_name[SMCCC_SOC_NAME_LEN];
+
+		(void)memset(soc_name, 0U, SMCCC_SOC_NAME_LEN);
+		ret = plat_get_soc_name(soc_name);
+
+		if (ret == SMC_ARCH_CALL_SUCCESS) {
+			(void)memcpy(arg, soc_name, SMCCC_SOC_NAME_LEN);
+			/*
+			 * The SoC name is returned as a null-terminated
+			 * ASCII string, split across registers X1 to X17
+			 * in little endian order.
+			 * Each 64-bit register holds 8 consecutive bytes
+			 * of the string.
+			 */
+			SMC_RET18(handle, ret, arg[0], arg[1], arg[2],
+					arg[3], arg[4], arg[5], arg[6],
+					arg[7], arg[8], arg[9], arg[10],
+					arg[11], arg[12], arg[13], arg[14],
+					arg[15], arg[16]);
+		} else {
+			SMC_RET1(handle, ret);
+		}
+	}
+#endif /* __aarch64__ */
+	SMC_RET1(handle, SMC_ARCH_CALL_INVAL_PARAM);
 }
 
 /*
@@ -144,28 +180,26 @@ static uintptr_t smccc_arch_feature_availability(u_register_t reg,
 						 void *handle,
 						 u_register_t flags)
 {
-	cpu_context_t *caller_context;
 	per_world_context_t *caller_per_world_context;
 	el3_state_t *state;
 	u_register_t bitmask, check;
+	size_t security_state;
 
 	/* check the caller security state */
 	if (is_caller_secure(flags)) {
-		caller_context = cm_get_context(SECURE);
-		caller_per_world_context = &per_world_context[CPU_CONTEXT_SECURE];
+		security_state = SECURE;
 	} else if (is_caller_non_secure(flags)) {
-		caller_context = cm_get_context(NON_SECURE);
-		caller_per_world_context = &per_world_context[CPU_CONTEXT_NS];
+		security_state = NON_SECURE;
 	} else {
 #if ENABLE_RME
-		caller_context = cm_get_context(REALM);
-		caller_per_world_context = &per_world_context[CPU_CONTEXT_REALM];
+		security_state = REALM;
 #else /* !ENABLE_RME */
 		assert(0); /* shouldn't be possible */
 #endif /* ENABLE_RME */
 	}
 
-	state = get_el3state_ctx(caller_context);
+	caller_per_world_context = &per_world_context[get_cpu_context_index(security_state)];
+	state = get_el3state_ctx(cm_get_context(security_state));
 
 	switch (reg) {
 	case SCR_EL3_OPCODE:
@@ -175,8 +209,10 @@ static uintptr_t smccc_arch_feature_availability(u_register_t reg,
 		bitmask &= SCR_EL3_FEATS;
 		bitmask ^= SCR_EL3_FLIPPED;
 		/* will only report 0 if neither is implemented */
-		if (is_feat_rng_trap_supported() || is_feat_rng_present())
+		if (is_feat_rng_trap_supported() || is_feat_rng_present()) {
 			bitmask |= SCR_TRNDR_BIT;
+			check   &= ~SCR_TRNDR_BIT;
+		}
 		break;
 	case CPTR_EL3_OPCODE:
 		bitmask  = caller_per_world_context->ctx_cptr_el3;
@@ -231,14 +267,21 @@ static uintptr_t arm_arch_svc_smc_handler(uint32_t smc_fid,
 	void *handle,
 	u_register_t flags)
 {
+	(void)x2;
+	(void)x3;
+	(void)x4;
+	(void)cookie;
+
 	switch (smc_fid) {
 	case SMCCC_VERSION:
 		SMC_RET1(handle, smccc_version());
 	case SMCCC_ARCH_FEATURES:
 		SMC_RET1(handle, smccc_arch_features(x1));
 	case SMCCC_ARCH_SOC_ID:
-		SMC_RET1(handle, smccc_arch_id(x1));
-#ifdef __aarch64__
+	case SMCCC_ARCH_SOC_ID | (SMC_64 << FUNCID_CC_SHIFT):
+		return smccc_arch_id(x1, handle, (smc_fid
+				& (SMC_64 << FUNCID_CC_SHIFT)));
+#if __aarch64__
 #if WORKAROUND_CVE_2017_5715
 	case SMCCC_ARCH_WORKAROUND_1:
 		/*
@@ -294,7 +337,7 @@ DECLARE_RT_SVC(
 		arm_arch_svc,
 		OEN_ARM_START,
 		OEN_ARM_END,
-		SMC_TYPE_FAST,
+		(uint8_t)SMC_TYPE_FAST,
 		NULL,
 		arm_arch_svc_smc_handler
 );

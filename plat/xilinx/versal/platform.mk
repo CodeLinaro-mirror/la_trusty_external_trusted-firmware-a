@@ -98,7 +98,7 @@ $(eval $(call add_define_val,VERSAL_CONSOLE,VERSAL_CONSOLE_ID_${VERSAL_CONSOLE})
 
 # Runtime console in default console in DEBUG build
 ifeq ($(DEBUG), 1)
-CONSOLE_RUNTIME ?= pl011
+CONSOLE_RUNTIME ?= $(VERSAL_CONSOLE)
 endif
 
 # Runtime console
@@ -143,4 +143,10 @@ ifeq (${ERRATA_ABI_SUPPORT}, 1)
 # enable the cpu macros for errata abi interface
 CORTEX_A72_H_INC	:= 1
 $(eval $(call add_define, CORTEX_A72_H_INC))
+endif
+
+ifdef CUSTOM_PKG_PATH
+include $(CUSTOM_PKG_PATH)/custom_pkg.mk
+else
+BL31_SOURCES		+=	plat/xilinx/common/custom_sip_svc.c
 endif

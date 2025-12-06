@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2023, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2019-2025, Arm Limited and Contributors. All rights reserved.
  * Copyright (c) 2019-2023, Intel Corporation. All rights reserved.
  * Copyright (c) 2024-2025, Altera Corporation. All rights reserved.
  *
@@ -9,9 +9,11 @@
 #include <assert.h>
 #include <common/debug.h>
 #include <common/runtime_svc.h>
+#include <drivers/delay_timer.h>
 #include <lib/mmio.h>
 #include <tools_share/uuid.h>
 
+#include "lib/utils/alignment_utils.h"
 #include "socfpga_fcs.h"
 #include "socfpga_mailbox.h"
 #include "socfpga_plat_def.h"
@@ -799,10 +801,26 @@ int intel_smmu_hps_remapper_config(uint32_t remapper_bypass)
 	}
 	return INTEL_SIP_SMC_STATUS_OK;
 }
+
+static void intel_inject_io96b_ecc_err(const uint32_t *syndrome, const uint32_t command)
+{
+	volatile uint64_t atf_ddr_buffer;
+	volatile uint64_t val;
+
+	mmio_write_32(IOSSM_CMD_PARAM, *syndrome);
+	mmio_write_32(IOSSM_CMD_TRIG_OP, command);
+	udelay(IOSSM_ECC_ERR_INJ_DELAY_USECS);
+	atf_ddr_buffer = 0xCAFEBABEFEEDFACE;	/* Write data */
+	memcpy_s((void *)&val, sizeof(val),
+		 (void *)&atf_ddr_buffer, sizeof(atf_ddr_buffer));
+
+	/* Clear response_ready BIT0 of status_register before sending next command. */
+	mmio_clrbits_32(IOSSM_CMD_RESP_STATUS, IOSSM_CMD_STATUS_RESP_READY);
+}
 #endif
 
 #if SIP_SVC_V3
-uint8_t sip_smc_cmd_cb_ret2(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
+uint8_t sip_smc_cmd_cb_ret2(void *resp_desc, void *cmd_desc, uint64_t *ret_args)
 {
 	uint8_t ret_args_len = 0U;
 	sdm_response_t *resp = (sdm_response_t *)resp_desc;
@@ -816,7 +834,7 @@ uint8_t sip_smc_cmd_cb_ret2(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
 	return ret_args_len;
 }
 
-uint8_t sip_smc_cmd_cb_ret3(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
+uint8_t sip_smc_cmd_cb_ret3(void *resp_desc, void *cmd_desc, uint64_t *ret_args)
 {
 	uint8_t ret_args_len = 0U;
 	sdm_response_t *resp = (sdm_response_t *)resp_desc;
@@ -831,13 +849,12 @@ uint8_t sip_smc_cmd_cb_ret3(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
 	return ret_args_len;
 }
 
-uint8_t sip_smc_ret_nbytes_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
+uint8_t sip_smc_ret_nbytes_cb(void *resp_desc, void *cmd_desc, uint64_t *ret_args)
 {
 	uint8_t ret_args_len = 0U;
 	sdm_response_t *resp = (sdm_response_t *)resp_desc;
 	sdm_command_t *cmd = (sdm_command_t *)cmd_desc;
 
-	(void)cmd;
 	INFO("MBOX: %s: mailbox_err 0%x, nbytes_ret %d\n",
 		__func__, resp->err_code, resp->rcvd_resp_len * MBOX_WORD_BYTE);
 
@@ -845,10 +862,13 @@ uint8_t sip_smc_ret_nbytes_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_arg
 	ret_args[ret_args_len++] = resp->err_code;
 	ret_args[ret_args_len++] = resp->rcvd_resp_len * MBOX_WORD_BYTE;
 
+	/* Flush the response data buffer. */
+	flush_dcache_range((uintptr_t)cmd->cb_args, resp->rcvd_resp_len * MBOX_WORD_BYTE);
+
 	return ret_args_len;
 }
 
-uint8_t sip_smc_get_chipid_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
+uint8_t sip_smc_get_chipid_cb(void *resp_desc, void *cmd_desc, uint64_t *ret_args)
 {
 	uint8_t ret_args_len = 0U;
 	sdm_response_t *resp = (sdm_response_t *)resp_desc;
@@ -866,33 +886,186 @@ uint8_t sip_smc_get_chipid_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_arg
 	return ret_args_len;
 }
 
-static uintptr_t smc_ret(void *handle, uint32_t *ret_args, uint32_t ret_args_len)
+uint8_t sip_smc_cmd_cb_rsu_status(void *resp_desc, void *cmd_desc, uint64_t *ret_args)
 {
+	uint8_t ret_args_len = 0U;
+	uint32_t retry_counter = ~0U;
+	uint32_t failure_source = 0U;
+	sdm_response_t *resp = (sdm_response_t *)resp_desc;
+	sdm_command_t *cmd = (sdm_command_t *)cmd_desc;
+
+	(void)cmd;
+	/* Get the failure source and current image retry counter value from the response. */
+	failure_source = resp->resp_data[5] & RSU_VERSION_ACMF_MASK;
+	retry_counter = resp->resp_data[8];
+
+	if ((retry_counter != ~0U) && (failure_source == 0U))
+		resp->resp_data[5] |= RSU_VERSION_ACMF;
+
+	ret_args[ret_args_len++] = INTEL_SIP_SMC_STATUS_OK;
+	ret_args[ret_args_len++] = resp->err_code;
+	/* Current CMF */
+	ret_args[ret_args_len++] = GET_ADDR64(resp->resp_data[1], resp->resp_data[0]);
+	/* Last Failing CMF Address */
+	ret_args[ret_args_len++] = GET_ADDR64(resp->resp_data[3], resp->resp_data[2]);
+	/* Config State */
+	ret_args[ret_args_len++] = resp->resp_data[4];
+	/* Version */
+	ret_args[ret_args_len++] = resp->resp_data[5];
+	/* Failure Source */
+	ret_args[ret_args_len++] = ((GENMASK(32, 17) & resp->resp_data[5]) >> 16);
+	/* Error location */
+	ret_args[ret_args_len++] = resp->resp_data[6];
+	/* Error details */
+	ret_args[ret_args_len++] = resp->resp_data[7];
+	/* Current image retry counter */
+	ret_args[ret_args_len++] = resp->resp_data[8];
+
+	return ret_args_len;
+}
+
+uint8_t sip_smc_cmd_cb_rsu_spt(void *resp_desc, void *cmd_desc, uint64_t *ret_args)
+{
+	uint8_t ret_args_len = 0U;
+	sdm_response_t *resp = (sdm_response_t *)resp_desc;
+	sdm_command_t *cmd = (sdm_command_t *)cmd_desc;
+
+	(void)cmd;
+
+	ret_args[ret_args_len++] = INTEL_SIP_SMC_STATUS_OK;
+	ret_args[ret_args_len++] = resp->err_code;
+	/* Sub Partition Table (SPT) 0 address */
+	ret_args[ret_args_len++] = GET_ADDR64(resp->resp_data[0], resp->resp_data[1]);
+	/* Sub Partition Table (SPT) 1 address */
+	ret_args[ret_args_len++] = GET_ADDR64(resp->resp_data[2], resp->resp_data[3]);
+
+	return ret_args_len;
+}
+
+static uintptr_t smc_ret(void *handle, uint64_t *ret_args, uint32_t ret_args_len)
+{
+
 	switch (ret_args_len) {
 	case SMC_RET_ARGS_ONE:
+		VERBOSE("SVC V3: %s: x0 0x%lx\n", __func__, ret_args[0]);
 		SMC_RET1(handle, ret_args[0]);
 		break;
 
 	case SMC_RET_ARGS_TWO:
+		VERBOSE("SVC V3: %s: x0 0x%lx, x1 0x%lx\n", __func__, ret_args[0], ret_args[1]);
 		SMC_RET2(handle, ret_args[0], ret_args[1]);
 		break;
 
 	case SMC_RET_ARGS_THREE:
+		VERBOSE("SVC V3: %s: x0 0x%lx, x1 0x%lx, x2 0x%lx\n",
+			__func__, ret_args[0],	ret_args[1], ret_args[2]);
 		SMC_RET3(handle, ret_args[0], ret_args[1], ret_args[2]);
 		break;
 
 	case SMC_RET_ARGS_FOUR:
+		VERBOSE("SVC V3: %s: x0 0x%lx, x1 0x%lx, x2 0x%lx, x3 0x%lx\n",
+			__func__, ret_args[0], ret_args[1], ret_args[2], ret_args[3]);
 		SMC_RET4(handle, ret_args[0], ret_args[1], ret_args[2], ret_args[3]);
 		break;
 
 	case SMC_RET_ARGS_FIVE:
+		VERBOSE("SVC V3: %s: x0 0x%lx, x1 0x%lx, x2 0x%lx, x3 0x%lx, x4 0x%lx\n",
+			__func__, ret_args[0], ret_args[1], ret_args[2], ret_args[3], ret_args[4]);
 		SMC_RET5(handle, ret_args[0], ret_args[1], ret_args[2], ret_args[3], ret_args[4]);
 		break;
 
+	case SMC_RET_ARGS_SIX:
+		VERBOSE("SVC V3: %s: x0 0x%lx, x1 0x%lx x2 0x%lx x3 0x%lx, x4 0x%lx x5 0x%lx\n",
+			__func__, ret_args[0], ret_args[1], ret_args[2], ret_args[3], ret_args[4],
+			ret_args[5]);
+		SMC_RET6(handle, ret_args[0], ret_args[1], ret_args[2], ret_args[3], ret_args[4],
+			 ret_args[5]);
+		break;
+
+	case SMC_RET_ARGS_SEVEN:
+		VERBOSE("SVC V3: %s: x0 0x%lx, x1 0x%lx x2 0x%lx, x3 0x%lx, x4 0x%lx, x5 0x%lx\t"
+			"x6 0x%lx\n",
+			__func__, ret_args[0], ret_args[1], ret_args[2], ret_args[3], ret_args[4],
+			ret_args[5], ret_args[6]);
+		SMC_RET7(handle, ret_args[0], ret_args[1], ret_args[2], ret_args[3], ret_args[4],
+			 ret_args[5], ret_args[6]);
+		break;
+
+	case SMC_RET_ARGS_EIGHT:
+		VERBOSE("SVC V3: %s: x0 0x%lx, x1 0x%lx x2 0x%lx, x3 0x%lx, x4 0x%lx x5 0x%lx\t"
+			"x6 0x%lx, x7 0x%lx\n",
+			__func__, ret_args[0], ret_args[1], ret_args[2], ret_args[3], ret_args[4],
+			ret_args[5], ret_args[6], ret_args[7]);
+		SMC_RET8(handle, ret_args[0], ret_args[1], ret_args[2], ret_args[3], ret_args[4],
+			 ret_args[5], ret_args[6], ret_args[7]);
+		break;
+
+	case SMC_RET_ARGS_NINE:
+		VERBOSE("SVC V3: %s: x0 0x%lx, x1 0x%lx x2 0x%lx, x3 0x%lx, x4 0x%lx, x5 0x%lx\t"
+			"x6 0x%lx, x7 0x%lx, x8 0x%lx\n",
+			__func__, ret_args[0], ret_args[1], ret_args[2], ret_args[3], ret_args[4],
+			ret_args[5], ret_args[6], ret_args[7], ret_args[8]);
+		SMC_RET18(handle, ret_args[0], ret_args[1], ret_args[2], ret_args[3], ret_args[4],
+			 ret_args[5], ret_args[6], ret_args[7], ret_args[8],
+			 0, 0, 0, 0, 0, 0, 0, 0, 0);
+		break;
+
+	case SMC_RET_ARGS_TEN:
+		VERBOSE("SVC V3: %s: x0 0x%lx, x1 0x%lx, x2 0x%lx, x3 0x%lx, x4 0x%lx x5 0x%lx\t"
+			"x6 0x%lx, x7 0x%lx x8 0x%lx, x9 0x%lx, x10 0x%lx\n",
+			__func__, ret_args[0], ret_args[1], ret_args[2], ret_args[3],
+			ret_args[4], ret_args[5], ret_args[6], ret_args[7], ret_args[8],
+			ret_args[9], ret_args[10]);
+		SMC_RET18(handle, ret_args[0], ret_args[1], ret_args[2], ret_args[3], ret_args[4],
+			  ret_args[5], ret_args[6], ret_args[7], ret_args[8], ret_args[9],
+			  0, 0, 0, 0, 0, 0, 0, 0);
+		break;
+
 	default:
+		VERBOSE("SVC V3: %s ret_args_len is wrong, please check %d\n ",
+			__func__, ret_args_len);
 		SMC_RET1(handle, INTEL_SIP_SMC_STATUS_ERROR);
 		break;
 	}
+}
+
+static inline bool is_gen_mbox_cmd_allowed(uint32_t cmd)
+{
+	/* Check if the command is allowed to be executed in generic mbox format */
+	bool is_cmd_allowed = false;
+
+	switch (cmd) {
+	case MBOX_FCS_OPEN_CS_SESSION:
+	case MBOX_FCS_CLOSE_CS_SESSION:
+	case MBOX_FCS_IMPORT_CS_KEY:
+	case MBOX_FCS_EXPORT_CS_KEY:
+	case MBOX_FCS_REMOVE_CS_KEY:
+	case MBOX_FCS_GET_CS_KEY_INFO:
+	case MBOX_FCS_CREATE_CS_KEY:
+	case MBOX_FCS_GET_DIGEST_REQ:
+	case MBOX_FCS_MAC_VERIFY_REQ:
+	case MBOX_FCS_ECDSA_HASH_SIGN_REQ:
+	case MBOX_FCS_GET_PROVISION:
+	case MBOX_FCS_CNTR_SET_PREAUTH:
+	case MBOX_FCS_ENCRYPT_REQ:
+	case MBOX_FCS_DECRYPT_REQ:
+	case MBOX_FCS_RANDOM_GEN:
+	case MBOX_FCS_AES_CRYPT_REQ:
+	case MBOX_FCS_ECDSA_SHA2_DATA_SIGN_REQ:
+	case MBOX_FCS_ECDSA_HASH_SIG_VERIFY:
+	case MBOX_FCS_ECDSA_SHA2_DATA_SIGN_VERIFY:
+	case MBOX_FCS_ECDSA_GET_PUBKEY:
+	case MBOX_FCS_ECDH_REQUEST:
+	case MBOX_FCS_HKDF_REQUEST:
+		/* These mailbox commands are not supported in the generic mailbox format. */
+		break;
+
+	default:
+		is_cmd_allowed = true;
+		break;
+	} /* switch */
+
+	return is_cmd_allowed;
 }
 
 /*
@@ -929,8 +1102,8 @@ static uintptr_t sip_smc_handler_v3(uint32_t smc_fid,
 	switch (smc_fid) {
 	case ALTERA_SIP_SMC_ASYNC_RESP_POLL:
 	{
-		uint32_t ret_args[8] = {0};
-		uint32_t ret_args_len;
+		uint64_t ret_args[16] = {0};
+		uint32_t ret_args_len = 0;
 
 		status = mailbox_response_poll_v3(GET_CLIENT_ID(x1),
 						  GET_JOB_ID(x1),
@@ -1173,6 +1346,111 @@ static uintptr_t sip_smc_handler_v3(uint32_t smc_fid,
 						   sip_smc_cmd_cb_ret3,
 						   NULL,
 						   0);
+
+		SMC_RET1(handle, status);
+	}
+
+	case ALTERA_SIP_SMC_ASYNC_RSU_GET_SPT:
+	{
+		status = mailbox_send_cmd_async_v3(GET_CLIENT_ID(x1),
+						   GET_JOB_ID(x1),
+						   MBOX_GET_SUBPARTITION_TABLE,
+						   NULL,
+						   0,
+						   MBOX_CMD_FLAG_CASUAL,
+						   sip_smc_cmd_cb_rsu_spt,
+						   NULL,
+						   0);
+
+		SMC_RET1(handle, status);
+	}
+
+	case ALTERA_SIP_SMC_ASYNC_RSU_GET_STATUS:
+	{
+		status = mailbox_send_cmd_async_v3(GET_CLIENT_ID(x1),
+						   GET_JOB_ID(x1),
+						   MBOX_RSU_STATUS,
+						   NULL,
+						   0,
+						   MBOX_CMD_FLAG_CASUAL,
+						   sip_smc_cmd_cb_rsu_status,
+						   NULL,
+						   0);
+
+		SMC_RET1(handle, status);
+	}
+
+	case ALTERA_SIP_SMC_ASYNC_RSU_NOTIFY:
+	{
+		uint32_t notify_code = (uint32_t)x2;
+
+		status = mailbox_send_cmd_async_v3(GET_CLIENT_ID(x1),
+						   GET_JOB_ID(x1),
+						   MBOX_HPS_STAGE_NOTIFY,
+						   &notify_code,
+						   1U,
+						   MBOX_CMD_FLAG_CASUAL,
+						   sip_smc_cmd_cb_ret2,
+						   NULL,
+						   0);
+
+		SMC_RET1(handle, status);
+	}
+
+	case ALTERA_SIP_SMC_ASYNC_GEN_MBOX_CMD:
+	{
+		/* Collect all the args passed in, and send the mailbox command. */
+		uint32_t mbox_cmd = (uint32_t)x2;
+		uint32_t *cmd_payload_addr = NULL;
+		uint32_t cmd_payload_len = (uint32_t)x4 / MBOX_WORD_BYTE;
+		uint32_t *resp_payload_addr = NULL;
+		uint32_t resp_payload_len = (uint32_t)x6 / MBOX_WORD_BYTE;
+
+		/* Filter the required commands here. */
+		if (!is_gen_mbox_cmd_allowed(mbox_cmd)) {
+			status = INTEL_SIP_SMC_STATUS_REJECTED;
+			SMC_RET1(handle, status);
+		}
+
+		if ((cmd_payload_len > MBOX_GEN_CMD_MAX_WORDS) ||
+		    (resp_payload_len > MBOX_GEN_CMD_MAX_WORDS)) {
+			ERROR("MBOX: 0x%x: Command/Response payload length exceeds max limit\n",
+				smc_fid);
+			status = INTEL_SIP_SMC_STATUS_REJECTED;
+			SMC_RET1(handle, status);
+		}
+
+		/* Make sure we have valid command payload length and buffer */
+		if (cmd_payload_len != 0U) {
+			cmd_payload_addr = (uint32_t *)x3;
+			if (cmd_payload_addr == NULL) {
+				ERROR("MBOX: 0x%x: Command payload address is NULL\n",
+					smc_fid);
+				status = INTEL_SIP_SMC_STATUS_REJECTED;
+				SMC_RET1(handle, status);
+			}
+		}
+
+		/* Make sure we have valid response payload length and buffer */
+		if (resp_payload_len != 0U) {
+			resp_payload_addr = (uint32_t *)x5;
+			if (resp_payload_addr == NULL) {
+				ERROR("MBOX: 0x%x: Response payload address is NULL\n",
+					smc_fid);
+				status = INTEL_SIP_SMC_STATUS_REJECTED;
+				SMC_RET1(handle, status);
+			}
+		}
+
+		status = mailbox_send_cmd_async_v3(GET_CLIENT_ID(x1),
+						   GET_JOB_ID(x1),
+						   mbox_cmd,
+						   (uint32_t *)cmd_payload_addr,
+						   cmd_payload_len,
+						   MBOX_CMD_FLAG_CASUAL,
+						   sip_smc_ret_nbytes_cb,
+						   (uint32_t *)resp_payload_addr,
+						   resp_payload_len);
 
 		SMC_RET1(handle, status);
 	}
@@ -1653,7 +1931,7 @@ uintptr_t sip_smc_handler_v1(uint32_t smc_fid,
 	uint32_t seu_respbuf[3];
 	int status = INTEL_SIP_SMC_STATUS_OK;
 	int mbox_status;
-	unsigned int len_in_resp;
+	unsigned int len_in_resp = 0;
 	u_register_t x5, x6, x7;
 
 	switch (smc_fid) {
@@ -2193,6 +2471,12 @@ uintptr_t sip_smc_handler_v1(uint32_t smc_fid,
 	case INTEL_SIP_SMC_ATF_BUILD_VER:
 		SMC_RET4(handle, INTEL_SIP_SMC_STATUS_OK, VERSION_MAJOR,
 			 VERSION_MINOR, VERSION_PATCH);
+
+#if PLATFORM_MODEL == PLAT_SOCFPGA_AGILEX5
+	case INTEL_SIP_SMC_INJECT_IO96B_ECC_ERR:
+		intel_inject_io96b_ecc_err((uint32_t *)&x1, (uint32_t)x2);
+		SMC_RET1(handle, INTEL_SIP_SMC_STATUS_OK);
+#endif
 
 	default:
 		return socfpga_sip_handler(smc_fid, x1, x2, x3, x4,

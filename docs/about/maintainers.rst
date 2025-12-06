@@ -73,8 +73,6 @@ LTS Maintainers
 :|G|: `vwadekar`_
 :|M|: Yann Gautier <yann.gautier@st.com>
 :|G|: `Yann-lms`_
-:|M|: Chris Palmer <palmer@google.com>
-:|G|: `noncombatant`_
 :|M|: Govindraj Raja <govindraj.raja@arm.com>
 :|G|: `govindraj-arm`_
 
@@ -377,6 +375,14 @@ GIC driver
 :|G|: `loosper-arm`_
 :|F|: drivers/arm/gic/
 
+GICv5 driver
+^^^^^^^^^^^^
+:|M|: Boyan Karatotev <boyan.karatotev@arm.com>
+:|G|: `loosper-arm`_
+:|F|: drivers/arm/gicv5
+:|F|: plat/common/plat_gicv5.c
+:|F|: plat/arm/board/fvp/gicv5_config.yaml
+
 Message Handling Unit (MHU) driver
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 :|M|: David Vincze <david.vincze@arm.com>
@@ -509,6 +515,28 @@ Runtime Services
 :|F|: include/services/arm_arch_svc.h
 :|F|: include/services/std_svc.h
 
+Live Firmware Activation Service
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+:|M|: Manish Badarkhe <manish.badarkhe@arm.com>
+:|G|: `ManishVB-Arm`_
+:|F|: services/std_svc/lfa
+:|F|: include/plat/common/plat_lfa.h
+:|F|: include/services/lfa_svc.h
+
+Per-CPU Framework
+^^^^^^^^^^^^^^^^^
+:|M|: Rohit Mathew <rohit.mathew@arm.com>
+:|G|: `rohit-arm`_
+:|M|: Sammit Joshi <sammit.joshi@arm.com>
+:|G|: `sammit-arm`_
+:|M|: Manish Pandey <manish.pandey2@arm.com>
+:|G|: `manish-pandey-arm`_
+:|M|: Chris Kay <chris.kay@arm.com>
+:|G|: `CJKay`_
+:|F|: include/lib/per_cpu
+:|F|: lib/per_cpu
+:|F|: docs/components/numa-per-cpu.rst
+
 Platform Ports
 ~~~~~~~~~~~~~~
 
@@ -625,6 +653,9 @@ Arm Automotive RD platform port
 :|M|: Divin Raj <divin.raj@arm.com>
 :|G|: `divin-raj`_
 :|F|: plat/arm/board/automotive_rd
+:|M|: Ahmed Azeem <ahmed.azeem@arm.com>
+:|G|: `Ahmed-Azeem`_
+:|F|: plat/arm/board/automotive_rd/rdaspen
 
 Aspeed platform port
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -742,6 +773,8 @@ NXP i.MX9 platform port
 :|G|: `JackyBai`_
 :|F|: docs/plat/imx9.rst
 :|F|: plat/imx/imx93/
+:|F|: plat/imx/imx9/imx94/
+:|F|: plat/imx/imx9/imx95/
 
 NXP QorIQ Layerscape common code for platform ports
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -821,8 +854,10 @@ QTI platform port
 :|G|: `quic_mkf`_
 :|M|: Saurabh Gorecha <quic_sgorecha@quicinc.com>
 :|G|: `quic_sgorecha`_
+:|M|: Sumit Garg <sumit.garg@oss.qualcomm.com>
+:|G|: `b49020`_
 :|M|: QTI TF Maintainers <qti.trustedfirmware.maintainers@codeaurora.org>
-:|F|: docs/plat/qti.rst
+:|F|: docs/plat/qti/
 :|F|: plat/qti/
 
 QTI MSM8916 platform port
@@ -831,7 +866,7 @@ QTI MSM8916 platform port
 :|G|: `stephan-gh`_
 :|M|: Nikita Travkin <nikita@trvn.ru>
 :|G|: `TravMurav`_
-:|F|: docs/plat/qti-msm8916.rst
+:|F|: docs/plat/qti/msm8916.rst
 :|F|: plat/qti/mdm9607/
 :|F|: plat/qti/msm8909/
 :|F|: plat/qti/msm8916/
@@ -1055,6 +1090,7 @@ Conventional Changelog Extensions
 .. _AlexeiFedorov: https://github.com/AlexeiFedorov
 .. _andersdellien-arm: https://github.com/andersdellien-arm
 .. _Andre-ARM: https://github.com/Andre-ARM
+.. _Ahmed-Azeem: https://github.com/ahmed-azeem
 .. _Anson-Huang: https://github.com/Anson-Huang
 .. _anukou: https://github.com/anukou
 .. _arugan02: https://github.com/arugan02
@@ -1118,7 +1154,6 @@ Conventional Changelog Extensions
 .. _MrVan: https://github.com/MrVan
 .. _Neal-liu: https://github.com/neal-liu
 .. _niej: https://github.com/niej
-.. _noncombatant: https://github.com/noncombatant
 .. _nmenon: https://github.com/nmenon
 .. _npoushin: https://github.com/npoushin
 .. _odeprez: https://github.com/odeprez
@@ -1133,6 +1168,7 @@ Conventional Changelog Extensions
 .. _rohit-arm: https://github.com/rohit-arm
 .. _o-tarhunakov: https://github.com/o-tarhunakov
 .. _rutigl: https://github.com/rutigl
+.. _sammit-arm: https://github.com/sammit-arm
 .. _sandrine-bailleux-arm: https://github.com/sandrine-bailleux-arm
 .. _shawnguo2: https://github.com/shawnguo2
 .. _sieumunt: https://github.com/sieumunt

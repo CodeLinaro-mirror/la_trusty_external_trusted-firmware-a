@@ -21,6 +21,13 @@ struct transfer_list_header *ns_tl __unused;
 
 static entry_point_info_t bl33_image_ep_info;
 
+#if USE_GIC_DRIVER == 3
+static const uintptr_t gicr_base_addrs[2] = {
+	PLAT_ARM_GICR_BASE,	/* GICR Base address of the primary CPU */
+	0U			/* Zero Termination */
+};
+#endif
+
 /* Weak definitions may be overridden in specific ARM standard platform */
 #pragma weak sp_min_platform_setup
 #pragma weak sp_min_plat_arch_setup
@@ -97,16 +104,13 @@ void arm_sp_min_early_platform_setup(u_register_t arg0, u_register_t arg1,
 
 #if RESET_TO_SP_MIN
 	/* Populate entry point information for BL33 */
-	SET_PARAM_HEAD(&bl33_image_ep_info,
-				PARAM_EP,
-				VERSION_1,
-				0);
+	SET_PARAM_HEAD(&bl33_image_ep_info, PARAM_EP, VERSION_1, 0);
 	/*
 	 * Tell SP_MIN where the non-trusted software image
 	 * is located and the entry state information
 	 */
 	bl33_image_ep_info.pc = plat_get_ns_image_entrypoint();
-	bl33_image_ep_info.spsr = arm_get_spsr_for_bl33_entry();
+	bl33_image_ep_info.spsr = arm_get_spsr(BL33_IMAGE_ID);
 	SET_SECURITY_STATE(bl33_image_ep_info.h.attr, NON_SECURE);
 
 #if ARM_LINUX_KERNEL_AS_BL33
@@ -162,6 +166,7 @@ void plat_arm_sp_min_early_platform_setup(u_register_t arg0, u_register_t arg1,
 {
 	arm_sp_min_early_platform_setup(arg0, arg1, arg2, arg3);
 
+#if !HW_ASSISTED_COHERENCY
 	/*
 	 * Initialize Interconnect for this cluster during cold boot.
 	 * No need for locks as no other CPU is active.
@@ -177,6 +182,7 @@ void plat_arm_sp_min_early_platform_setup(u_register_t arg0, u_register_t arg1,
 	 * clusters.
 	 */
 	plat_arm_interconnect_enter_coherency();
+#endif
 }
 
 void sp_min_early_platform_setup2(u_register_t arg0, u_register_t arg1,
@@ -209,6 +215,9 @@ void sp_min_platform_setup(void)
 	/* Initialize the GIC driver, cpu and distributor interfaces */
 	unsigned int core_pos = plat_my_core_pos();
 
+#if USE_GIC_DRIVER == 3
+	gic_set_gicr_frames(gicr_base_addrs);
+#endif
 	gic_init(core_pos);
 	gic_pcpu_init(core_pos);
 	gic_cpuif_enable(core_pos);

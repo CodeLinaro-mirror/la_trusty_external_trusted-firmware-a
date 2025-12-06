@@ -48,11 +48,6 @@ typedef struct spm_core_manifest_sect_attribute {
 	 */
 	uint16_t spmc_id;
 
-	/*
-	 * FFA version used by SP (mandatory for el3_spmc).
-	 */
-	uint32_t sp_ffa_version;
-
 } spmc_manifest_attribute_t;
 
 #endif /* SPM_CORE_MANIFEST_H */

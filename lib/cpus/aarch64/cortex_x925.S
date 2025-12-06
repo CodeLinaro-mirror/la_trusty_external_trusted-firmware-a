@@ -9,6 +9,7 @@
 #include <common/bl_common.h>
 #include <cortex_x925.h>
 #include <cpu_macros.S>
+#include <dsu_macros.S>
 #include <plat_macros.S>
 
 /* Hardware handled coherency */
@@ -23,8 +24,18 @@
 
 cpu_reset_prologue cortex_x925
 
+workaround_reset_start cortex_x925, ERRATUM(2900952), ERRATA_DSU_2900952
+	errata_dsu_2900952_wa_apply
+workaround_reset_end cortex_x925, ERRATUM(2900952)
+
+check_erratum_custom_start cortex_x925, ERRATUM(2900952)
+	check_errata_dsu_2900952_applies
+	ret
+check_erratum_custom_end cortex_x925, ERRATUM(2900952)
+
 add_erratum_entry cortex_x925, ERRATUM(3701747), ERRATA_X925_3701747
 
+.global check_erratum_cortex_x925_3701747
 check_erratum_ls cortex_x925, ERRATUM(3701747), CPU_REV(0, 1)
 
 workaround_reset_start cortex_x925, ERRATUM(2963999), ERRATA_X925_2963999

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2024, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2017-2025, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -279,7 +279,7 @@ void xlat_tables_print(xlat_ctx_t *ctx)
  *   Size in bytes of the virtual address space.
  */
 static uint64_t *find_xlat_table_entry(uintptr_t virtual_addr,
-				       void *xlat_table_base,
+				       uint64_t *xlat_table_base,
 				       unsigned int xlat_table_base_entries,
 				       unsigned long long virt_addr_space_size,
 				       unsigned int *out_level)
@@ -487,10 +487,10 @@ static int xlat_get_mem_attributes_internal(const xlat_ctx_t *ctx,
 
 
 int xlat_get_mem_attributes_ctx(const xlat_ctx_t *ctx, uintptr_t base_va,
-				uint32_t *attr)
+				uint32_t *attr, unsigned int *table_level)
 {
 	return xlat_get_mem_attributes_internal(ctx, base_va, attr,
-				NULL, NULL, NULL);
+				NULL, NULL, table_level);
 }
 
 

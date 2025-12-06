@@ -61,27 +61,39 @@ sdei_entry_t *get_event_entry(const sdei_ev_map_t *map)
  * Both shared and private maps are stored in single-dimensional array. Private
  * event entries are kept for each PE forming a 2D array.
  */
-sdei_entry_t *get_event_entry_target_pe(long int mapsub, unsigned int nm, uint64_t target_pe)
+sdei_entry_t *get_event_entry_target_pe(long int mapsub, size_t nm,
+					uint64_t target_pe)
 {
-	sdei_entry_t *cpu_priv_base;
-	unsigned int base_idx;
-	long int idx;
-
-	/*
-	 * For a private map, find the index of the mapping in the
-	 * array.
-	 */
-	idx = mapsub;
+	size_t base, uidx;
+	int target_pos;
+	const size_t table_len = (size_t)PLATFORM_CORE_COUNT * nm;
 
 	/* Base of private mappings for this CPU */
-	base_idx = (unsigned int) plat_core_pos_by_mpidr(target_pe);
-	base_idx *= nm;
-	cpu_priv_base = &sdei_private_event_table[base_idx];
+	target_pos = plat_core_pos_by_mpidr(target_pe);
+	if ((target_pos < 0) || ((unsigned int)target_pos >= PLATFORM_CORE_COUNT)) {
+		return NULL;
+	}
+
+	if (mapsub < 0) {
+		return NULL;
+	}
+
+	uidx = (unsigned int)mapsub;
+	if (uidx >= nm) {
+		return NULL;
+	}
+
+	base = (size_t)target_pos * nm + uidx;
+	/* ensure base is in-bounds of the actual table */
+	if (base >= table_len) {
+		return NULL;
+	}
+
 	/*
 	 * Return the address of the entry at the same index in the
 	 * per-CPU event entry.
 	 */
-	return &cpu_priv_base[idx];
+	return &sdei_private_event_table[base];
 }
 
 /*

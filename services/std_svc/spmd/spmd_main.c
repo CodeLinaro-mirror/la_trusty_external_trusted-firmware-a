@@ -20,6 +20,7 @@
 #include <lib/el3_runtime/context_mgmt.h>
 #include <lib/fconf/fconf.h>
 #include <lib/fconf/fconf_dyn_cfg_getter.h>
+#include <lib/per_cpu/per_cpu.h>
 #include <lib/smccc.h>
 #include <lib/spinlock.h>
 #include <lib/utils.h>
@@ -33,11 +34,14 @@
 #include <services/spmd_svc.h>
 #include <smccc_helpers.h>
 #include "spmd_private.h"
+#if TRANSFER_LIST
+#include <transfer_list.h>
+#endif
 
 /*******************************************************************************
  * SPM Core context information.
  ******************************************************************************/
-static spmd_spm_core_context_t spm_core_context[PLATFORM_CORE_COUNT];
+static PER_CPU_DEFINE(spmd_spm_core_context_t, spm_core_context);
 
 /*******************************************************************************
  * SPM Core attribute information is read from its manifest if the SPMC is not
@@ -46,9 +50,19 @@ static spmd_spm_core_context_t spm_core_context[PLATFORM_CORE_COUNT];
 static spmc_manifest_attribute_t spmc_attrs;
 
 /*******************************************************************************
- * FFA version used by nonsecure endpoint
+ * FFA version used by nonsecure endpoint.
  ******************************************************************************/
 static uint32_t nonsecure_ffa_version;
+
+/*******************************************************************************
+ * Whether the normal world finished negotiating its version.
+ ******************************************************************************/
+static bool nonsecure_version_negotiated;
+
+/*******************************************************************************
+ * FFA version used by SPMC, as seen by the normal world.
+ ******************************************************************************/
+static uint32_t spmc_nwd_ffa_version;
 
 /*******************************************************************************
  * SPM Core entry point information. Discovered on the primary core and reused
@@ -61,7 +75,7 @@ static entry_point_info_t *spmc_ep_info;
  ******************************************************************************/
 spmd_spm_core_context_t *spmd_get_context(void)
 {
-	return &spm_core_context[plat_my_core_pos()];
+	return PER_CPU_CUR(spm_core_context);
 }
 
 /*******************************************************************************
@@ -86,7 +100,8 @@ static uint64_t spmd_smc_forward(uint32_t smc_fid,
 				 uint64_t x4,
 				 void *cookie,
 				 void *handle,
-				 uint64_t flags);
+				 uint64_t flags,
+				 uint32_t secure_ffa_version);
 
 /******************************************************************************
  * Builds an SPMD to SPMC direct message request.
@@ -161,6 +176,24 @@ __dead2 void spmd_spm_core_sync_exit(uint64_t rc)
 	spmd_spm_core_exit(ctx->c_rt_ctx, rc);
 
 	panic();
+}
+
+void spmd_setup_context(unsigned int core_id)
+{
+	cpu_context_t *cpu_ctx;
+
+	PER_CPU_CUR(spm_core_context)->state = SPMC_STATE_OFF;
+
+	/* Setup an initial cpu context for the SPMC. */
+	cpu_ctx = &(PER_CPU_CUR(spm_core_context)->cpu_ctx);
+	cm_setup_context(cpu_ctx, spmc_ep_info);
+
+	/*
+	 * Pass the core linear ID to the SPMC through x4.
+	 * (TF-A implementation defined behavior helping
+	 * a legacy TOS migration to adopt FF-A).
+	 */
+	write_ctx_reg(get_gpregs_ctx(cpu_ctx), CTX_GPREG_X4, core_id);
 }
 
 /*******************************************************************************
@@ -279,7 +312,7 @@ static uint64_t spmd_group0_interrupt_handler_nwd(uint32_t id,
 						  void *handle,
 						  void *cookie)
 {
-	uint32_t intid;
+	uint32_t intid, intr_raw;
 
 	/* Sanity check the security state when the exception was generated. */
 	assert(get_interrupt_src_ss(flags) == NON_SECURE);
@@ -291,7 +324,12 @@ static uint64_t spmd_group0_interrupt_handler_nwd(uint32_t id,
 
 	assert(plat_ic_get_pending_interrupt_type() == INTR_TYPE_EL3);
 
-	intid = plat_ic_acknowledge_interrupt();
+	intr_raw = plat_ic_acknowledge_interrupt();
+	intid = plat_ic_get_interrupt_id(intr_raw);
+
+	if (intid == INTR_ID_UNAVAILABLE) {
+		return 0U;
+	}
 
 	if (plat_spmd_handle_group0_interrupt(intid) < 0) {
 		ERROR("Group0 interrupt %u not handled\n", intid);
@@ -314,14 +352,19 @@ static uint64_t spmd_group0_interrupt_handler_nwd(uint32_t id,
  ******************************************************************************/
 static uint64_t spmd_handle_group0_intr_swd(void *handle)
 {
-	uint32_t intid;
+	uint32_t intid, intr_raw;
 
 	/* Sanity check the pointer to this cpu's context */
 	assert(handle == cm_get_context(SECURE));
 
 	assert(plat_ic_get_pending_interrupt_type() == INTR_TYPE_EL3);
 
-	intid = plat_ic_acknowledge_interrupt();
+	intr_raw = plat_ic_acknowledge_interrupt();
+	intid = plat_ic_get_interrupt_id(intr_raw);
+
+	if (intid == INTR_ID_UNAVAILABLE) {
+		return 0U;
+	}
 
 	/*
 	 * TODO: Currently due to a limitation in SPMD implementation, the
@@ -434,8 +477,6 @@ static void spmd_do_sec_cpy(uintptr_t root_base_addr, uintptr_t sec_base_addr,
  ******************************************************************************/
 static int spmd_spmc_init(void *pm_addr)
 {
-	cpu_context_t *cpu_ctx;
-	unsigned int core_id;
 	uint32_t ep_attr, flags;
 	int rc;
 	const struct dyn_cfg_dtb_info_t *image_info __unused;
@@ -549,21 +590,7 @@ static int spmd_spmc_init(void *pm_addr)
 	spmc_ep_info->args.arg0 = image_info->secondary_config_addr;
 #endif /* ENABLE_RME && SPMD_SPM_AT_SEL2 && !RESET_TO_BL31 */
 
-	/* Set an initial SPMC context state for all cores. */
-	for (core_id = 0U; core_id < PLATFORM_CORE_COUNT; core_id++) {
-		spm_core_context[core_id].state = SPMC_STATE_OFF;
-
-		/* Setup an initial cpu context for the SPMC. */
-		cpu_ctx = &spm_core_context[core_id].cpu_ctx;
-		cm_setup_context(cpu_ctx, spmc_ep_info);
-
-		/*
-		 * Pass the core linear ID to the SPMC through x4.
-		 * (TF-A implementation defined behavior helping
-		 * a legacy TOS migration to adopt FF-A).
-		 */
-		write_ctx_reg(get_gpregs_ctx(cpu_ctx), CTX_GPREG_X4, core_id);
-	}
+	spmd_setup_context(plat_my_core_pos());
 
 	/* Register power management hooks with PSCI */
 	psci_register_spd_pm_hook(&spmd_pm);
@@ -623,25 +650,21 @@ int spmd_setup(void)
 {
 	int rc;
 	void *spmc_manifest;
+	struct transfer_list_header *tl __maybe_unused;
+	struct transfer_list_entry *te __maybe_unused;
 
 	/*
 	 * If the SPMC is at EL3, then just initialise it directly. The
 	 * shenanigans of when it is at a lower EL are not needed.
 	 */
 	if (is_spmc_at_el3()) {
+		/* Allow the SPMC to populate its attributes directly. */
+		spmc_populate_attrs(&spmc_attrs);
+
 		rc = spmc_setup();
 		if (rc != 0) {
 			WARN("SPMC initialisation failed 0x%x.\n", rc);
 		}
-
-		/* Allow the SPMC to populate its attributes directly. */
-		/*
-		 * I think it's safe to reorder the calls to
-		 *  spmc_populate_attrs() and spmc_setup() so that I can
-		 *  set sp_ffa_version in spmc_populate_attrs()
-		 */
-		spmc_populate_attrs(&spmc_attrs);
-
 		return 0;
 	}
 
@@ -654,11 +677,31 @@ int spmd_setup(void)
 	/* Under no circumstances will this parameter be 0 */
 	assert(spmc_ep_info->pc != 0ULL);
 
+
+#if TRANSFER_LIST && !RESET_TO_BL31
+	tl = (struct transfer_list_header *)spmc_ep_info->args.arg3;
+	te = transfer_list_find(tl, TL_TAG_DT_SPMC_MANIFEST);
+	if (te == NULL) {
+		WARN("SPM Core manifest absent in TRANSFER_LIST.\n");
+		return -ENOENT;
+	}
+
+	spmc_manifest = (void *)transfer_list_entry_data(te);
+
+	/* Change the DT in the handoff */
+	if (sizeof(spmc_ep_info->args.arg0) == sizeof(uint64_t)) {
+		spmc_ep_info->args.arg0 = (uintptr_t)spmc_manifest;
+	} else {
+		spmc_ep_info->args.arg3 = (uintptr_t)spmc_manifest;
+	}
+#else
 	/*
 	 * Check if BL32 ep_info has a reference to 'tos_fw_config'. This will
 	 * be used as a manifest for the SPM Core at the next lower EL/mode.
 	 */
 	spmc_manifest = (void *)spmc_ep_info->args.arg0;
+#endif
+
 	if (spmc_manifest == NULL) {
 		WARN("Invalid or absent SPM Core manifest.\n");
 		return 0;
@@ -683,13 +726,14 @@ uint64_t spmd_smc_switch_state(uint32_t smc_fid,
 			       uint64_t x3,
 			       uint64_t x4,
 			       void *handle,
-			       uint64_t flags)
+			       uint64_t flags,
+			       uint32_t secure_ffa_version)
 {
 	unsigned int secure_state_in = (secure_origin) ? SECURE : NON_SECURE;
 	unsigned int secure_state_out = (!secure_origin) ? SECURE : NON_SECURE;
+	uint32_t version_in = (secure_origin) ? secure_ffa_version : nonsecure_ffa_version;
+	uint32_t version_out = (!secure_origin) ? secure_ffa_version : nonsecure_ffa_version;
 	void *ctx_out;
-	uint32_t dst_version;
-	uint32_t src_version;
 
 #if SPMD_SPM_AT_SEL2
 	if ((secure_state_out == SECURE) && (is_sve_hint_set(flags) == true)) {
@@ -728,25 +772,8 @@ uint64_t spmd_smc_switch_state(uint32_t smc_fid,
 		SMC_RET0(ctx_out);
 	}
 
-	if (secure_origin && is_spmc_at_el3()) {
-		dst_version = nonsecure_ffa_version;
-		src_version = spmc_attrs.sp_ffa_version;
-	} else if (secure_origin && !is_spmc_at_el3()) {
-		dst_version = nonsecure_ffa_version;
-		src_version = MAKE_FFA_VERSION(spmc_attrs.major_version,
-					       spmc_attrs.minor_version);
-	} else if (!secure_origin && is_spmc_at_el3()) {
-		dst_version = spmc_attrs.sp_ffa_version;
-		src_version = nonsecure_ffa_version;
-	} else {  /*(!secure_origin && !is_spmc_at_el3()) */
-		dst_version = MAKE_FFA_VERSION(spmc_attrs.major_version,
-					       spmc_attrs.minor_version);
-		src_version = nonsecure_ffa_version;
-	}
-
-
-	if ((GET_SMC_CC(smc_fid) == SMC_64) && (dst_version >= MAKE_FFA_VERSION(U(1), U(2)))) {
-		if (src_version < MAKE_FFA_VERSION(U(1), U(2))) {
+	if ((GET_SMC_CC(smc_fid) == SMC_64) && (version_out >= MAKE_FFA_VERSION(U(1), U(2)))) {
+		if (version_in < MAKE_FFA_VERSION(U(1), U(2))) {
 			/* FFA version mismatch, with dest >= 1.2 - set outgoing x8-x17 to zero */
 			SMC_RET18(ctx_out, smc_fid, x1, x2, x3, x4,
 				  SMC_GET_GP(handle, CTX_GPREG_X5),
@@ -791,7 +818,8 @@ static uint64_t spmd_smc_forward(uint32_t smc_fid,
 				 uint64_t x4,
 				 void *cookie,
 				 void *handle,
-				 uint64_t flags)
+				 uint64_t flags,
+				 uint32_t secure_ffa_version)
 {
 	if (is_spmc_at_el3() && !secure_origin) {
 		return spmc_smc_handler(smc_fid, secure_origin, x1, x2, x3, x4,
@@ -799,7 +827,7 @@ static uint64_t spmd_smc_forward(uint32_t smc_fid,
 	}
 
 	return spmd_smc_switch_state(smc_fid, secure_origin, x1, x2, x3, x4,
-				     handle, flags);
+				     handle, flags, secure_ffa_version);
 
 }
 
@@ -864,19 +892,11 @@ uint64_t spmd_ffa_smc_handler(uint32_t smc_fid,
 		}
 	}
 	return spmd_smc_handler(smc_fid, x1, x2, x3, x4, cookie,
-				handle, flags);
+				handle, flags, spmc_nwd_ffa_version);
 }
 
-static uint32_t get_common_ffa_version(void)
+static uint32_t get_common_ffa_version(uint32_t secure_ffa_version)
 {
-	uint32_t secure_ffa_version;
-	if (is_spmc_at_el3()) {
-		secure_ffa_version = spmc_attrs.sp_ffa_version;
-	} else {
-		secure_ffa_version = MAKE_FFA_VERSION(spmc_attrs.major_version,
-						      spmc_attrs.minor_version);
-	}
-
 	if (secure_ffa_version <= nonsecure_ffa_version) {
 		return secure_ffa_version;
 	} else {
@@ -895,7 +915,8 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 			  uint64_t x4,
 			  void *cookie,
 			  void *handle,
-			  uint64_t flags)
+			  uint64_t flags,
+			  uint32_t secure_ffa_version)
 {
 	spmd_spm_core_context_t *ctx = spmd_get_context();
 	bool secure_origin;
@@ -920,6 +941,14 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 	if (is_spmd_logical_sp_info_regs_req_in_progress(ctx)) {
 		assert(secure_origin);
 		spmd_spm_core_sync_exit(0ULL);
+	}
+
+	if ((!secure_origin) && (smc_fid != FFA_VERSION)) {
+		/*
+		 * Once the caller invokes any FF-A ABI other than FFA_VERSION,
+		 * the version negotiation phase is complete.
+		 */
+		nonsecure_version_negotiated = true;
 	}
 
 	switch (smc_fid) {
@@ -949,7 +978,7 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 
 		return spmd_smc_forward(smc_fid, secure_origin,
 					x1, x2, x3, x4, cookie,
-					handle, flags);
+					handle, flags, secure_ffa_version);
 		break; /* not reached */
 
 	case FFA_VERSION:
@@ -958,8 +987,10 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 		 * If caller is secure and SPMC was initialized,
 		 * return FFA_VERSION of SPMD.
 		 * If caller is non secure and SPMC was initialized,
-		 * forward to the EL3 SPMC if enabled, otherwise return
-		 * the SPMC version if implemented at a lower EL.
+		 * forward to the EL3 SPMC if enabled, otherwise send a
+		 * framework message to the SPMC at the lower EL to
+		 * negotiate a version that is compatible between the
+		 * normal world and the SPMC.
 		 * Sanity check to "input_version".
 		 * If the EL3 SPMC is enabled, ignore the SPMC state as
 		 * this is not used.
@@ -968,7 +999,15 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 		    (!is_spmc_at_el3() && (ctx->state == SPMC_STATE_RESET))) {
 			ret = FFA_ERROR_NOT_SUPPORTED;
 		} else if (!secure_origin) {
-			nonsecure_ffa_version = input_version;
+			if (!nonsecure_version_negotiated) {
+				/*
+				 * Once an FF-A version has been negotiated
+				 * between a caller and a callee, the version
+				 * may not be changed for the lifetime of
+				 * the calling component.
+				 */
+				nonsecure_ffa_version = input_version;
+			}
 
 			if (is_spmc_at_el3()) {
 				/*
@@ -976,7 +1015,9 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 				 * enabled, as we don't need to wrap the call in
 				 * a direct request.
 				 */
-				return spmd_smc_forward(smc_fid, secure_origin,
+				spmc_nwd_ffa_version =
+					MAKE_FFA_VERSION(FFA_VERSION_MAJOR, FFA_VERSION_MINOR);
+				return spmc_smc_handler(smc_fid, secure_origin,
 							x1, x2, x3, x4, cookie,
 							handle, flags);
 			}
@@ -988,6 +1029,7 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 			    spmc_attrs.minor_version == 0) {
 				ret = MAKE_FFA_VERSION(spmc_attrs.major_version,
 						       spmc_attrs.minor_version);
+				spmc_nwd_ffa_version = (uint32_t)ret;
 				SMC_RET8(handle, (uint32_t)ret,
 					 FFA_TARGET_INFO_MBZ,
 					 FFA_TARGET_INFO_MBZ,
@@ -1040,6 +1082,7 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 				ret = FFA_ERROR_NOT_SUPPORTED;
 			} else {
 				ret = SMC_GET_GP(gpregs, CTX_GPREG_X3);
+				spmc_nwd_ffa_version = (uint32_t)ret;
 			}
 
 			/*
@@ -1058,7 +1101,7 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 			return spmd_smc_forward(ret, true, FFA_PARAM_MBZ,
 						FFA_PARAM_MBZ, FFA_PARAM_MBZ,
 						FFA_PARAM_MBZ, cookie, gpregs,
-						flags);
+						flags, spmc_nwd_ffa_version);
 		} else {
 			ret = MAKE_FFA_VERSION(FFA_VERSION_MAJOR,
 					       FFA_VERSION_MINOR);
@@ -1079,7 +1122,7 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 		if (!secure_origin) {
 			return spmd_smc_forward(smc_fid, secure_origin,
 						x1, x2, x3, x4, cookie,
-						handle, flags);
+						handle, flags, secure_ffa_version);
 		}
 
 		/*
@@ -1161,7 +1204,7 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 		break; /* not reached */
 
 	case FFA_MSG_SEND_DIRECT_REQ2_SMC64:
-		if (get_common_ffa_version() < MAKE_FFA_VERSION(U(1), U(2))) {
+		if (get_common_ffa_version(secure_ffa_version) < MAKE_FFA_VERSION(U(1), U(2))) {
 			/* Call not supported at this version */
 			return spmd_ffa_error_return(handle, FFA_ERROR_NOT_SUPPORTED);
 		}
@@ -1207,12 +1250,12 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 			/* Forward direct message to the other world */
 			return spmd_smc_forward(smc_fid, secure_origin,
 						x1, x2, x3, x4, cookie,
-						handle, flags);
+						handle, flags, secure_ffa_version);
 		}
 		break; /* Not reached */
 
 	case FFA_MSG_SEND_DIRECT_RESP2_SMC64:
-		if (get_common_ffa_version() < MAKE_FFA_VERSION(U(1), U(2))) {
+		if (get_common_ffa_version(secure_ffa_version) < MAKE_FFA_VERSION(U(1), U(2))) {
 			/* Call not supported at this version */
 			return spmd_ffa_error_return(handle, FFA_ERROR_NOT_SUPPORTED);
 		}
@@ -1226,7 +1269,7 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 			/* Forward direct message to the other world */
 			return spmd_smc_forward(smc_fid, secure_origin,
 						x1, x2, x3, x4, cookie,
-						handle, flags);
+						handle, flags, secure_ffa_version);
 		}
 		break; /* Not reached */
 	case FFA_RX_RELEASE:
@@ -1245,6 +1288,7 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 	case FFA_NOTIFICATION_INFO_GET_SMC64:
 	case FFA_MSG_SEND2:
 	case FFA_RX_ACQUIRE:
+	case FFA_NS_RES_INFO_GET_SMC64:
 #endif
 	case FFA_MSG_RUN:
 		/*
@@ -1286,7 +1330,7 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 
 		return spmd_smc_forward(smc_fid, secure_origin,
 					x1, x2, x3, x4, cookie,
-					handle, flags);
+					handle, flags, secure_ffa_version);
 		break; /* not reached */
 
 	case FFA_MSG_WAIT:
@@ -1317,7 +1361,7 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 
 		return spmd_smc_forward(smc_fid, secure_origin,
 					x1, x2, x3, x4, cookie,
-					handle, flags);
+					handle, flags, secure_ffa_version);
 		break; /* not reached */
 
 	case FFA_NORMAL_WORLD_RESUME:
@@ -1341,7 +1385,7 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 
 		return spmd_smc_forward(smc_fid, secure_origin,
 					x1, x2, x3, x4, cookie,
-					handle, flags);
+					handle, flags, secure_ffa_version);
 		break; /* Not reached */
 #endif
 	case FFA_CONSOLE_LOG_SMC32:
@@ -1356,6 +1400,18 @@ uint64_t spmd_smc_handler(uint32_t smc_fid,
 		} else {
 			return spmd_ffa_error_return(handle, FFA_ERROR_NOT_SUPPORTED);
 		}
+	case FFA_ABORT_SMC32:
+	case FFA_ABORT_SMC64:
+		/* This interface must be invoked only by the Secure world */
+		if (!secure_origin) {
+			return spmd_ffa_error_return(handle, FFA_ERROR_NOT_SUPPORTED);
+		}
+
+		ERROR("SPMC encountered a fatal error. Aborting now\n");
+		panic();
+
+		/* Not reached. */
+		SMC_RET0(handle);
 	default:
 		WARN("SPM: Unsupported call 0x%08x\n", smc_fid);
 		return spmd_ffa_error_return(handle, FFA_ERROR_NOT_SUPPORTED);

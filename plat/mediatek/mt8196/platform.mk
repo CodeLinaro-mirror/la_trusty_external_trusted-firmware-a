@@ -45,11 +45,13 @@ MODULES-y += $(MTK_PLAT)/lib/pm
 MODULES-y += $(MTK_PLAT)/lib/system_reset
 MODULES-y += $(MTK_PLAT)/drivers/apusys
 MODULES-y += $(MTK_PLAT)/drivers/cirq
+MODULES-y += $(MTK_PLAT)/drivers/cpu_qos
 MODULES-y += $(MTK_PLAT)/drivers/dp
 MODULES-y += $(MTK_PLAT)/drivers/emi
 MODULES-y += $(MTK_PLAT)/drivers/gicv3
 MODULES-y += $(MTK_PLAT)/drivers/mcusys
 MODULES-y += $(MTK_PLAT)/drivers/mminfra
+MODULES-y += $(MTK_PLAT)/drivers/slbc
 MODULES-y += $(MTK_PLAT)/drivers/smmu
 MODULES-y += $(MTK_PLAT)/drivers/spm
 MODULES-y += $(MTK_PLAT)/drivers/timer
@@ -59,13 +61,13 @@ MODULES-y += $(MTK_PLAT)/helpers
 MODULES-y += $(MTK_PLAT)/topology
 MODULES-$(CONFIG_MTK_CPU_PM_SUPPORT) += $(MTK_PLAT)/drivers/cpu_pm
 MODULES-$(CONFIG_MTK_PMIC) += $(MTK_PLAT)/drivers/pmic
+MODULES-$(CONFIG_MTK_SMMU_SID) += $(MTK_PLAT)/drivers/smmu_sid
 MODULES-$(CONFIG_MTK_SPMI) += $(MTK_PLAT)/drivers/spmi
 
 MODULES-$(CONFIG_MTK_MTCMOS) += $(MTK_PLAT)/drivers/mtcmos
 
 ifneq ($(MTKLIB_PATH),)
-LDFLAGS += -L $(dir $(MTKLIB_PATH))
-LDLIBS += -Wl,--whole-archive -l$(patsubst lib%.a,%,$(notdir $(MTKLIB_PATH))) -Wl,--no-whole-archive
+LDLIBS += -Wl,--whole-archive $(MTKLIB_PATH) -Wl,--no-whole-archive
 endif
 
 PLAT_BL_COMMON_SOURCES := common/desc_image_load.c \
