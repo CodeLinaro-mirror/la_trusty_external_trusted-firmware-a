@@ -152,14 +152,14 @@
 	 * If the field equals 1, branch targets trained in one context cannot
 	 * affect speculative execution in a different context.
 	 *
-	 * If the field equals 2, it means that the system is also aware of
+	 * If the field equals 2 or 3, it means that the system is also aware of
 	 * SCXTNUM_ELx register contexts. We aren't using them in the TF, so we
 	 * expect users of the registers to do the right thing.
 	 *
 	 * Only apply mitigations if the value of this field is 0.
 	 */
 #if ENABLE_ASSERTIONS
-	cmp	\_reg, #3 /* Only values 0 to 2 are expected */
+	cmp	\_reg, #4 /* Only values 0 to 3 are expected */
 	ASM_ASSERT(lo)
 #endif
 
@@ -651,6 +651,17 @@
 	sysreg_bit_set CPUPPMCR_EL3, CPUMPMMCR_EL3_MPMM_EN_BIT
 	1:
 #endif
+.endm
+
+/*
+ * Call this just before a return to indicate support for pabandon. Only
+ * necessary on an abandon call, but harmless on a powerdown call.
+ *
+ * PSCI wants us to tell it we handled a pabandon by returning 0. This is the
+ * only way support for it is indicated.
+ */
+.macro signal_pabandon_handled
+	mov_imm	x0, PABANDON_ACK
 .endm
 
 #endif /* CPU_MACROS_S */

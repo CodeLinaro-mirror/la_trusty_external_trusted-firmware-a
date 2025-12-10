@@ -9,6 +9,7 @@
 #include <common/debug.h>
 #include <lib/mmio.h>
 
+#include "../lib/utils/alignment_utils.h"
 #include "socfpga_plat_def.h"
 #include "socfpga_fcs.h"
 #include "socfpga_mailbox.h"
@@ -25,7 +26,7 @@ static fcs_crypto_service_data fcs_sha2_data_sig_verify_param;
 static fcs_crypto_service_data fcs_ecdsa_get_pubkey_param;
 static fcs_crypto_service_data fcs_ecdh_request_param;
 
-uint8_t fcs_send_cert_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
+uint8_t fcs_send_cert_cb(void *resp_desc, void *cmd_desc, uint64_t *ret_args)
 {
 	uint8_t ret_args_len = 0U;
 	sdm_response_t *resp = (sdm_response_t *)resp_desc;
@@ -42,7 +43,7 @@ uint8_t fcs_send_cert_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
 	return ret_args_len;
 }
 
-uint8_t fcs_cntr_set_preauth_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
+uint8_t fcs_cntr_set_preauth_cb(void *resp_desc, void *cmd_desc, uint64_t *ret_args)
 {
 	uint8_t ret_args_len = 0U;
 	sdm_response_t *resp = (sdm_response_t *)resp_desc;
@@ -57,13 +58,12 @@ uint8_t fcs_cntr_set_preauth_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_a
 	return ret_args_len;
 }
 
-uint8_t fcs_get_attest_cert_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
+uint8_t fcs_get_attest_cert_cb(void *resp_desc, void *cmd_desc, uint64_t *ret_args)
 {
 	uint8_t ret_args_len = 0U;
 	sdm_response_t *resp = (sdm_response_t *)resp_desc;
 	sdm_command_t *cmd = (sdm_command_t *)cmd_desc;
 
-	(void)cmd;
 	INFO("MBOX: %s: mailbox_err 0x%x, nbytes_ret %d\n",
 		__func__, resp->err_code, resp->rcvd_resp_len * MBOX_WORD_BYTE);
 
@@ -71,10 +71,13 @@ uint8_t fcs_get_attest_cert_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_ar
 	ret_args[ret_args_len++] = resp->err_code;
 	ret_args[ret_args_len++] = resp->rcvd_resp_len * MBOX_WORD_BYTE;
 
+	/* Flush the response data buffer. */
+	flush_dcache_range((uintptr_t)cmd->cb_args, resp->rcvd_resp_len * MBOX_WORD_BYTE);
+
 	return ret_args_len;
 }
 
-uint8_t fcs_hkdf_request_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
+uint8_t fcs_hkdf_request_cb(void *resp_desc, void *cmd_desc, uint64_t *ret_args)
 {
 	uint8_t ret_args_len = 0U;
 	sdm_response_t *resp = (sdm_response_t *)resp_desc;
@@ -92,7 +95,7 @@ uint8_t fcs_hkdf_request_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
 	return ret_args_len;
 }
 
-uint8_t fcs_create_cert_reload_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
+uint8_t fcs_create_cert_reload_cb(void *resp_desc, void *cmd_desc, uint64_t *ret_args)
 {
 	uint8_t ret_args_len = 0U;
 	sdm_response_t *resp = (sdm_response_t *)resp_desc;
@@ -107,13 +110,12 @@ uint8_t fcs_create_cert_reload_cb(void *resp_desc, void *cmd_desc, uint32_t *ret
 	return ret_args_len;
 }
 
-uint8_t fcs_cs_get_digest_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
+uint8_t fcs_cs_get_digest_cb(void *resp_desc, void *cmd_desc, uint64_t *ret_args)
 {
 	uint8_t ret_args_len = 0U;
 	sdm_response_t *resp = (sdm_response_t *)resp_desc;
 	sdm_command_t *cmd = (sdm_command_t *)cmd_desc;
 
-	(void)cmd;
 	INFO("MBOX: %s: mbox_err  0x%x, nbytes_ret %d\n", __func__,
 		resp->err_code, resp->rcvd_resp_len * MBOX_WORD_BYTE);
 
@@ -121,36 +123,40 @@ uint8_t fcs_cs_get_digest_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_args
 	ret_args[ret_args_len++] = resp->err_code;
 	ret_args[ret_args_len++] = resp->rcvd_resp_len * MBOX_WORD_BYTE;
 
+	/* Flush the response data buffer. */
+	flush_dcache_range((uintptr_t)cmd->cb_args, resp->rcvd_resp_len * MBOX_WORD_BYTE);
+
 	return ret_args_len;
 }
 
-uint8_t fcs_cs_mac_verify_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
+uint8_t fcs_cs_mac_verify_cb(void *resp_desc, void *cmd_desc, uint64_t *ret_args)
 {
 	uint8_t ret_args_len = 0U;
 	sdm_response_t *resp = (sdm_response_t *)resp_desc;
 	sdm_command_t *cmd = (sdm_command_t *)cmd_desc;
 
-	(void)cmd;
 	INFO("MBOX: %s: mbox_err 0x%x, nbytes_ret %d, verify_result 0x%x\n",
 		__func__, resp->err_code,
 		resp->rcvd_resp_len * MBOX_WORD_BYTE,
-		resp->resp_data[3]);
+		cmd->cb_args[3]);
 
 	ret_args[ret_args_len++] = INTEL_SIP_SMC_STATUS_OK;
 	ret_args[ret_args_len++] = resp->err_code;
 	ret_args[ret_args_len++] = resp->rcvd_resp_len * MBOX_WORD_BYTE;
-	ret_args[ret_args_len++] = resp->resp_data[3];
+	ret_args[ret_args_len++] = cmd->cb_args[3];
+
+	/* Flush the response data buffer. */
+	flush_dcache_range((uintptr_t)cmd->cb_args, resp->rcvd_resp_len * MBOX_WORD_BYTE);
 
 	return ret_args_len;
 }
 
-uint8_t fcs_cs_hash_sign_req_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
+uint8_t fcs_cs_hash_sign_req_cb(void *resp_desc, void *cmd_desc, uint64_t *ret_args)
 {
 	uint8_t ret_args_len = 0U;
 	sdm_response_t *resp = (sdm_response_t *)resp_desc;
 	sdm_command_t *cmd = (sdm_command_t *)cmd_desc;
 
-	(void)cmd;
 	INFO("MBOX: %s: [0] 0%x, [1] 0x%x, [2] 0x%x, len_words %d\n",
 			__func__, resp->resp_data[0], resp->resp_data[1],
 			resp->resp_data[2], resp->rcvd_resp_len);
@@ -159,16 +165,18 @@ uint8_t fcs_cs_hash_sign_req_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_a
 	ret_args[ret_args_len++] = resp->err_code;
 	ret_args[ret_args_len++] = resp->rcvd_resp_len * MBOX_WORD_BYTE;
 
+	/* Flush the response data buffer. */
+	flush_dcache_range((uintptr_t)cmd->cb_args, resp->rcvd_resp_len * MBOX_WORD_BYTE);
+
 	return ret_args_len;
 }
 
-uint8_t fcs_cs_hash_sig_verify_req_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
+uint8_t fcs_cs_hash_sig_verify_req_cb(void *resp_desc, void *cmd_desc, uint64_t *ret_args)
 {
 	uint8_t ret_args_len = 0U;
 	sdm_response_t *resp = (sdm_response_t *)resp_desc;
 	sdm_command_t *cmd = (sdm_command_t *)cmd_desc;
 
-	(void)cmd;
 	INFO("MBOX: %s: [0] 0%x, [1] 0x%x, [2] 0x%x, [3] 0x%x\n",
 			__func__, resp->resp_data[0], resp->resp_data[1],
 			resp->resp_data[2], resp->resp_data[3]);
@@ -177,34 +185,40 @@ uint8_t fcs_cs_hash_sig_verify_req_cb(void *resp_desc, void *cmd_desc, uint32_t 
 	ret_args[ret_args_len++] = resp->err_code;
 	ret_args[ret_args_len++] = resp->rcvd_resp_len * MBOX_WORD_BYTE;
 
+	/* Flush the response data buffer. */
+	flush_dcache_range((uintptr_t)cmd->cb_args, resp->rcvd_resp_len * MBOX_WORD_BYTE);
+
 	return ret_args_len;
 }
 
-uint8_t fcs_cs_aes_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
+uint8_t fcs_cs_aes_cb(void *resp_desc, void *cmd_desc, uint64_t *ret_args)
 {
 	uint8_t ret_args_len = 0U;
+	uint32_t nbytes_ret = 0U;
 	sdm_response_t *resp = (sdm_response_t *)resp_desc;
 	sdm_command_t *cmd = (sdm_command_t *)cmd_desc;
 
 	(void)cmd;
 
+	/* Data size written to the destination is always at last index of the response data. */
+	nbytes_ret = resp->resp_data[resp->rcvd_resp_len - 1];
+
 	INFO("MBOX: %s: mbox_err 0x%x, nbytes_ret %d\n", __func__,
-		resp->err_code, resp->resp_data[3]);
+		resp->err_code, nbytes_ret);
 
 	ret_args[ret_args_len++] = INTEL_SIP_SMC_STATUS_OK;
 	ret_args[ret_args_len++] = resp->err_code;
-	ret_args[ret_args_len++] = resp->resp_data[3];
+	ret_args[ret_args_len++] = nbytes_ret;
 
 	return ret_args_len;
 }
 
-uint8_t fcs_cs_data_sign_req_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
+uint8_t fcs_cs_data_sign_req_cb(void *resp_desc, void *cmd_desc, uint64_t *ret_args)
 {
 	uint8_t ret_args_len = 0U;
 	sdm_response_t *resp = (sdm_response_t *)resp_desc;
 	sdm_command_t *cmd = (sdm_command_t *)cmd_desc;
 
-	(void)cmd;
 	INFO("MBOX: %s: mbox_err 0x%x, nbytes_ret %d\n", __func__,
 		resp->err_code, resp->rcvd_resp_len * MBOX_WORD_BYTE);
 
@@ -212,10 +226,12 @@ uint8_t fcs_cs_data_sign_req_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_a
 	ret_args[ret_args_len++] = resp->err_code;
 	ret_args[ret_args_len++] = resp->rcvd_resp_len * MBOX_WORD_BYTE;
 
+	/* Flush the response data buffer. */
+	flush_dcache_range((uintptr_t)cmd->cb_args, resp->rcvd_resp_len * MBOX_WORD_BYTE);
 	return ret_args_len;
 }
 
-uint8_t fcs_sdos_crypto_request_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
+uint8_t fcs_sdos_crypto_request_cb(void *resp_desc, void *cmd_desc, uint64_t *ret_args)
 {
 	uint8_t ret_args_len = 0U;
 	sdm_response_t *resp = (sdm_response_t *)resp_desc;
@@ -233,13 +249,12 @@ uint8_t fcs_sdos_crypto_request_cb(void *resp_desc, void *cmd_desc, uint32_t *re
 	return ret_args_len;
 }
 
-uint8_t fcs_cs_get_public_key_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
+uint8_t fcs_cs_get_public_key_cb(void *resp_desc, void *cmd_desc, uint64_t *ret_args)
 {
 	uint8_t ret_args_len = 0U;
 	sdm_response_t *resp = (sdm_response_t *)resp_desc;
 	sdm_command_t *cmd = (sdm_command_t *)cmd_desc;
 
-	(void)cmd;
 	INFO("MBOX: %s: mbox_err 0x%x, nbytes_ret %u\n",
 			__func__, resp->err_code,
 			resp->rcvd_resp_len * MBOX_WORD_BYTE);
@@ -248,16 +263,18 @@ uint8_t fcs_cs_get_public_key_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_
 	ret_args[ret_args_len++] = resp->err_code;
 	ret_args[ret_args_len++] = resp->rcvd_resp_len * MBOX_WORD_BYTE;
 
+	/* Flush the response data buffer. */
+	flush_dcache_range((uintptr_t)cmd->cb_args, resp->rcvd_resp_len * MBOX_WORD_BYTE);
+
 	return ret_args_len;
 }
 
-uint8_t fcs_cs_data_sig_verify_req_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
+uint8_t fcs_cs_data_sig_verify_req_cb(void *resp_desc, void *cmd_desc, uint64_t *ret_args)
 {
 	uint8_t ret_args_len = 0U;
 	sdm_response_t *resp = (sdm_response_t *)resp_desc;
 	sdm_command_t *cmd = (sdm_command_t *)cmd_desc;
 
-	(void)cmd;
 	INFO("MBOX: %s: mbox_err 0x%x, nbytes_ret 0x%x\n",
 			__func__, resp->err_code, resp->rcvd_resp_len);
 
@@ -265,16 +282,18 @@ uint8_t fcs_cs_data_sig_verify_req_cb(void *resp_desc, void *cmd_desc, uint32_t 
 	ret_args[ret_args_len++] = resp->err_code;
 	ret_args[ret_args_len++] = resp->rcvd_resp_len * MBOX_WORD_BYTE;
 
+	/* Flush the response data buffer. */
+	flush_dcache_range((uintptr_t)cmd->cb_args, resp->rcvd_resp_len * MBOX_WORD_BYTE);
+
 	return ret_args_len;
 }
 
-uint8_t fcs_cs_ecdh_request_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_args)
+uint8_t fcs_cs_ecdh_request_cb(void *resp_desc, void *cmd_desc, uint64_t *ret_args)
 {
 	uint8_t ret_args_len = 0U;
 	sdm_response_t *resp = (sdm_response_t *)resp_desc;
 	sdm_command_t *cmd = (sdm_command_t *)cmd_desc;
 
-	(void)cmd;
 	INFO("MBOX: %s: [0] 0%x, [1] 0x%x, [2] 0x%x, len_words %d\n",
 			__func__, resp->resp_data[0], resp->resp_data[1],
 			resp->resp_data[2], resp->rcvd_resp_len);
@@ -283,34 +302,10 @@ uint8_t fcs_cs_ecdh_request_cb(void *resp_desc, void *cmd_desc, uint32_t *ret_ar
 	ret_args[ret_args_len++] = resp->err_code;
 	ret_args[ret_args_len++] = resp->rcvd_resp_len * MBOX_WORD_BYTE;
 
+	/* Flush the response data buffer. */
+	flush_dcache_range((uintptr_t)cmd->cb_args, resp->rcvd_resp_len * MBOX_WORD_BYTE);
+
 	return ret_args_len;
-}
-
-bool is_size_4_bytes_aligned(uint32_t size)
-{
-	if ((size % MBOX_WORD_BYTE) != 0U) {
-		return false;
-	} else {
-		return true;
-	}
-}
-
-static bool is_8_bytes_aligned(uint32_t data)
-{
-	if ((data % (MBOX_WORD_BYTE * 2U)) != 0U) {
-		return false;
-	} else {
-		return true;
-	}
-}
-
-static bool is_32_bytes_aligned(uint32_t data)
-{
-	if ((data % (8U * MBOX_WORD_BYTE)) != 0U) {
-		return false;
-	} else {
-		return true;
-	}
 }
 
 static int intel_fcs_crypto_service_init(uint32_t session_id,
@@ -2708,7 +2703,7 @@ int intel_fcs_aes_crypt_update_finalize(uint32_t smc_fid, uint32_t trans_id,
 				uint32_t session_id, uint32_t context_id,
 				uint64_t src_addr, uint32_t src_size,
 				uint64_t dst_addr, uint32_t dst_size,
-				uint32_t aad_size, uint8_t is_finalised,
+				uint32_t padding_size, uint8_t is_finalised,
 				uint32_t *send_id, uint64_t smmu_src_addr,
 				uint64_t smmu_dst_addr)
 {
@@ -2719,30 +2714,55 @@ int intel_fcs_aes_crypt_update_finalize(uint32_t smc_fid, uint32_t trans_id,
 	uint32_t fcs_aes_crypt_payload[FCS_AES_CMD_MAX_WORD_SIZE];
 	uint32_t src_addr_sdm = (uint32_t)src_addr;
 	uint32_t dst_addr_sdm = (uint32_t)dst_addr;
+	bool is_src_size_aligned;
+	bool is_dst_size_aligned;
+	bool is_src_size_valid;
+	bool is_dst_size_valid;
 
 	if (fcs_aes_init_payload.session_id != session_id ||
 		fcs_aes_init_payload.context_id != context_id) {
 		return INTEL_SIP_SMC_STATUS_REJECTED;
 	}
 
+	/* Default source and destination size align check, 32 bytes alignment. */
+	is_src_size_aligned = is_32_bytes_aligned(src_size);
+	is_dst_size_aligned = is_32_bytes_aligned(dst_size);
+	is_src_size_valid = FCS_AES_DATA_SIZE_CHECK(src_size);
+	is_dst_size_valid = FCS_AES_DATA_SIZE_CHECK(dst_size);
+
+	/*
+	 * Get the requested block mode.
+	 * On the Agilex5 platform with GCM and GCM-GHASH modes, the source and destination size
+	 * should be in multiples of 16 bytes. For other platforms and other modes, it should be
+	 * in multiples of 32 bytes.
+	 */
+#if PLATFORM_MODEL == PLAT_SOCFPGA_AGILEX5
+	uint32_t block_mode = fcs_aes_init_payload.crypto_param[0] & FCS_CRYPTO_BLOCK_MODE_MASK;
+
+	if ((block_mode == FCS_CRYPTO_GCM_MODE) ||
+	    (block_mode == FCS_CRYPTO_GCM_GHASH_MODE)) {
+		is_src_size_aligned = is_16_bytes_aligned(src_size);
+		is_dst_size_aligned = is_16_bytes_aligned(dst_size);
+		/* The size validity here is, should be 0 or multiples of 16 bytes. */
+		is_src_size_valid = is_16_bytes_aligned(src_size);
+		is_dst_size_valid = is_16_bytes_aligned(dst_size);
+	}
+#endif
+
 	if ((!is_8_bytes_aligned(src_addr)) ||
-		(!is_32_bytes_aligned(src_size)) ||
+		(!is_src_size_aligned) ||
 		(!is_address_in_ddr_range(src_addr, src_size))) {
 		return INTEL_SIP_SMC_STATUS_REJECTED;
 	}
 
 	if ((!is_8_bytes_aligned(dst_addr)) ||
-		(!is_32_bytes_aligned(dst_size)) ||
+		(!is_dst_size_aligned) ||
 		(!is_address_in_ddr_range(dst_addr, dst_size))) {
 		return INTEL_SIP_SMC_STATUS_REJECTED;
 	}
 
-	if ((dst_size > FCS_AES_MAX_DATA_SIZE ||
-		dst_size < FCS_AES_MIN_DATA_SIZE) ||
-		(src_size > FCS_AES_MAX_DATA_SIZE ||
-		src_size < FCS_AES_MIN_DATA_SIZE)) {
+	if (!is_src_size_valid || !is_dst_size_valid)
 		return INTEL_SIP_SMC_STATUS_REJECTED;
-	}
 
 	/* Prepare crypto header*/
 	flag = 0;
@@ -2802,11 +2822,14 @@ int intel_fcs_aes_crypt_update_finalize(uint32_t smc_fid, uint32_t trans_id,
 	fcs_aes_crypt_payload[i] = dst_size;
 	i++;
 
-	/* Additional Authenticated Data size */
-	if (aad_size > 0) {
-		fcs_aes_crypt_payload[i] = aad_size;
+	/* Padding data size, only on Agilex5 with GCM and GCM-GHASH modes. */
+#if PLATFORM_MODEL == PLAT_SOCFPGA_AGILEX5
+	if ((block_mode == FCS_CRYPTO_GCM_MODE) ||
+	    (block_mode == FCS_CRYPTO_GCM_GHASH_MODE)) {
+		fcs_aes_crypt_payload[i] = padding_size;
 		i++;
 	}
+#endif
 
 	status = ((smc_fid == ALTERA_SIP_SMC_ASYNC_FCS_AES_CRYPT_UPDATE) ||
 		  (smc_fid == ALTERA_SIP_SMC_ASYNC_FCS_AES_CRYPT_FINALIZE)) ?
@@ -2828,7 +2851,7 @@ int intel_fcs_aes_crypt_update_finalize(uint32_t smc_fid, uint32_t trans_id,
 			sizeof(fcs_aes_init_payload));
 	}
 
-	if (status < 0U) {
+	if (status < 0) {
 		return INTEL_SIP_SMC_STATUS_ERROR;
 	}
 

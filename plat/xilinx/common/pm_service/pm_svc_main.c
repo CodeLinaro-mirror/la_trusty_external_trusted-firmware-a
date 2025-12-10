@@ -15,6 +15,7 @@
 
 #include "../drivers/arm/gic/v3/gicv3_private.h"
 
+#include <common/ep_info.h>
 #include <common/runtime_svc.h>
 #include <drivers/arm/gicv3.h>
 #include <lib/psci/psci.h>
@@ -29,7 +30,6 @@
 
 #define MODE				0x80000000U
 
-#define XSCUGIC_SGIR_EL1_INITID_SHIFT    24U
 #define INVALID_SGI    0xFFU
 #define PM_INIT_SUSPEND_CB	(30U)
 #define PM_NOTIFY_CB		(32U)
@@ -68,7 +68,12 @@
 /* pm_up = true - UP, pm_up = false - DOWN */
 static bool pm_up;
 static uint32_t sgi = (uint32_t)INVALID_SGI;
-bool pwrdwn_req_received;
+static bool pwrdwn_req_received;
+
+bool pm_pwrdwn_req_status(void)
+{
+	return pwrdwn_req_received;
+}
 
 static void notify_os(void)
 {
@@ -171,7 +176,8 @@ static uint64_t ipi_fiq_handler(uint32_t id, uint32_t flags, void *handle,
 		break;
 	case PM_NOTIFY_CB:
 		if (sgi != INVALID_SGI) {
-			if (payload[2] == EVENT_CPU_PWRDWN) {
+			if ((payload[2] == EVENT_CPU_PWRDWN) &&
+			    (NODECLASS(payload[1]) == (uint32_t)XPM_NODECLASS_DEVICE)) {
 				if (pwrdwn_req_received) {
 					pwrdwn_req_received = false;
 					request_cpu_pwrdwn();
@@ -183,7 +189,8 @@ static uint64_t ipi_fiq_handler(uint32_t id, uint32_t flags, void *handle,
 			}
 			notify_os();
 		} else {
-			if (payload[2] == EVENT_CPU_PWRDWN) {
+			if ((payload[2] == EVENT_CPU_PWRDWN) &&
+			    (NODECLASS(payload[1]) == (uint32_t)XPM_NODECLASS_DEVICE)) {
 				request_cpu_pwrdwn();
 				(void)psci_cpu_off();
 			}
@@ -256,6 +263,7 @@ int32_t pm_setup(void)
 
 	pm_ipi_init(primary_proc);
 	pm_up = true;
+	pwrdwn_req_received = false;
 
 	/* register SGI handler for CPU power down request */
 	ret = request_intr_type_el3(CPU_PWR_DOWN_REQ_INTR, cpu_pwrdwn_req_handler);
@@ -280,7 +288,7 @@ int32_t pm_setup(void)
 
 	/* Register for idle callback during force power down/restart */
 	ret = (int32_t)pm_register_notifier(primary_proc->node_id, EVENT_CPU_PWRDWN,
-				   0x0U, 0x1U, SECURE_FLAG);
+					    0x0U, 0x1U, SECURE);
 	if (ret != 0) {
 		WARN("BL31: registering idle callback for restart/force power down failed\n");
 	}
@@ -293,7 +301,7 @@ int32_t pm_setup(void)
  * @api_id: identifier for the API being called.
  * @pm_arg: pointer to the argument data for the API call.
  * @handle: Pointer to caller's context structure.
- * @security_flag: SECURE_FLAG or NON_SECURE_FLAG.
+ * @security_flag: SECURE or NON_SECURE.
  *
  * Return: If EEMI API found then, uintptr_t type address, else 0.
  *
@@ -303,7 +311,7 @@ int32_t pm_setup(void)
  * until their use case in linux driver changes.
  *
  */
-static uintptr_t eemi_for_compatibility(uint32_t api_id, uint32_t *pm_arg,
+static uintptr_t eemi_for_compatibility(uint32_t api_id, const uint32_t *pm_arg,
 					void *handle, uint32_t security_flag)
 {
 	enum pm_ret_status ret;
@@ -336,7 +344,7 @@ static uintptr_t eemi_for_compatibility(uint32_t api_id, uint32_t *pm_arg,
  * @api_id: identifier for the API being called.
  * @pm_arg: pointer to the argument data for the API call.
  * @handle: Pointer to caller's context structure.
- * @security_flag: SECURE_FLAG or NON_SECURE_FLAG.
+ * @security_flag: SECURE or NON_SECURE.
  *
  * These EEMI APIs performs CPU specific power management tasks.
  * These EEMI APIs are invoked either from PSCI or from debugfs in kernel.
@@ -348,7 +356,7 @@ static uintptr_t eemi_for_compatibility(uint32_t api_id, uint32_t *pm_arg,
  * Return: If EEMI API found then, uintptr_t type address, else 0.
  *
  */
-static uintptr_t eemi_psci_debugfs_handler(uint32_t api_id, uint32_t *pm_arg,
+static uintptr_t eemi_psci_debugfs_handler(uint32_t api_id, const uint32_t *pm_arg,
 					   void *handle, uint32_t security_flag)
 {
 	enum pm_ret_status ret;
@@ -364,15 +372,6 @@ static uintptr_t eemi_psci_debugfs_handler(uint32_t api_id, uint32_t *pm_arg,
 		ret = pm_force_powerdown(pm_arg[0], (uint8_t)pm_arg[1], security_flag);
 		SMC_RET1(handle, (u_register_t)ret);
 
-	case (uint32_t)PM_REQ_SUSPEND:
-		ret = pm_req_suspend(pm_arg[0], (uint8_t)pm_arg[1], pm_arg[2],
-				     pm_arg[3], security_flag);
-		SMC_RET1(handle, (u_register_t)ret);
-
-	case (uint32_t)PM_ABORT_SUSPEND:
-		ret = pm_abort_suspend((enum pm_abort_reason)pm_arg[0], security_flag);
-		SMC_RET1(handle, (u_register_t)ret);
-
 	case (uint32_t)PM_SYSTEM_SHUTDOWN:
 		ret = pm_system_shutdown(pm_arg[0], pm_arg[1], security_flag);
 		SMC_RET1(handle, (u_register_t)ret);
@@ -383,11 +382,28 @@ static uintptr_t eemi_psci_debugfs_handler(uint32_t api_id, uint32_t *pm_arg,
 }
 
 /**
+ * tfa_clear_pm_state() - Reset TF-A-specific PM state.
+ *
+ * This function resets TF-A-specific state that may have been modified,
+ * such as during a kexec-based kernel reload. It resets the SGI number
+ * and the shutdown scope to its default value.
+ */
+static enum pm_ret_status tfa_clear_pm_state(void)
+{
+	/* Reset SGI number to default value(-1). */
+	sgi = (uint32_t)INVALID_SGI;
+
+	/* Reset the shutdown scope to its default value(system). */
+	return pm_system_shutdown(XPM_SHUTDOWN_TYPE_SETSCOPE_ONLY, XPM_SHUTDOWN_SUBTYPE_RST_SYSTEM,
+				  0U);
+}
+
+/**
  * TF_A_specific_handler() - SMC handler for TF-A specific functionality.
  * @api_id: identifier for the API being called.
  * @pm_arg: pointer to the argument data for the API call.
  * @handle: Pointer to caller's context structure.
- * @security_flag: SECURE_FLAG or NON_SECURE_FLAG.
+ * @security_flag: SECURE or NON_SECURE.
  *
  * These EEMI calls performs functionality that does not require
  * IPI transaction. The handler ends in TF-A and returns requested data to
@@ -396,7 +412,7 @@ static uintptr_t eemi_psci_debugfs_handler(uint32_t api_id, uint32_t *pm_arg,
  * Return: If TF-A specific API found then, uintptr_t type address, else 0
  *
  */
-static uintptr_t TF_A_specific_handler(uint32_t api_id, uint32_t *pm_arg,
+static uintptr_t TF_A_specific_handler(uint32_t api_id, const uint32_t *pm_arg,
 				       void *handle, uint32_t security_flag)
 {
 	switch (api_id) {
@@ -406,7 +422,7 @@ static uintptr_t TF_A_specific_handler(uint32_t api_id, uint32_t *pm_arg,
 		enum pm_ret_status ret;
 		uint32_t result[PAYLOAD_ARG_CNT] = {0U};
 
-		ret = eemi_feature_check(pm_arg[0], result);
+		ret = tfa_api_feature_check(pm_arg[0], result);
 		SMC_RET1(handle, (uint64_t)ret | ((uint64_t)result[0] << 32U));
 	}
 
@@ -441,6 +457,15 @@ static uintptr_t TF_A_specific_handler(uint32_t api_id, uint32_t *pm_arg,
 		SMC_RET1(handle, (uint64_t)PM_RET_SUCCESS |
 			 ((uint64_t)TZ_VERSION << 32U));
 
+	case TF_A_CLEAR_PM_STATE:
+	{
+		enum pm_ret_status ret;
+
+		ret = tfa_clear_pm_state();
+
+		SMC_RET1(handle, (uint64_t)ret);
+	}
+
 	default:
 		return (uintptr_t)0;
 	}
@@ -451,7 +476,7 @@ static uintptr_t TF_A_specific_handler(uint32_t api_id, uint32_t *pm_arg,
  * @api_id: identifier for the API being called.
  * @pm_arg: pointer to the argument data for the API call.
  * @handle: Pointer to caller's context structure.
- * @security_flag: SECURE_FLAG or NON_SECURE_FLAG.
+ * @security_flag: SECURE or NON_SECURE.
  *
  * EEMI - Embedded Energy Management Interface is Xilinx proprietary protocol
  * to allow communication between power management controller and different
@@ -463,7 +488,7 @@ static uintptr_t TF_A_specific_handler(uint32_t api_id, uint32_t *pm_arg,
  * Return: If EEMI API found then, uintptr_t type address, else 0
  *
  */
-static uintptr_t eemi_handler(uint32_t api_id, uint32_t *pm_arg,
+static uintptr_t eemi_handler(uint32_t api_id, const uint32_t *pm_arg,
 			      void *handle, uint32_t security_flag)
 {
 	enum pm_ret_status ret;
@@ -495,7 +520,7 @@ static uintptr_t eemi_handler(uint32_t api_id, uint32_t *pm_arg,
  * @api_id: identifier for the API being called.
  * @pm_arg: pointer to the argument data for the API call.
  * @handle: Pointer to caller's context structure.
- * @security_flag: SECURE_FLAG or NON_SECURE_FLAG.
+ * @security_flag: SECURE or NON_SECURE.
  *
  * EEMI - Embedded Energy Management Interface is AMD-Xilinx proprietary
  * protocol to allow communication between power management controller and
@@ -538,7 +563,7 @@ static uintptr_t eemi_api_handler(uint32_t api_id, const uint32_t *pm_arg,
  * @x4: Unused.
  * @cookie: Unused.
  * @handle: Pointer to caller's context structure.
- * @flags: SECURE_FLAG or NON_SECURE_FLAG.
+ * @flags: SECURE or NON_SECURE.
  *
  * Return: Unused.
  *
@@ -556,7 +581,7 @@ uint64_t pm_smc_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2, uint64_t x3,
 	(void)cookie;
 	uintptr_t ret;
 	uint32_t pm_arg[PAYLOAD_ARG_CNT] = {0};
-	uint32_t security_flag = NON_SECURE_FLAG;
+	uint32_t security_flag = NON_SECURE;
 	uint32_t api_id;
 	bool status = false, status_tmp = false;
 	const uint64_t x[4] = {x1, x2, x3, x4};
@@ -574,7 +599,7 @@ uint64_t pm_smc_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2, uint64_t x3,
 	 */
 	SECURE_REDUNDANT_CALL(status, status_tmp, is_caller_secure, flags);
 	if ((status != false) && (status_tmp != false)) {
-		security_flag = SECURE_FLAG;
+		security_flag = SECURE;
 	}
 
 	if ((smc_fid & FUNCID_NUM_MASK) == PASS_THROUGH_FW_CMD_ID) {

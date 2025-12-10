@@ -811,8 +811,7 @@ data access and all interrupt sources masked:
 
 The warm boot entrypoint may be implemented by using TF-A
 ``psci_warmboot_entrypoint()`` function. In that case, the platform must fulfil
-the pre-requisites mentioned in the
-:ref:`PSCI Library Integration guide for Armv8-A AArch32 systems`.
+the pre-requisites mentioned in the :ref:`Porting Guide`.
 
 EL3 runtime services framework
 ------------------------------
@@ -1053,8 +1052,21 @@ hooks to be registered with the generic PSCI code to be supported.
 
 The PSCI implementation in TF-A is a library which can be integrated with
 AArch64 or AArch32 EL3 Runtime Software for Armv8-A systems. A guide to
-integrating PSCI library with AArch32 EL3 Runtime Software can be found
-at :ref:`PSCI Library Integration guide for Armv8-A AArch32 systems`.
+integrating the PSCI library for EL3 Runtime Software can be found
+at :ref:`Porting Guide`.
+
+DSU driver
+----------
+
+Platforms that include a DSU (DynamIQ Shared Unit) can define
+the ``USE_DSU_DRIVER`` build flag to enable the DSU driver.
+This driver is responsible for configuring DSU-related powerdown
+and power feature settings, enabling access to PMU registers at EL1
+using ``dsu_driver_init()`` and for preserving the context of DSU
+PMU system registers.
+
+To support the DSU driver, platforms must define the ``plat_dsu_data``
+structure.
 
 .. _firmware_design_sel1_spd:
 
@@ -1489,7 +1501,7 @@ CPU specific power down sequence
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 During the BL31 initialization sequence, the pointer to the matching ``cpu_ops``
-entry is stored in per-CPU data by ``init_cpu_ops()`` so that it can be quickly
+entry is stored in per-CPU data by ``cpu_data_init_cpu_ops()`` so that it can be quickly
 retrieved during power down sequences.
 
 Various CPU drivers register handlers to perform power down at certain power

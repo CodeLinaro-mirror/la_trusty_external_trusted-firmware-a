@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2018-2025, Arm Limited and Contributors. All rights reserved.
  * Copyright (c) 2018-2022, Xilinx, Inc. All rights reserved.
  * Copyright (c) 2022-2025, Advanced Micro Devices, Inc. All rights reserved.
  *
@@ -23,11 +23,14 @@
 #include <plat_console.h>
 #include <scmi.h>
 
+#include <custom_svc.h>
 #include <def.h>
 #include <plat_fdt.h>
 #include <plat_private.h>
 #include <plat_startup.h>
+#if TRANSFER_LIST
 #include <plat_xfer_list.h>
+#endif
 #include <pm_api_sys.h>
 #include <pm_client.h>
 
@@ -59,13 +62,19 @@ entry_point_info_t *bl31_plat_get_next_image_ep_info(uint32_t type)
 static inline void bl31_set_default_config(void)
 {
 	bl32_image_ep_info.pc = BL32_BASE;
-	bl32_image_ep_info.spsr = arm_get_spsr_for_bl32_entry();
+	bl32_image_ep_info.spsr = arm_get_spsr(BL32_IMAGE_ID);
 #if defined(SPD_opteed)
 #if (TRANSFER_LIST == 0)
 	/* NS dtb addr passed to optee_os */
 	bl32_image_ep_info.args.arg3 = XILINX_OF_BOARD_DTB_ADDR;
 #endif
 #endif
+
+#if defined(SPD_spmd)
+	bl32_image_ep_info.args.arg2 = XILINX_OF_BOARD_DTB_ADDR;
+	bl32_image_ep_info.args.arg0 = SPMC_MANIFEST_DTB_ADDR;
+#endif
+
 	bl33_image_ep_info.pc = plat_get_ns_image_entrypoint();
 	bl33_image_ep_info.spsr = (uint32_t)SPSR_64(MODE_EL2, MODE_SP_ELX,
 					  DISABLE_ALL_EXCEPTIONS);
@@ -186,6 +195,8 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 #endif /* SPD_tspd || SPD_opteed */
 	NOTICE("BL31: Non secure code at 0x%lx\n", bl33_image_ep_info.pc);
 
+	custom_early_setup();
+
 }
 
 static versal_intr_info_type_el3_t type_el3_interrupt_table[MAX_INTR_EL3];
@@ -219,6 +230,7 @@ exit_label:
 	return ret;
 }
 
+#if defined(SPD_none) || defined(SPD_opteed)
 static uint64_t rdo_el3_interrupt_handler(uint32_t id, uint32_t flags,
 					  void *handle, void *cookie)
 {
@@ -241,6 +253,28 @@ static uint64_t rdo_el3_interrupt_handler(uint32_t id, uint32_t flags,
 
 	return 0;
 }
+#endif
+
+#if defined(SPD_spmd)
+int plat_spmd_handle_group0_interrupt(uint32_t intid)
+{
+	uint32_t i;
+	interrupt_type_handler_t handler = NULL;
+
+	for (i = 0; i < MAX_INTR_EL3; i++) {
+		if (intid == type_el3_interrupt_table[i].id) {
+			handler = type_el3_interrupt_table[i].handler;
+		}
+	}
+
+	if (handler != NULL) {
+		/* TODO: Review handler logic and add error handling if needed */
+		(void)handler(intid, 0, NULL, NULL);
+	}
+
+	return 0;
+}
+#endif
 
 void bl31_platform_setup(void)
 {
@@ -250,13 +284,17 @@ void bl31_platform_setup(void)
 	plat_gic_driver_init();
 	plat_gic_init();
 
+#if (TFA_NO_PM == 1)
 	if (platform_id != EMU) {
 		init_scmi_server();
 	}
+#endif
 }
 
 void bl31_plat_runtime_setup(void)
 {
+	uint32_t rre_ret = 0;
+#if defined(SPD_none) || defined(SPD_opteed)
 	uint32_t flags = 0;
 	int32_t rc;
 
@@ -266,6 +304,16 @@ void bl31_plat_runtime_setup(void)
 	if (rc != 0) {
 		panic();
 	}
+#endif
+
+	/* Instead of calling for each time fill in structure early. */
+	rre_ret = retrieve_reserved_entries();
+
+	if (rre_ret != 0) {
+		INFO("Runtime FDT reserve node retreival failed");
+	}
+
+	custom_runtime_setup();
 
 	console_switch_state(CONSOLE_FLAG_RUNTIME);
 }
@@ -282,10 +330,14 @@ void bl31_plat_arch_setup(void)
 				MT_CODE | MT_SECURE),
 		MAP_REGION_FLAT(BL_RO_DATA_BASE, BL_RO_DATA_END - BL_RO_DATA_BASE,
 				MT_RO_DATA | MT_SECURE),
+#if (TFA_NO_PM == 1)
 		MAP_REGION_FLAT(SMT_BUFFER_BASE, 0x1000,
 			MT_DEVICE | MT_RW | MT_NON_CACHEABLE | MT_EXECUTE_NEVER | MT_NS),
+#endif
 		{0}
 	};
+
+	custom_mmap_add();
 
 	setup_page_tables(bl_regions, plat_get_mmap());
 	enable_mmu(0);

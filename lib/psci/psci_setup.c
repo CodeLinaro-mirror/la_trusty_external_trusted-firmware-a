@@ -13,6 +13,7 @@
 #include <context.h>
 #include <lib/cpus/errata.h>
 #include <lib/el3_runtime/context_mgmt.h>
+#include <lib/per_cpu/per_cpu.h>
 #include <plat/common/platform.h>
 
 #include "psci_private.h"
@@ -29,7 +30,7 @@ CASSERT(PLATFORM_CORE_COUNT <= (PSCI_MAX_CPUS_INDEX + 1U), assert_psci_cores_ove
  * TODO: Use the memory allocator to set aside memory for the contexts instead
  * of relying on platform defined constants.
  ******************************************************************************/
-static cpu_context_t psci_ns_context[PLATFORM_CORE_COUNT];
+static PER_CPU_DEFINE(cpu_context_t, psci_ns_context);
 static entry_point_info_t warmboot_ep_info[PLATFORM_CORE_COUNT];
 
 /******************************************************************************
@@ -58,13 +59,12 @@ static void __init psci_init_pwr_domain_node(uint16_t node_idx,
 
 		assert(node_idx < PLATFORM_CORE_COUNT);
 
-		psci_cpu_pd_nodes[node_idx].parent_node = parent_idx;
+		PER_CPU_BY_INDEX(psci_cpu_pd_nodes, node_idx)->parent_node = parent_idx;
 
 		/* Initialize with an invalid mpidr */
-		psci_cpu_pd_nodes[node_idx].mpidr = PSCI_INVALID_MPIDR;
+		PER_CPU_BY_INDEX(psci_cpu_pd_nodes, node_idx)->mpidr = PSCI_INVALID_MPIDR;
 
-		svc_cpu_data =
-			&(_cpu_data_by_index(node_idx)->psci_svc_cpu_data);
+		svc_cpu_data = &get_cpu_data_by_index(node_idx, psci_svc_cpu_data);
 
 		/* Set the Affinity Info for the cores as OFF */
 		svc_cpu_data->aff_info_state = AFF_STATE_OFF;
@@ -79,7 +79,8 @@ static void __init psci_init_pwr_domain_node(uint16_t node_idx,
 						 sizeof(*svc_cpu_data));
 
 		cm_set_context_by_index(node_idx,
-					(void *) &psci_ns_context[node_idx],
+					(void *) PER_CPU_BY_INDEX(psci_ns_context,
+					node_idx),
 					NON_SECURE);
 	}
 }
@@ -98,7 +99,7 @@ static void __init psci_update_pwrlvl_limits(void)
 	unsigned int cpu_idx;
 	int j;
 	unsigned int nodes_idx[PLAT_MAX_PWR_LVL] = {0};
-	unsigned int temp_index[PLAT_MAX_PWR_LVL];
+	unsigned int temp_index[PLAT_MAX_PWR_LVL] = {0};
 
 	for (cpu_idx = 0; cpu_idx < psci_plat_core_count; cpu_idx++) {
 		psci_get_parent_pwr_domain_nodes(cpu_idx,
@@ -161,11 +162,11 @@ static unsigned int __init populate_power_domain_tree(const unsigned char
 			num_children = topology[parent_node_index];
 
 			for (j = node_index;
-				j < (node_index + num_children); j++)
+				j < (node_index + num_children); j++) {
 				psci_init_pwr_domain_node((uint16_t)j,
 						  parent_node_index - 1U,
 						  (unsigned char)level);
-
+			}
 			node_index = j;
 			num_nodes_at_next_lvl += num_children;
 			parent_node_index++;
@@ -175,8 +176,9 @@ static unsigned int __init populate_power_domain_tree(const unsigned char
 		level--;
 
 		/* Reset the index for the cpu power domain array */
-		if (level == (int) PSCI_CPU_PWR_LVL)
+		if (level == (int) PSCI_CPU_PWR_LVL) {
 			node_index = 0;
+		}
 	}
 
 	/* Validate the sanity of array exported by the platform */
@@ -230,7 +232,7 @@ int __init psci_setup(const psci_lib_args_t *lib_args)
 	populate_cpu_data();
 
 	/* Populate the mpidr field of cpu node for this CPU */
-	psci_cpu_pd_nodes[cpu_idx].mpidr =
+	PER_CPU_BY_INDEX(psci_cpu_pd_nodes, cpu_idx)->mpidr =
 		read_mpidr() & MPIDR_AFFINITY_MASK;
 
 	psci_init_req_local_pwr_states();
@@ -314,7 +316,10 @@ void psci_arch_setup(void)
 #endif
 
 	/* Initialize the cpu_ops pointer. */
-	init_cpu_ops();
+	cpu_data_init_cpu_ops();
+
+	/* Initialize the cached percpu ID register values */
+	cm_init_percpu_once_regs();
 
 	/* Having initialized cpu_ops, we can now print errata status */
 	print_errata_status();

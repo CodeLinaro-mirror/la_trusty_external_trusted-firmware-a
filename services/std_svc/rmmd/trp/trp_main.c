@@ -97,12 +97,20 @@ int trp_validate_warmboot_args(uint64_t x0, uint64_t x1,
 	 * received from EL3 during warm boot are:
 	 *
 	 * x0: CPUID (verified earlier so not used here)
-	 * [x1:x3]: RES0
+	 * x1: activation token (ignored)
+	 * [x2:x3]: RES0
 	 */
 
 	(void)x0;
+	(void)x1;
 
-	return ((x1 | x2 | x3) == 0UL) ? 0 : E_RMM_BOOT_UNKNOWN;
+	if ((x2 | x3) != 0UL) {
+		ERROR("TRP: extra warmboot arguments not 0: x2=0x%lx, x3=0x%lx\n",
+		     x2, x3);
+		return E_RMM_BOOT_UNKNOWN;
+	}
+
+	return 0;
 }
 
 /* Main function for TRP */

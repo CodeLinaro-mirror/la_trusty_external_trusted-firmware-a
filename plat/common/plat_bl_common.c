@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2024, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2018-2025, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -9,7 +9,9 @@
 #include <arch_helpers.h>
 #include <common/bl_common.h>
 #include <common/debug.h>
-#include <lib/transfer_list.h>
+#if TRANSFER_LIST
+#include <transfer_list.h>
+#endif
 #include <lib/xlat_tables/xlat_tables_compat.h>
 #include <plat/common/platform.h>
 #include <services/arm_arch_svc.h>
@@ -29,6 +31,15 @@
 #pragma weak plat_is_smccc_feature_available
 #pragma weak plat_get_soc_version
 #pragma weak plat_get_soc_revision
+#pragma weak plat_get_soc_name
+
+/* Pointer and function to register platform function to log GPT corruption */
+const struct plat_log_gpt_corrupted *plat_log_gpt_ptr;
+
+void plat_setup_log_gpt_corrupted(const struct plat_log_gpt_corrupted *log_gpt)
+{
+	plat_log_gpt_ptr = log_gpt;
+}
 
 int32_t plat_get_soc_version(void)
 {
@@ -40,8 +51,14 @@ int32_t plat_get_soc_revision(void)
 	return SMC_ARCH_CALL_NOT_SUPPORTED;
 }
 
+int32_t plat_get_soc_name(char *soc_name __unused)
+{
+	return SMC_ARCH_CALL_NOT_SUPPORTED;
+}
+
 int32_t plat_is_smccc_feature_available(u_register_t fid __unused)
 {
+	(void)fid;
 	return SMC_ARCH_CALL_NOT_SUPPORTED;
 }
 
@@ -51,7 +68,9 @@ void bl2_el3_plat_prepare_exit(void)
 
 void __dead2 plat_error_handler(int err)
 {
-	while (1) {
+	(void)err;
+
+	while (true) {
 		wfi();
 	}
 }
@@ -62,11 +81,15 @@ void bl2_plat_preload_setup(void)
 
 int bl2_plat_handle_pre_image_load(unsigned int image_id)
 {
+	(void)image_id;
+
 	return 0;
 }
 
 int bl2_plat_handle_post_image_load(unsigned int image_id)
 {
+	(void)image_id;
+
 	return 0;
 }
 
@@ -79,6 +102,10 @@ int plat_get_enc_key_info(enum fw_enc_status_t fw_enc_status, uint8_t *key,
 			  size_t *key_len, unsigned int *flags,
 			  const uint8_t *img_id, size_t img_id_len)
 {
+	(void)fw_enc_status;
+	(void)img_id;
+	(void)img_id_len;
+
 #define DUMMY_FIP_ENC_KEY { 0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef, \
 			    0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef, \
 			    0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef, \

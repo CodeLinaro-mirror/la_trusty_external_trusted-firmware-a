@@ -55,6 +55,7 @@ is given on Table 1. On the diagram, the red broken lines indicate
 trust boundaries. Components outside of the broken lines
 are considered untrusted by TF-A.
 
+.. _tfa_dfd:
 .. uml:: ../../resources/diagrams/plantuml/tfa_dfd.puml
   :caption: Figure 1: TF-A Data Flow Diagram
 
@@ -1037,11 +1038,11 @@ Threats to be Mitigated by the Runtime EL3 Firmware
 | Affected TF-A          | BL31                                                 |
 | Components             |                                                      |
 +------------------------+------------------------------------------------------+
-| Assets                 | Sensitive Data                                       |
+| Assets                 | Availability, Sensitive data                         |
 +------------------------+------------------------------------------------------+
 | Threat Agent           | NSCode, SecCode                                      |
 +------------------------+------------------------------------------------------+
-| Threat Type            | Information Disclosure                               |
+| Threat Type            | Information disclosure, Denial of Service            |
 +------------------------+-------------------+----------------+-----------------+
 | Application            | Server            | IoT            | Mobile          |
 +------------------------+-------------------+----------------+-----------------+
@@ -1053,8 +1054,9 @@ Threats to be Mitigated by the Runtime EL3 Firmware
 +------------------------+-------------------+----------------+-----------------+
 | Mitigations            | Save and restore registers when switching contexts.  |
 +------------------------+------------------------------------------------------+
-| Mitigations            | | Yes.                                               |
-| implemented?           |                                                      |
+| Mitigations            | | Yes / Platform specific. FEATURE_DETECTION is      |
+| implemented?           |   provided to match firmware to hardware.            |
+|                        |                                                      |
 |                        | | This is the default behaviour in TF-A.             |
 |                        |   Build options are also provided to save/restore    |
 |                        |   additional registers such as floating-point        |

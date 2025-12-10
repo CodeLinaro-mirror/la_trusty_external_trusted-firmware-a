@@ -39,10 +39,66 @@
 #define IOCFG_RT_BASE		(IO_PHYS + 0x01F20000)
 
 /*******************************************************************************
+ * SPM related constants
+ ******************************************************************************/
+#define SPM_BASE	(IO_PHYS + 0x0C001000)
+#define INFRACFG_AO_BASE	(IO_PHYS + 0x00001000)
+#define CKSYS_BASE	(IO_PHYS)
+
+/*******************************************************************************
+ * dvfsrc related constants
+ ******************************************************************************/
+#define DVFSRC_BASE	(IO_PHYS + 0x0C00F000)
+
+#define MTK_LPM_SRAM_BASE	(0x11B000)
+
+/*******************************************************************************
+ * mfgsys related constants
+ ******************************************************************************/
+#define MFGSYS_BASE	(IO_PHYS + 0x03000000)
+
+/*******************************************************************************
+ * PERI related constants
+ ******************************************************************************/
+#define PERICFG_AO_BASE	(IO_PHYS + 0x01036000)
+#define PERICFG_AO_SIZE	(0x1000)
+
+/*******************************************************************************
+ * APMIX related constants
+ ******************************************************************************/
+#define APMIXEDSYS	(IO_PHYS + 0x0000C000)
+#define APMIXEDSYS_REG_SIZE	0x1000
+
+/*******************************************************************************
  * UART related constants
  ******************************************************************************/
 #define UART0_BASE	(IO_PHYS + 0x01002000)
 #define UART_BAUDRATE	(115200)
+
+/*******************************************************************************
+ * SSPM CFGREG related constants
+ ******************************************************************************/
+#define SSPM_REG_OFFSET	(0x40000)
+#define SSPM_CFGREG_BASE	(IO_PHYS + 0x0C300000 + SSPM_REG_OFFSET)
+#define SSPM_CFGREG_SIZE	(0x1000)
+
+/*******************************************************************************
+ * SSPM_MBOX_3 related constants
+ ******************************************************************************/
+#define SSPM_MBOX_3_BASE	(IO_PHYS + 0x0C380000)
+#define SSPM_MBOX_3_SIZE	(0x1000)
+
+/*******************************************************************************
+ * LPM syssram related constants
+ ******************************************************************************/
+#define MTK_LPM_SRAM_BASE	(0x11B000)
+#define MTK_LPM_SRAM_MAP_SIZE	(0x1000)
+
+/*******************************************************************************
+ * Infra IOMMU related constants
+ ******************************************************************************/
+#define PERICFG_AO_BASE		(IO_PHYS + 0x01036000)
+#define PERICFG_AO_REG_SIZE	(0x1000)
 
 /*******************************************************************************
  * CIRQ related constants
@@ -52,6 +108,39 @@
 #define CIRQ_REG_NUM		(19)
 #define CIRQ_SPI_START		(128)
 #define CIRQ_IRQ_NUM		(598)
+
+/*******************************************************************************
+ * MM IOMMU & SMI related constants
+ ******************************************************************************/
+#define SMI_LARB_0_BASE		(IO_PHYS + 0x0401c000)
+#define SMI_LARB_1_BASE		(IO_PHYS + 0x0401d000)
+#define SMI_LARB_2_BASE		(IO_PHYS + 0x0f002000)
+#define SMI_LARB_4_BASE		(IO_PHYS + 0x0602e000)
+#define SMI_LARB_7_BASE		(IO_PHYS + 0x07010000)
+#define SMI_LARB_9_BASE		(IO_PHYS + 0x0502e000)
+#define SMI_LARB_11_BASE	(IO_PHYS + 0x0582e000)
+#define SMI_LARB_13_BASE	(IO_PHYS + 0x0a001000)
+#define SMI_LARB_14_BASE	(IO_PHYS + 0x0a002000)
+#define SMI_LARB_16_BASE	(IO_PHYS + 0x0a00f000)
+#define SMI_LARB_17_BASE	(IO_PHYS + 0x0a010000)
+#define SMI_LARB_19_BASE	(IO_PHYS + 0x0b10f000)
+#define SMI_LARB_20_BASE	(IO_PHYS + 0x0b00f000)
+#define SMI_LARB_REG_RNG_SIZE	(0x1000)
+#define MMSYS_CONFIG_BASE	(IO_PHYS + 0x04000000)
+#define DISP_MUTEX_BASE		(IO_PHYS + 0x04001000)
+#define DISP_OVL0_BASE		(IO_PHYS + 0x04002000)
+#define DISP_OVL1_BASE		(IO_PHYS + 0x04003000)
+#define DISP_RDMA0_BASE		(IO_PHYS + 0x04006000)
+#define DISP_COLOR0_BASE	(IO_PHYS + 0x04008000)
+#define DISP_CCORR0_BASE	(IO_PHYS + 0x0400A000)
+#define DISP_CCORR2_BASE	(IO_PHYS + 0x0400C000)
+#define DISP_AAL0_BASE		(IO_PHYS + 0x0400E000)
+#define DISP_GAMMA0_BASE	(IO_PHYS + 0x04010000)
+#define DISP_DITHER0_BASE	(IO_PHYS + 0x04012000)
+#define MM_IOMMU_BASE		(IO_PHYS + 0x0e802000 + 0x4000)
+#define APU_IOMMU_BASE		(IO_PHYS + 0x09010000)
+
+#define IOMMU_REG_RNG_SIZE	(0x5000)
 
 /*******************************************************************************
  * System counter frequency related constants
@@ -113,5 +202,74 @@
  * SYSTIMER related definitions
  ******************************************************************************/
 #define SYSTIMER_BASE		(IO_PHYS + 0x0CC10000)
+
+/*******************************************************************************
+ * SPMI related definitions
+ ******************************************************************************/
+#define SPMI_MST_P_BASE			(IO_PHYS + 0x0CC00000)
+#define PMIF_SPMI_P_BASE		(IO_PHYS + 0x0CC06000)
+#define SPMI_MST_P_SIZE			(0x1000)
+
+/*******************************************************************************
+ * PWRAP related definitions
+ ******************************************************************************/
+#define PMICSPI_MST_BASE		(IO_PHYS + 0x0c013000)
+#define PMICSPI_MST_SIZE		(0x1000)
+#define PMIC_WRAP_BASE			(IO_PHYS + 0x0CC04000)
+#define PMIF_SPI_BASE			(0x1CC04000)
+#define PWRAP_REG_BASE			(0x1C013000)
+#define PWRAP_WRAP_EN			(PWRAP_REG_BASE + 0x14)
+
+/*******************************************************************************
+ * PMIC regsister related definitions
+ ******************************************************************************/
+#define PMIC_REG_BASE			(0x0000)
+#define PWRAP_SIZE			(0x1000)
+#define DEW_READ_TEST			(PMIC_REG_BASE + 0x040e)
+#define DEW_WRITE_TEST			(PMIC_REG_BASE + 0x0410)
+
+/*******************************************************************************
+ * Differentiate between 3G and 2.6G-related definitions
+ ******************************************************************************/
+#define EFUSEC_BASE			(IO_PHYS + 0x01F10000)
+#define CHIP_ID_REG			(EFUSEC_BASE + 0x7A0)
+#define CPU_SEG_ID_REG			(EFUSEC_BASE + 0x7E0)
+
+#define MTK_CPU_ID_MT8189		0x81890000
+#define MTK_CPU_SEG_ID_MT8189G		0x20
+#define MTK_CPU_SEG_ID_MT8189H		0x21
+
+/*******************************************************************************
+ * Thermal related constants
+ ******************************************************************************/
+#define INFRACFG_BASE			(IO_PHYS + 0x0020E000)
+#define THERM_CTRL_AP_BASE		(IO_PHYS + 0x00315000)
+#define THERM_AP_REG_SIZE		(0x1000)
+#define THERM_CTRL_MCU_BASE		(IO_PHYS + 0x00316000)
+#define THERM_MCU_REG_SIZE		(0x1000)
+
+#define THERMAL_CSRAM_BASE		(0x00102500)
+#define THERMAL_CSRAM_SIZE		(0x400)
+
+/*******************************************************************************
+ * CPU PM definitions
+ ******************************************************************************/
+#define PLAT_CPU_PM_B_BUCK_ISO_ID	(6)
+#define PLAT_CPU_PM_ILDO_ID		(6)
+#define CPU_IDLE_SRAM_BASE		(0x11B000)
+#define CPU_IDLE_SRAM_SIZE		(0x1000)
+
+/*******************************************************************************
+ * SPM related constants
+ ******************************************************************************/
+#define SPM_BASE		(IO_PHYS + 0x0C001000)
+#define SPM_REG_SIZE		(0x1000)
+
+/*******************************************************************************
+ * CPU_EB related constants
+ ******************************************************************************/
+#define CPU_EB_TCM_BASE		(0x0C56F000)
+#define CPU_EB_TCM_SIZE		(0x1000)
+#define CPU_EB_MBOX3_OFFSET	(0xCE0)
 
 #endif /* PLATFORM_DEF_H */

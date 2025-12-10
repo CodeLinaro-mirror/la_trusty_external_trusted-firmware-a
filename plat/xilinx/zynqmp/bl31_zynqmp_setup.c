@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2025, Arm Limited and Contributors. All rights reserved.
  * Copyright (c) 2023-2024, Advanced Micro Devices, Inc. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
@@ -58,10 +58,30 @@ struct entry_point_info *bl31_plat_get_next_image_ep_info(uint32_t type)
 static inline void bl31_set_default_config(void)
 {
 	bl32_image_ep_info.pc = BL32_BASE;
-	bl32_image_ep_info.spsr = arm_get_spsr_for_bl32_entry();
+	bl32_image_ep_info.spsr = arm_get_spsr(BL32_IMAGE_ID);
 	bl33_image_ep_info.pc = plat_get_ns_image_entrypoint();
 	bl33_image_ep_info.spsr = (uint32_t)SPSR_64(MODE_EL2, MODE_SP_ELX,
 					  DISABLE_ALL_EXCEPTIONS);
+}
+
+static inline uint64_t read_cntvct_el0(void)
+{
+	uint64_t val;
+
+	asm volatile("mrs %0, cntvct_el0" : "=r" (val));
+	return val;
+}
+
+static inline void reset_cntvct_el0_to_zero(void)
+{
+	asm volatile(
+		"mrs x0, cntpct_el0\n"   /* Read physical counter into x0 */
+		"neg x0, x0\n"           /* Negate it: x0 = -x0 */
+		"msr cntvoff_el2, x0\n"  /* Write offset to virtual counter */
+		:
+		:
+		: "x0", "memory"
+	);
 }
 
 /*
@@ -92,6 +112,10 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 
 	/* Initialize the platform config for future decision making */
 	zynqmp_config_setup();
+
+	INFO("Counter TICK 0x%lx\n", read_cntvct_el0());
+	reset_cntvct_el0_to_zero();
+	INFO("Counter TICK after reset 0x%lx\n", read_cntvct_el0());
 
 	/*
 	 * Do initial security configuration to allow DRAM/device access. On

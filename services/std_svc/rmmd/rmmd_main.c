@@ -23,6 +23,7 @@
 #include <lib/extensions/pmuv3.h>
 #include <lib/extensions/sys_reg_trace.h>
 #include <lib/gpt_rme/gpt_rme.h>
+#include <lib/per_cpu/per_cpu.h>
 
 #include <lib/spinlock.h>
 #include <lib/utils.h>
@@ -36,8 +37,13 @@
 #include <lib/extensions/sve.h>
 #include <lib/extensions/spe.h>
 #include <lib/extensions/trbe.h>
-#include "rmmd_initial_context.h"
 #include "rmmd_private.h"
+
+#define MECID_SHIFT			U(32)
+#define MECID_MASK			0xFFFFU
+
+#define MEC_REFRESH_REASON_SHIFT	U(0)
+#define MEC_REFRESH_REASON_MASK		BIT(0)
 
 /*******************************************************************************
  * RMM boot failure flag
@@ -47,7 +53,7 @@ static bool rmm_boot_failed;
 /*******************************************************************************
  * RMM context information.
  ******************************************************************************/
-rmmd_rmm_context_t rmm_context[PLATFORM_CORE_COUNT];
+PER_CPU_DEFINE(rmmd_rmm_context_t, rmm_context);
 
 /*******************************************************************************
  * RMM entry point information. Discovered on the primary core and reused
@@ -95,7 +101,7 @@ uint64_t rmmd_rmm_sync_entry(rmmd_rmm_context_t *rmm_ctx)
  ******************************************************************************/
 __dead2 void rmmd_rmm_sync_exit(uint64_t rc)
 {
-	rmmd_rmm_context_t *ctx = &rmm_context[plat_my_core_pos()];
+	rmmd_rmm_context_t *ctx = PER_CPU_CUR(rmm_context);
 
 	/* Get context of the RMM in use by this CPU. */
 	assert(cm_get_context(REALM) == &(ctx->cpu_ctx));
@@ -110,95 +116,15 @@ __dead2 void rmmd_rmm_sync_exit(uint64_t rc)
 	panic();
 }
 
-static void rmm_el2_context_init(el2_sysregs_t *regs)
-{
-	write_el2_ctx_common(regs, spsr_el2, REALM_SPSR_EL2);
-	write_el2_ctx_common(regs, sctlr_el2, SCTLR_EL2_RES1);
-}
-
-/*******************************************************************************
- * Enable architecture extensions on first entry to Realm world.
- ******************************************************************************/
-
-static void manage_extensions_realm(cpu_context_t *ctx)
-{
-	/*
-	 * Enable access to TPIDR2_EL0 if SME/SME2 is enabled for Non Secure world.
-	 */
-	if (is_feat_sme_supported()) {
-		sme_enable(ctx);
-	}
-
-	/*
-	 * SPE and TRBE cannot be fully disabled from EL3 registers alone, only
-	 * sysreg access can. In case the EL1 controls leave them active on
-	 * context switch, we want the owning security state to be NS so Realm
-	 * can't be DOSed.
-	 */
-	if (is_feat_spe_supported()) {
-		spe_disable(ctx);
-	}
-
-	if (is_feat_trbe_supported()) {
-		trbe_disable(ctx);
-	}
-}
-
-static void manage_extensions_realm_per_world(void)
-{
-	cm_el3_arch_init_per_world(&per_world_context[CPU_CONTEXT_REALM]);
-
-	if (is_feat_sve_supported()) {
-	/*
-	 * Enable SVE and FPU in realm context when it is enabled for NS.
-	 * Realm manager must ensure that the SVE and FPU register
-	 * contexts are properly managed.
-	 */
-		sve_enable_per_world(&per_world_context[CPU_CONTEXT_REALM]);
-	}
-
-	/* NS can access this but Realm shouldn't */
-	if (is_feat_sys_reg_trace_supported()) {
-		sys_reg_trace_disable_per_world(&per_world_context[CPU_CONTEXT_REALM]);
-	}
-
-	/*
-	 * If SME/SME2 is supported and enabled for NS world, then disable trapping
-	 * of SME instructions for Realm world. RMM will save/restore required
-	 * registers that are shared with SVE/FPU so that Realm can use FPU or SVE.
-	 */
-	if (is_feat_sme_supported()) {
-		sme_enable_per_world(&per_world_context[CPU_CONTEXT_REALM]);
-	}
-
-	/*
-	 * If FEAT_MPAM is supported and enabled, then disable trapping access
-	 * to the MPAM registers for Realm world. Instead, RMM will configure
-	 * the access to be trapped by itself so it can inject undefined aborts
-	 * back to the Realm.
-	 */
-	if (is_feat_mpam_supported()) {
-		mpam_enable_per_world(&per_world_context[CPU_CONTEXT_REALM]);
-	}
-}
-
 /*******************************************************************************
  * Jump to the RMM for the first time.
  ******************************************************************************/
 static int32_t rmm_init(void)
 {
 	long rc;
-	rmmd_rmm_context_t *ctx = &rmm_context[plat_my_core_pos()];
+	rmmd_rmm_context_t *ctx = PER_CPU_CUR(rmm_context);
 
 	INFO("RMM init start.\n");
-
-	/* Enable architecture extensions */
-	manage_extensions_realm(&ctx->cpu_ctx);
-
-	manage_extensions_realm_per_world();
-
-	/* Initialize RMM EL2 context. */
-	rmm_el2_context_init(&ctx->cpu_ctx.el2_sysregs_ctx);
 
 	rc = rmmd_rmm_sync_entry(ctx);
 	if (rc != E_RMM_BOOT_SUCCESS) {
@@ -222,7 +148,8 @@ int rmmd_setup(void)
 	uintptr_t shared_buf_base;
 	uint32_t ep_attr;
 	unsigned int linear_id = plat_my_core_pos();
-	rmmd_rmm_context_t *rmm_ctx = &rmm_context[linear_id];
+
+	rmmd_rmm_context_t *rmm_ctx = PER_CPU_CUR(rmm_context);
 	struct rmm_manifest *manifest;
 	int rc;
 
@@ -281,11 +208,13 @@ int rmmd_setup(void)
 	 * arg2: PLATFORM_CORE_COUNT.
 	 * arg3: Base address for the EL3 <-> RMM shared area. The boot
 	 *       manifest will be stored at the beginning of this area.
+	 * arg4: opaque activation token, as returned by previous calls
 	 */
 	rmm_ep_info->args.arg0 = linear_id;
 	rmm_ep_info->args.arg1 = RMM_EL3_INTERFACE_VERSION;
 	rmm_ep_info->args.arg2 = PLATFORM_CORE_COUNT;
 	rmm_ep_info->args.arg3 = shared_buf_base;
+	rmm_ep_info->args.arg4 = rmm_ctx->activation_token;
 
 	/* Initialise RMM context with this entry point information */
 	cm_setup_context(&rmm_ctx->cpu_ctx, rmm_ep_info);
@@ -402,7 +331,9 @@ static void *rmmd_cpu_on_finish_handler(const void *arg)
 {
 	long rc;
 	uint32_t linear_id = plat_my_core_pos();
-	rmmd_rmm_context_t *ctx = &rmm_context[linear_id];
+	rmmd_rmm_context_t *ctx = PER_CPU_CUR(rmm_context);
+	/* Create a local copy of ep info to avoid race conditions */
+	entry_point_info_t local_rmm_ep_info = *rmm_ep_info;
 
 	if (rmm_boot_failed) {
 		/* RMM Boot failed on a previous CPU. Abort. */
@@ -414,27 +345,26 @@ static void *rmmd_cpu_on_finish_handler(const void *arg)
 	/*
 	 * Prepare warmboot arguments for RMM:
 	 * arg0: This CPUID.
-	 * arg1 to arg3: Not used.
+	 * arg1: opaque activation token, as returned by previous calls
+	 * arg2 to arg3: Not used.
 	 */
-	rmm_ep_info->args.arg0 = linear_id;
-	rmm_ep_info->args.arg1 = 0ULL;
-	rmm_ep_info->args.arg2 = 0ULL;
-	rmm_ep_info->args.arg3 = 0ULL;
+	local_rmm_ep_info.args.arg0 = linear_id;
+	local_rmm_ep_info.args.arg1 = ctx->activation_token;
+	local_rmm_ep_info.args.arg2 = 0ULL;
+	local_rmm_ep_info.args.arg3 = 0ULL;
 
 	/* Initialise RMM context with this entry point information */
-	cm_setup_context(&ctx->cpu_ctx, rmm_ep_info);
-
-	/* Enable architecture extensions */
-	manage_extensions_realm(&ctx->cpu_ctx);
-
-	/* Initialize RMM EL2 context. */
-	rmm_el2_context_init(&ctx->cpu_ctx.el2_sysregs_ctx);
+	cm_setup_context(&ctx->cpu_ctx, &local_rmm_ep_info);
 
 	rc = rmmd_rmm_sync_entry(ctx);
 
 	if (rc != E_RMM_BOOT_SUCCESS) {
 		ERROR("RMM init failed on CPU%d: %ld\n", linear_id, rc);
-		/* Mark the boot as failed for any other booting CPU */
+		/*
+		 * TODO: Investigate handling of rmm_boot_failed under
+		 * concurrent access, or explore alternative approaches
+		 * to fixup the logic.
+		 */
 		rmm_boot_failed = true;
 	}
 
@@ -482,11 +412,13 @@ static int rmm_el3_ifc_get_feat_register(uint64_t feat_reg_idx,
 }
 
 /*
- * Update encryption key associated with @mecid.
+ * Update encryption key associated with mecid included in x1.
  */
-static int rmmd_mecid_key_update(uint64_t mecid)
+static int rmmd_mecid_key_update(uint64_t x1)
 {
 	uint64_t mecid_width, mecid_width_mask;
+	uint16_t mecid;
+	unsigned int reason;
 	int ret;
 
 	/*
@@ -502,13 +434,16 @@ static int rmmd_mecid_key_update(uint64_t mecid)
 	 * in length.
 	 */
 	mecid_width = ((read_mecidr_el2() >> MECIDR_EL2_MECIDWidthm1_SHIFT) &
-		MECIDR_EL2_MECIDWidthm1_MASK) + 1;
-	mecid_width_mask = ((1 << mecid_width) - 1);
+		MECIDR_EL2_MECIDWidthm1_MASK) + 1UL;
+	mecid_width_mask = ((1UL << mecid_width) - 1UL);
+
+	mecid = (x1 >> MECID_SHIFT) & MECID_MASK;
 	if ((mecid & ~mecid_width_mask) != 0U) {
 		return E_RMM_INVAL;
 	}
 
-	ret = plat_rmmd_mecid_key_update(mecid);
+	reason = (x1 >> MEC_REFRESH_REASON_SHIFT) & MEC_REFRESH_REASON_MASK;
+	ret = plat_rmmd_mecid_key_update(mecid, reason);
 
 	if (ret != 0) {
 		return E_RMM_UNK;
@@ -592,15 +527,59 @@ uint64_t rmmd_rmm_el3_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2,
 		SMC_RET4(handle, ret, req_resp, req_id, cookie_var);
 	}
 #endif /* RMMD_ENABLE_IDE_KEY_PROG */
+	case RMM_RESERVE_MEMORY:
+		ret = rmmd_reserve_memory(x1, &x2);
+		SMC_RET2(handle, ret, x2);
+
 	case RMM_BOOT_COMPLETE:
+	{
+		rmmd_rmm_context_t *ctx = PER_CPU_CUR(rmm_context);
+
+		ctx->activation_token = x2;
 		VERBOSE("RMMD: running rmmd_rmm_sync_exit\n");
 		rmmd_rmm_sync_exit(x1);
-
-	case RMM_MECID_KEY_UPDATE:
+	}
+	case RMM_MEC_REFRESH:
 		ret = rmmd_mecid_key_update(x1);
 		SMC_RET1(handle, ret);
 	default:
 		WARN("RMMD: Unsupported RMM-EL3 call 0x%08x\n", smc_fid);
 		SMC_RET1(handle, SMC_UNK);
 	}
+}
+
+/**
+ * Helper to activate Primary CPU with the updated RMM, mainly used during
+ * LFA of RMM.
+ */
+int rmmd_primary_activate(void)
+{
+	int rc;
+
+	rc = rmmd_setup();
+	if (rc != 0) {
+		ERROR("rmmd_setup failed during LFA: %d\n", rc);
+		return rc;
+	}
+
+	rc = rmm_init();
+	if (rc == 0) {
+		ERROR("rmm_init failed during LFA: %d\n", rc);
+		return rc;
+	}
+
+	INFO("RMM warm reset done on primary during LFA. \n");
+
+	return 0;
+}
+
+/**
+ * Helper to activate Primary CPU with the updated RMM, mainly used during
+ * LFA of RMM.
+ */
+int rmmd_secondary_activate(void)
+{
+	rmmd_cpu_on_finish_handler(NULL);
+
+	return 0;
 }
