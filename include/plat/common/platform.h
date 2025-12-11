@@ -24,6 +24,9 @@
 #if DRTM_SUPPORT
 #include "plat_drtm.h"
 #endif /* DRTM_SUPPORT */
+#if LFA_SUPPORT
+#include "plat_lfa.h"
+#endif /* LFA_SUPPORT */
 
 /*******************************************************************************
  * Forward declarations
@@ -50,6 +53,18 @@ struct plat_try_images_ops {
 };
 
 extern const struct plat_try_images_ops *plat_try_img_ops;
+
+/*******************************************************************************
+ * Structure populated by platform specific code to log if the primary GPT
+ * is corrupted
+ ******************************************************************************/
+struct plat_log_gpt_corrupted {
+	uint8_t gpt_corrupted_info;
+	void (*plat_set_gpt_corruption)(uintptr_t gpt_corrupted_info_ptr, uint8_t flags);
+	void (*plat_log_gpt_corruption)(uintptr_t log_address, uint8_t gpt_corrupted_info);
+};
+
+extern const struct plat_log_gpt_corrupted *plat_log_gpt_ptr;
 
 /*******************************************************************************
  * plat_get_rotpk_info() flags
@@ -130,9 +145,9 @@ uint32_t plat_interrupt_type_to_line(uint32_t type,
  * Optional interrupt management functions, depending on chosen EL3 components.
  ******************************************************************************/
 unsigned int plat_ic_get_running_priority(void);
-int plat_ic_is_spi(unsigned int id);
-int plat_ic_is_ppi(unsigned int id);
-int plat_ic_is_sgi(unsigned int id);
+bool plat_ic_is_spi(unsigned int id);
+bool plat_ic_is_ppi(unsigned int id);
+bool plat_ic_is_sgi(unsigned int id);
 unsigned int plat_ic_get_interrupt_active(unsigned int id);
 void plat_ic_disable_interrupt(unsigned int id);
 void plat_ic_enable_interrupt(unsigned int id);
@@ -162,10 +177,10 @@ int plat_crash_console_putc(int c);
 void plat_crash_console_flush(void);
 void plat_error_handler(int err) __dead2;
 void plat_panic_handler(void) __dead2;
-void plat_system_reset(void) __dead2;
 const char *plat_log_get_prefix(unsigned int log_level);
 void bl2_plat_preload_setup(void);
 void plat_setup_try_img_ops(const struct plat_try_images_ops *plat_try_ops);
+void plat_setup_log_gpt_corrupted(const struct plat_log_gpt_corrupted *log_gpt);
 
 #if MEASURED_BOOT
 int plat_mboot_measure_image(unsigned int image_id, image_info_t *image_data);
@@ -265,6 +280,8 @@ int bl1_plat_handle_post_image_load(unsigned int image_id);
 /* Utility functions */
 void bl1_plat_calc_bl2_layout(const meminfo_t *bl1_mem_layout,
 			      meminfo_t *bl2_mem_layout);
+
+bool bl1_plat_is_shared_nv_ctr(void);
 
 #if MEASURED_BOOT
 void bl1_plat_mboot_init(void);
@@ -398,7 +415,8 @@ int plat_rmmd_el3_token_sign_push_req(
 int plat_rmmd_el3_token_sign_pull_resp(struct el3_token_sign_response *resp);
 size_t plat_rmmd_get_el3_rmm_shared_mem(uintptr_t *shared);
 int plat_rmmd_load_manifest(struct rmm_manifest *manifest);
-int plat_rmmd_mecid_key_update(uint16_t mecid);
+int plat_rmmd_mecid_key_update(uint16_t mecid, unsigned int reason);
+uintptr_t plat_rmmd_reserve_memory(size_t size, unsigned long alignment);
 
 /* The following 4 functions are to be implemented if
  * RMMD_ENABLE_IDE_KEY_PROG=1.
@@ -494,9 +512,20 @@ int32_t plat_get_soc_version(void);
 int32_t plat_get_soc_revision(void);
 
 /*
+ * Optional function to get SoC name
+ */
+int32_t plat_get_soc_name(char *soc_name);
+
+/*
  * Optional function to check for SMCCC function availability for platform
  */
 int32_t plat_is_smccc_feature_available(u_register_t fid);
+
+/*
+ * Optional function to retrieve the base address of hardware DT from the
+ * platform.
+ */
+uintptr_t plat_get_hw_dt_base(void);
 
 /*******************************************************************************
  * FWU platform specific functions

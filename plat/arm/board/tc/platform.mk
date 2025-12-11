@@ -5,6 +5,9 @@
 
 include common/fdt_wrappers.mk
 
+# TARGET_PLATFORM must be defined as a pre-requisite
+$(eval $(call assert_numerics,TARGET_PLATFORM))
+
 TARGET_FLAVOUR			:=	fvp
 # DPU with SCMI may not necessarily work, so allow its independence
 TC_DPU_USE_SCMI_CLK		:=	1
@@ -16,6 +19,7 @@ CSS_USE_SCMI_SDS_DRIVER		:=	1
 HW_ASSISTED_COHERENCY		:=	1
 USE_COHERENT_MEM		:=	0
 USE_GIC_DRIVER			:=	3
+USE_DSU_DRIVER			:=	1
 GIC_ENABLE_V4_EXTN		:=      1
 GICV3_SUPPORT_GIC600		:=	1
 override NEED_BL2U		:=	no
@@ -122,16 +126,15 @@ endif
 
 # CPU libraries for TARGET_PLATFORM=4
 ifeq (${TARGET_PLATFORM}, 4)
-FEAT_PABANDON	:=	1
+
 # prevent CME related wakups
 ERRATA_SME_POWER_DOWN := 1
-TC_CPU_SOURCES	+=	lib/cpus/aarch64/cortex_gelas.S \
-			lib/cpus/aarch64/nevis.S \
-			lib/cpus/aarch64/travis.S
+TC_CPU_SOURCES	+=	lib/cpus/aarch64/c1_pro.S \
+			lib/cpus/aarch64/c1_nano.S \
+			lib/cpus/aarch64/c1_ultra.S
 endif
 
-INTERCONNECT_SOURCES	:=	${TC_BASE}/tc_interconnect.c \
-				plat/arm/common/arm_ni.c
+INTERCONNECT_SOURCES	:=	plat/arm/common/arm_ni.c
 
 PLAT_BL_COMMON_SOURCES	+=	${TC_BASE}/tc_plat.c	\
 				${TC_BASE}/include/tc_helpers.S
@@ -162,7 +165,7 @@ BL31_SOURCES		+=	${INTERCONNECT_SOURCES}	\
 				${TC_BASE}/tc_topology.c	\
 				lib/fconf/fconf.c			\
 				lib/fconf/fconf_dyn_cfg_getter.c	\
-				drivers/arm/css/dsu/dsu.c			\
+				drivers/arm/dsu/dsu.c			\
 				drivers/cfi/v2m/v2m_flash.c		\
 				lib/utils/mem_region.c			\
 				plat/arm/common/arm_nor_psci_mem_protect.c	\

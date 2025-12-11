@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "trusted-firmware-a"
-version = "2.13.0"
+version = "2.14.0"
 description = "Trusted Firmware-A (TF-A) Python dependencies."
 authors = ["Arm Ltd."]
 license = "BSD-3-Clause"
@@ -10,7 +10,7 @@ readme = "readme.rst"
 python = "^3.8"
 cot-dt2c = {path = "tools/cot_dt2c", develop = true}
 memory = {path = "tools/memory", develop = true}
-tlc = {path = "tools/tlc", develop = true}
+tlc = {path = "contrib/libtl/tlc", develop = true}
 
 [tool.poetry.group.docs]
 optional = true

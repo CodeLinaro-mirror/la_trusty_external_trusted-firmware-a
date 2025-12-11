@@ -80,7 +80,6 @@ static inline bool errata_a75_764081_applies(void)
 #endif
 
 bool check_if_trbe_disable_affected_core(void);
-int check_wa_cve_2024_7881(void);
 bool errata_ich_vmcr_el2_applies(void);
 struct erratum_entry *find_erratum_entry(uint32_t errata_id);
 int check_erratum_applies(uint32_t cve, int errata_id);
@@ -93,13 +92,12 @@ int check_erratum_applies(uint32_t cve, int errata_id);
  * NOTE an erratum and CVE id could clash. However, both numbers are very large
  * and the probablity is minuscule. Working around this makes code very
  * complicated and extremely difficult to read so it is not considered. In the
- * unlikely event that this does happen, prepending the CVE id with a 0 should
- * resolve the conflict
+ * unlikely event that this does happen, the build will fail, and unless the
+ * framework is updated to account for this one of the IDs will need to be
+ * altered to prevent the conflict.
  */
 #define NO_ISB			1
 #define NO_ASSERT		0
-#define NO_APPLY_AT_RESET	0
-#define APPLY_AT_RESET		1
 #define GET_CPU_REV		1
 #define NO_GET_CPU_REV		0
 

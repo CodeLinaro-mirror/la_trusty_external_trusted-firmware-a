@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2023-2024, STMicroelectronics - All Rights Reserved
+# Copyright (c) 2023-2025, STMicroelectronics - All Rights Reserved
 # Copyright (c) 2025, Arm Limited and Contributors. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
@@ -27,7 +27,10 @@ PLAT_XLAT_TABLES_DYNAMIC	:=	1
 STM32_HEADER_BL2_BINARY_TYPE	:=	0x10
 
 TF_CFLAGS			+=	-Wsign-compare
+ifeq ($(findstring clang,$(notdir $(CC))),)
+# Only for GCC
 TF_CFLAGS			+=	-Wformat-signedness
+endif
 
 # Number of TF-A copies in the device
 STM32_TF_A_COPIES		:=	2
@@ -77,7 +80,7 @@ ASFLAGS				+=	-DBL2_BIN_PATH=\"${BUILD_PLAT}/bl2.bin\"
 
 # Variables for use with stm32image
 STM32IMAGEPATH			?=	tools/stm32image
-STM32IMAGE			?=	${STM32IMAGEPATH}/stm32image$(.exe)
+STM32IMAGE			?=	${BUILD_PLAT}/${STM32IMAGEPATH}/stm32image$(.exe)
 STM32IMAGE_SRC			:=	${STM32IMAGEPATH}/stm32image.c
 STM32_DEPS			+=	${STM32IMAGE}
 
@@ -198,16 +201,9 @@ endif
 TF_MBEDTLS_KEY_ALG		:=	ecdsa
 KEY_SIZE			:=	256
 
-ifneq (${MBEDTLS_DIR},)
-MBEDTLS_MAJOR=$(shell grep -hP "define MBEDTLS_VERSION_MAJOR" \
-${MBEDTLS_DIR}/include/mbedtls/*.h | grep -oe '\([0-9.]*\)')
+PLAT_INCLUDES			+=	-Iinclude/drivers/auth/mbedtls
 
-ifeq (${MBEDTLS_MAJOR}, 3)
-MBEDTLS_CONFIG_FILE		?=	"<stm32mp_mbedtls_config-3.h>"
-else
-$(error Error: TF-A only supports MbedTLS versions > 3.x)
-endif
-endif
+MBEDTLS_CONFIG_FILE		?=	"<stm32mp_mbedtls_config.h>"
 
 include drivers/auth/mbedtls/mbedtls_x509.mk
 

@@ -15,7 +15,7 @@
 #include <lib/fconf/fconf.h>
 #include <lib/fconf/fconf_dyn_cfg_getter.h>
 #if TRANSFER_LIST
-#include <lib/transfer_list.h>
+#include <transfer_list.h>
 #endif
 #include <lib/utils.h>
 #include <lib/xlat_tables/xlat_tables_compat.h>
@@ -99,7 +99,7 @@ void arm_bl1_early_platform_setup(void)
 void bl1_early_platform_setup(void)
 {
 	arm_bl1_early_platform_setup();
-
+#if !HW_ASSISTED_COHERENCY
 	/*
 	 * Initialize Interconnect for this cluster during cold boot.
 	 * No need for locks as no other CPU is active.
@@ -109,6 +109,7 @@ void bl1_early_platform_setup(void)
 	 * Enable Interconnect coherency for the primary CPU's cluster.
 	 */
 	plat_arm_interconnect_enter_coherency();
+#endif
 }
 
 /******************************************************************************
@@ -316,3 +317,9 @@ int bl1_plat_handle_post_image_load(unsigned int image_id)
 	return 0;
 }
 #endif /* TRANSFER_LIST*/
+
+/* For ARM platform, the NV ctr is shared among all components */
+bool bl1_plat_is_shared_nv_ctr(void)
+{
+	return true;
+}

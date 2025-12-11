@@ -12,7 +12,9 @@
 #include <fvp_pas_def.h>
 #include <lib/fconf/fconf.h>
 #include <lib/fconf/fconf_dyn_cfg_getter.h>
-#include <lib/transfer_list.h>
+#if TRANSFER_LIST
+#include <transfer_list.h>
+#endif
 
 #include <plat/arm/common/plat_arm.h>
 #include <plat/common/platform.h>
@@ -114,15 +116,6 @@ struct bl_params *plat_get_next_bl_params(void)
 	assert(fw_config_base != 0UL);
 
 	param_node->ep_info.args.arg1 = (uint32_t)fw_config_base;
-
-	/* Update BL33's ep info with the NS HW config address */
-	param_node = get_bl_mem_params_node(BL33_IMAGE_ID);
-	assert(param_node != NULL);
-
-	hw_config_info = FCONF_GET_PROPERTY(dyn_cfg, dtb, HW_CONFIG_ID);
-	assert(hw_config_info != NULL);
-
-	param_node->ep_info.args.arg1 = hw_config_info->secondary_config_addr;
 #endif /* TRANSFER_LIST */
 
 	return arm_bl_params;
@@ -156,4 +149,16 @@ int bl2_plat_handle_post_image_load(unsigned int image_id)
 #endif /* !RESET_TO_BL2 && !EL3_PAYLOAD_BASE && !TRANSFER_LIST*/
 
 	return arm_bl2_plat_handle_post_image_load(image_id);
+}
+
+uintptr_t plat_get_hw_dt_base(void)
+{
+	const struct dyn_cfg_dtb_info_t *hw_config_info;
+
+	hw_config_info = FCONF_GET_PROPERTY(dyn_cfg, dtb, HW_CONFIG_ID);
+	if (hw_config_info == NULL) {
+		return 0U;
+	}
+
+	return hw_config_info->secondary_config_addr;
 }

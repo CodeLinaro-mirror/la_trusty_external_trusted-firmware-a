@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2022, Xilinx, Inc. All rights reserved.
- * Copyright (c) 2022-2023, Advanced Micro Devices, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Advanced Micro Devices, Inc. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -12,8 +12,7 @@
 
 #include <assert.h>
 
-#include <drivers/arm/gic_common.h>
-#include <drivers/arm/gicv3.h>
+#include <drivers/arm/gic.h>
 #include <lib/bakery_lock.h>
 #include <lib/mmio.h>
 #include <lib/spinlock.h>
@@ -285,9 +284,11 @@ enum pm_device_node_idx irq_to_pm_node_idx(uint32_t irq)
  *                       taken depend on the state system is suspending to.
  * @proc: processor which need to suspend.
  * @state: desired suspend state.
+ * @flag: 0 - Call from secure source.
+ *	  1 - Call from non-secure source.
  *
  */
-void pm_client_suspend(const struct pm_proc *proc, uint32_t state)
+void pm_client_suspend(const struct pm_proc *proc, uint32_t state, uint32_t flag)
 {
 	uint32_t cpu_id = plat_my_core_pos();
 	uintptr_t val;
@@ -295,7 +296,7 @@ void pm_client_suspend(const struct pm_proc *proc, uint32_t state)
 	pm_client_lock_get();
 
 	if (state == PM_STATE_SUSPEND_TO_RAM) {
-		pm_client_set_wakeup_sources((uint32_t)proc->node_id);
+		pm_client_set_wakeup_sources((uint32_t)proc->node_id, flag);
 	}
 
 	val = read_cpu_pwrctrl_val();
@@ -367,37 +368,6 @@ void pm_client_wakeup(const struct pm_proc *proc)
 	/* Disable wake interrupt */
 	mmio_write_32(APU_PCIL_CORE_X_IDS_WAKE_REG(cpuid),
 		      APU_PCIL_CORE_X_IDS_WAKE_MASK);
-
-	pm_client_lock_release();
-}
-
-/**
- * pm_client_abort_suspend() - Client-specific abort-suspend actions.
- *
- * This function should contain any PU-specific actions
- * required for aborting a prior suspend request.
- *
- */
-void pm_client_abort_suspend(void)
-{
-	uint32_t cpu_id = plat_my_core_pos();
-	uintptr_t val;
-
-	/* Enable interrupts at processor level (for current cpu) */
-	gicv3_cpuif_enable(plat_my_core_pos());
-
-	pm_client_lock_get();
-
-	/* Clear powerdown request */
-	val = read_cpu_pwrctrl_val();
-	val &= ~CORE_PWRDN_EN_BIT_MASK;
-	write_cpu_pwrctrl_val(val);
-
-	isb();
-
-	/* Disabled power down interrupt */
-	mmio_write_32(APU_PCIL_CORE_X_IDS_POWER_REG(cpu_id),
-			APU_PCIL_CORE_X_IDS_POWER_MASK);
 
 	pm_client_lock_release();
 }

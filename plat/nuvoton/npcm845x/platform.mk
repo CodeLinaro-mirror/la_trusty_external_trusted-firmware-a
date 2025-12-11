@@ -264,7 +264,7 @@ DYN_CFG_SOURCES	+=	plat/arm/common/arm_dyn_cfg.c \
 BL1_SOURCES	+=	${DYN_CFG_SOURCES}
 BL2_SOURCES	+=	${DYN_CFG_SOURCES}
 
-ifeq (${BL2_AT_EL3},1)
+ifeq (${RESET_TO_BL2},1)
 BL2_SOURCES	+=	plat/arm/common/arm_bl2_el3_setup.c
 endif
 
@@ -309,12 +309,6 @@ BL31_SOURCES	+=	plat/arm/common/aarch64/arm_sdei.c
 ifeq (${SDEI_IN_FCONF},1)
 BL31_SOURCES	+=	plat/arm/common/fconf/fconf_sdei_getter.c
 endif
-endif
-
-# RAS sources
-ifeq (${RAS_EXTENSION},1)
-BL31_SOURCES	+=	lib/extensions/ras/std_err_record.c \
-		lib/extensions/ras/ras_common.c
 endif
 
 # Pointer Authentication sources

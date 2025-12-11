@@ -24,22 +24,22 @@
 
 /* The macros below are used to identify FFA calls from the SMC function ID */
 #define FFA_FNUM_MIN_VALUE	U(0x60)
-#define FFA_FNUM_MAX_VALUE	U(0x8E)
+#define FFA_FNUM_MAX_VALUE	U(0x90)
 #define is_ffa_fid(fid) __extension__ ({		\
 	__typeof__(fid) _fid = (fid);			\
 	((GET_SMC_NUM(_fid) >= FFA_FNUM_MIN_VALUE) &&	\
 	 (GET_SMC_NUM(_fid) <= FFA_FNUM_MAX_VALUE)); })
 
 /* FFA_VERSION helpers */
-#define FFA_VERSION_MAJOR		U(1)
 #define FFA_VERSION_MAJOR_SHIFT		16
 #define FFA_VERSION_MAJOR_MASK		U(0x7FFF)
-#define FFA_VERSION_MINOR		U(2)
 #define FFA_VERSION_MINOR_SHIFT		0
 #define FFA_VERSION_MINOR_MASK		U(0xFFFF)
 #define FFA_VERSION_BIT31_MASK 		U(0x1u << 31)
 #define FFA_VERSION_MASK		U(0xFFFFFFFF)
 
+#define FFA_VERSION_MAJOR		U(1)
+#define FFA_VERSION_MINOR		U(3)
 
 #define MAKE_FFA_VERSION(major, minor) 	\
 	((((major) & FFA_VERSION_MAJOR_MASK) <<  FFA_VERSION_MAJOR_SHIFT) | \
@@ -125,6 +125,7 @@
 #define FFA_FNUM_EL3_INTR_HANDLE		U(0x8C)
 #define FFA_FNUM_MSG_SEND_DIRECT_REQ2		U(0x8D)
 #define FFA_FNUM_MSG_SEND_DIRECT_RESP2		U(0x8E)
+#define FFA_FNUM_NS_RES_INFO_GET		U(0x8F)
 
 #define FFA_FNUM_CONSOLE_LOG			U(0x8A)
 
@@ -203,7 +204,13 @@
 	FFA_FID(SMC_64, FFA_FNUM_MSG_SEND_DIRECT_RESP2)
 #define FFA_MEM_PERM_GET_SMC64	FFA_FID(SMC_64, FFA_FNUM_MEM_PERM_GET)
 #define FFA_MEM_PERM_SET_SMC64	FFA_FID(SMC_64, FFA_FNUM_MEM_PERM_SET)
+#define FFA_NS_RES_INFO_GET_SMC64	\
+	FFA_FID(SMC_64, FFA_FNUM_NS_RES_INFO_GET)
 
+/* FF-A v1.3 ALP2 specification. */
+#define FFA_FNUM_ABORT			U(0x90)
+#define FFA_ABORT_SMC32	FFA_FID(SMC_32, FFA_FNUM_ABORT)
+#define FFA_ABORT_SMC64	FFA_FID(SMC_64, FFA_FNUM_ABORT)
 /*
  * FF-A partition properties values.
  */

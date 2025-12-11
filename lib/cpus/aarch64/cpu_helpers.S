@@ -14,64 +14,6 @@
 #include <lib/cpus/errata.h>
 #include <lib/el3_runtime/cpu_data.h>
 
-#ifdef IMAGE_BL31 /* The power down core and cluster is needed only in  BL31 */
-	/*
-	 * void prepare_cpu_pwr_dwn(unsigned int power_level)
-	 *
-	 * Prepare CPU power down function for all platforms. The function takes
-	 * a domain level to be powered down as its parameter. After the cpu_ops
-	 * pointer is retrieved from cpu_data, the handler for requested power
-	 * level is called.
-	 */
-	.globl	prepare_cpu_pwr_dwn
-func prepare_cpu_pwr_dwn
-	/*
-	 * If the given power level exceeds CPU_MAX_PWR_DWN_OPS, we call the
-	 * power down handler for the last power level
-	 */
-	mov_imm	x2, (CPU_MAX_PWR_DWN_OPS - 1)
-	cmp	x0, x2
-	csel	x2, x2, x0, hi
-
-	mrs	x1, tpidr_el3
-	ldr	x0, [x1, #CPU_DATA_CPU_OPS_PTR]
-#if ENABLE_ASSERTIONS
-	cmp	x0, #0
-	ASM_ASSERT(ne)
-#endif
-
-	/* Get the appropriate power down handler */
-	mov	x1, #CPU_PWR_DWN_OPS
-	add	x1, x1, x2, lsl #3
-	ldr	x1, [x0, x1]
-#if ENABLE_ASSERTIONS
-	cmp	x1, #0
-	ASM_ASSERT(ne)
-#endif
-	br	x1
-endfunc prepare_cpu_pwr_dwn
-
-
-	/*
-	 * Initializes the cpu_ops_ptr if not already initialized
-	 * in cpu_data. This can be called without a runtime stack, but may
-	 * only be called after the MMU is enabled.
-	 * clobbers: x0 - x6, x10
-	 */
-	.globl	init_cpu_ops
-func init_cpu_ops
-	mrs	x6, tpidr_el3
-	ldr	x0, [x6, #CPU_DATA_CPU_OPS_PTR]
-	cbnz	x0, 1f
-	mov	x10, x30
-	bl	get_cpu_ops_ptr
-	str	x0, [x6, #CPU_DATA_CPU_OPS_PTR]!
-	mov x30, x10
-1:
-	ret
-endfunc init_cpu_ops
-#endif /* IMAGE_BL31 */
-
 #if defined(IMAGE_BL31) && CRASH_REPORTING
 	/*
 	 * The cpu specific registers which need to be reported in a crash

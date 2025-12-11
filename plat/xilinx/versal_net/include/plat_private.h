@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2019, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2018-2025, Arm Limited and Contributors. All rights reserved.
  * Copyright (c) 2021-2022, Xilinx, Inc. All rights reserved.
  * Copyright (c) 2022-2023, Advanced Micro Devices, Inc. All rights reserved.
  *
@@ -23,16 +23,6 @@ uint32_t get_uart_clk(void);
 
 const mmap_region_t *plat_get_mmap(void);
 
-void plat_versal_net_gic_driver_init(void);
-void plat_versal_net_gic_init(void);
-void plat_versal_net_gic_cpuif_enable(void);
-void plat_versal_net_gic_cpuif_disable(void);
-void plat_versal_net_gic_pcpu_init(void);
-void plat_versal_net_gic_save(void);
-void plat_versal_net_gic_resume(void);
-void plat_versal_net_gic_redistif_on(void);
-void plat_versal_net_gic_redistif_off(void);
-
 extern uint32_t cpu_clock, platform_id, platform_version;
 void board_detection(void);
 const char *board_name_decode(void);
@@ -44,5 +34,7 @@ int32_t sip_svc_setup_init(void);
  * for INTR_TYPE_EL3 type of interrupt
  */
 int request_intr_type_el3(uint32_t irq, interrupt_type_handler_t fiq_handler);
+
+void get_boot_mode(uint32_t *mode);
 
 #endif /* PLAT_PRIVATE_H */
