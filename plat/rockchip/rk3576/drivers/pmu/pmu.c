@@ -43,7 +43,7 @@ static struct rk3576_sleep_ddr_data ddr_data;
 
 void rockchip_plat_mmu_el3(void)
 {
-#ifdef PLAT_EXTRA_LD_SCRIPT
+#if PLAT_EXTRA_LD_SCRIPT
 	size_t sram_size;
 
 	sram_size = (char *)&__bl31_pmusram_text_end -
@@ -939,21 +939,6 @@ int rockchip_soc_sys_pwr_dm_resume(void)
 	return 0;
 }
 
-void __dead2 rockchip_soc_cores_pd_pwr_dn_wfi(const
-					      psci_power_state_t *target_state)
-{
-	psci_power_down_wfi();
-	/* should never reach here */
-	panic();
-}
-
-void __dead2 rockchip_soc_sys_pd_pwr_dn_wfi(void)
-{
-	psci_power_down_wfi();
-	/* should never reach here */
-	panic();
-}
-
 static int rockchip_reboot_is_rbrom(void)
 {
 	return mmio_read_32(PMU0_GRF_BASE + PMU0GRF_OS_REG(16)) ==
@@ -998,9 +983,9 @@ void __dead2 rockchip_soc_soft_reset(void)
 	 * Maybe the HW needs some times to reset the system,
 	 * so we do not hope the core to execute valid codes.
 	 */
-	psci_power_down_wfi();
-	/* should never reach here */
-	panic();
+	while (1) {
+		wfi();
+	}
 }
 
 void __dead2 rockchip_soc_system_off(void)
@@ -1020,9 +1005,9 @@ void __dead2 rockchip_soc_system_off(void)
 	 * Maybe the HW needs some times to reset the system,
 	 * so we do not hope the core to execute valid codes.
 	 */
-	psci_power_down_wfi();
-	/* should never reach here */
-	panic();
+	while (1) {
+		wfi();
+	}
 }
 
 static void rockchip_pmu_pd_repair_init(void)

@@ -9,6 +9,7 @@
 #include <common/bl_common.h>
 #include <cortex_x4.h>
 #include <cpu_macros.S>
+#include <dsu_macros.S>
 #include <plat_macros.S>
 #include "wa_cve_2022_23960_bhb_vector.S"
 
@@ -26,10 +27,6 @@ cpu_reset_prologue cortex_x4
 
 .global check_erratum_cortex_x4_2726228
 .global check_erratum_cortex_x4_3701758
-
-#if WORKAROUND_CVE_2022_23960
-        wa_cve_2022_23960_bhb_vector_table CORTEX_X4_BHB_LOOP_COUNT, cortex_x4
-#endif /* WORKAROUND_CVE_2022_23960 */
 
 add_erratum_entry cortex_x4, ERRATUM(2726228), ERRATA_X4_2726228
 
@@ -64,6 +61,15 @@ workaround_reset_end cortex_x4, ERRATUM(2897503)
 
 check_erratum_ls cortex_x4, ERRATUM(2897503), CPU_REV(0, 1)
 
+workaround_reset_start cortex_x4, ERRATUM(2900952), ERRATA_DSU_2900952
+	errata_dsu_2900952_wa_apply
+workaround_reset_end cortex_x4, ERRATUM(2900952)
+
+check_erratum_custom_start cortex_x4, ERRATUM(2900952)
+	check_errata_dsu_2900952_applies
+	ret
+check_erratum_custom_end cortex_x4, ERRATUM(2900952)
+
 workaround_reset_start cortex_x4, ERRATUM(2923985), ERRATA_X4_2923985
 	sysreg_bit_set CORTEX_X4_CPUACTLR4_EL1, (BIT(11) | BIT(10))
 workaround_reset_end cortex_x4, ERRATUM(2923985)
@@ -93,21 +99,28 @@ workaround_reset_end cortex_x4, ERRATUM(3076789)
 
 check_erratum_ls cortex_x4, ERRATUM(3076789), CPU_REV(0, 1)
 
+workaround_reset_start cortex_x4, ERRATUM(3133195), ERRATA_X4_3133195
+	ldr x0,=0x2
+	msr s3_6_c15_c8_0,x0 /* msr cpupselr_el3, x0 */
+	ldr x0,=0xd503225f
+	msr s3_6_c15_c8_2,x0 /* msr cpupor_el3, x0 */
+	ldr x0,=0xffffffff
+	msr s3_6_c15_c8_3,x0 /* msr cpupmr_el3, x0 */
+	ldr x0,=0x00000000404003fd
+	msr s3_6_c15_c8_1,x0 /* msr cpupcr_el3, x0 */
+workaround_reset_end cortex_x4, ERRATUM(3133195)
+
+check_erratum_range cortex_x4, ERRATUM(3133195), CPU_REV(0, 2), CPU_REV(0, 2)
+
 add_erratum_entry cortex_x4, ERRATUM(3701758), ERRATA_X4_3701758
 
 check_erratum_ls cortex_x4, ERRATUM(3701758), CPU_REV(0, 3)
 
-workaround_reset_start cortex_x4, CVE(2022, 23960), WORKAROUND_CVE_2022_23960
-#if IMAGE_BL31
-	/*
-	 * The Cortex X4 generic vectors are overridden to apply errata
-	 * mitigation on exception entry from lower ELs.
-	 */
-	override_vector_table wa_cve_vbar_cortex_x4
-#endif /* IMAGE_BL31 */
-workaround_reset_end cortex_x4, CVE(2022, 23960)
+workaround_reset_start cortex_x4, ERRATUM(3887999), ERRATA_X4_3887999
+	sysreg_bit_set CORTEX_X4_CPUACTLR2_EL1, BIT(22)
+workaround_reset_end cortex_x4, ERRATUM(3887999)
 
-check_erratum_chosen cortex_x4, CVE(2022, 23960), WORKAROUND_CVE_2022_23960
+check_erratum_ls cortex_x4, ERRATUM(3887999), CPU_REV(0, 3)
 
 /* Disable hardware page aggregation. Enables mitigation for `CVE-2024-5660` */
 workaround_reset_start cortex_x4, CVE(2024, 5660), WORKAROUND_CVE_2024_5660
@@ -144,7 +157,7 @@ func cortex_x4_core_pwr_dwn
 	 */
 	sysreg_bit_set CORTEX_X4_CPUPWRCTLR_EL1, CORTEX_X4_CPUPWRCTLR_EL1_CORE_PWRDN_BIT
 
-	apply_erratum cortex_x4, ERRATUM(2740089), ERRATA_X4_2740089, NO_GET_CPU_REV
+	apply_erratum cortex_x4, ERRATUM(2740089), ERRATA_X4_2740089
 
 	isb
 	ret

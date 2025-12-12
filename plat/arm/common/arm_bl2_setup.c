@@ -20,7 +20,7 @@
 #include <lib/fconf/fconf_dyn_cfg_getter.h>
 #include <lib/gpt_rme/gpt_rme.h>
 #if TRANSFER_LIST
-#include <lib/transfer_list.h>
+#include <transfer_list.h>
 #endif
 #ifdef SPD_opteed
 #include <lib/optee_utils.h>
@@ -34,6 +34,40 @@ static meminfo_t bl2_tzram_layout __aligned(CACHE_WRITEBACK_GRANULE);
 
 /* Base address of fw_config received from BL1 */
 static uintptr_t config_base __unused;
+
+#if ARM_GPT_SUPPORT
+// FIXME: should be removed once the transfer list version is updated
+#define TL_TAG_GPT_ERROR_INFO	0x109
+
+/*
+ * Inform the GPT corruption to BL32.
+ */
+static void arm_set_gpt_corruption(uintptr_t gpt_corrupted_info_ptr, uint8_t flags)
+{
+	*(uint8_t *)gpt_corrupted_info_ptr |= flags;
+}
+
+static void arm_get_gpt_corruption(uintptr_t log_address, uint8_t gpt_corrupted_info)
+{
+#if TRANSFER_LIST
+	/* Convey this information to BL2 via its TL. */
+	struct transfer_list_entry *te = transfer_list_add(
+		(struct transfer_list_header *)log_address,
+		TL_TAG_GPT_ERROR_INFO,
+		sizeof(gpt_corrupted_info),
+		(void *)&gpt_corrupted_info);
+	if (te == NULL) {
+		ERROR("Failed to log GPT corruption info in transfer list\n");
+	}
+#endif /* TRANSFER_LIST */
+}
+
+static struct plat_log_gpt_corrupted arm_log_gpt_corruption = {
+	.gpt_corrupted_info = 0U,
+	.plat_set_gpt_corruption = arm_set_gpt_corruption,
+	.plat_log_gpt_corruption = arm_get_gpt_corruption,
+};
+#endif /* ARM_GPT_SUPPORT */
 
 /*
  * Check that BL2_BASE is above ARM_FW_CONFIG_LIMIT. This reserved page is
@@ -95,11 +129,18 @@ void arm_bl2_early_platform_setup(u_register_t arg0, u_register_t arg1,
 
 	/* Load partition table */
 #if ARM_GPT_SUPPORT
+	plat_setup_log_gpt_corrupted(&arm_log_gpt_corruption);
+
 	ret = gpt_partition_init();
 	if (ret != 0) {
 		ERROR("GPT partition initialisation failed!\n");
 		panic();
 	}
+
+#if TRANSFER_LIST
+	plat_log_gpt_ptr->plat_log_gpt_corruption((uintptr_t)secure_tl,
+						   plat_log_gpt_ptr->gpt_corrupted_info);
+#endif	/* TRANSFER_LIST */
 
 #endif /* ARM_GPT_SUPPORT */
 }
@@ -118,6 +159,14 @@ void bl2_early_platform_setup2(u_register_t arg0, u_register_t arg1,
  */
 void bl2_plat_preload_setup(void)
 {
+#if ARM_GPT_SUPPORT && !PSA_FWU_SUPPORT
+	/*
+	 * Find FIP in GPT before FW Config load.
+	 * Always use the FIP from bank 0
+	 */
+	arm_set_fip_addr(0U);
+#endif /* ARM_GPT_SUPPORT && !PSA_FWU_SUPPORT */
+
 #if TRANSFER_LIST
 /* Assume the secure TL hasn't been initialised if BL2 is running at EL3. */
 #if RESET_TO_BL2
@@ -137,10 +186,6 @@ void bl2_plat_preload_setup(void)
 	arm_bl2_dyn_cfg_init();
 #endif
 
-#if ARM_GPT_SUPPORT && !PSA_FWU_SUPPORT
-	/* Always use the FIP from bank 0 */
-	arm_set_fip_addr(0U);
-#endif /* ARM_GPT_SUPPORT && !PSA_FWU_SUPPORT */
 }
 
 /*
@@ -266,14 +311,16 @@ int arm_bl2_handle_post_image_load(unsigned int image_id)
 			WARN("OPTEE header parse error.\n");
 		}
 #endif
-		bl_mem_params->ep_info.spsr = arm_get_spsr_for_bl32_entry();
+		bl_mem_params->ep_info.spsr = arm_get_spsr(BL32_IMAGE_ID);
 		break;
 #endif
 
 	case BL33_IMAGE_ID:
+#if !USE_KERNEL_DT_CONVENTION
 		/* BL33 expects to receive the primary CPU MPID (through r0) */
 		bl_mem_params->ep_info.args.arg0 = 0xffff & read_mpidr();
-		bl_mem_params->ep_info.spsr = arm_get_spsr_for_bl33_entry();
+#endif /* !USE_KERNEL_DT_CONVENTION */
+		bl_mem_params->ep_info.spsr = arm_get_spsr(BL33_IMAGE_ID);
 		break;
 
 #ifdef SCP_BL2_BASE
@@ -308,8 +355,11 @@ int arm_bl2_plat_handle_post_image_load(unsigned int image_id)
 #endif
 
 #if TRANSFER_LIST
-	if (image_id == HW_CONFIG_ID) {
-		/* Refresh the now stale checksum following loading of HW_CONFIG into the TL. */
+	if (image_id == HW_CONFIG_ID || image_id == TOS_FW_CONFIG_ID) {
+		/*
+		 * Refresh the now stale checksum following loading of
+		 * HW_CONFIG or TOS_FW_CONFIG into the TL.
+		 */
 		transfer_list_update_checksum(secure_tl);
 	}
 #endif /* TRANSFER_LIST */
@@ -321,6 +371,7 @@ void arm_bl2_setup_next_ep_info(bl_mem_params_node_t *next_param_node)
 {
 	entry_point_info_t *ep __unused;
 
+#if TRANSFER_LIST
 	/*
 	 * Information might have been added to the TL before this (i.e. event log)
 	 * make sure the checksum is up to date.
@@ -332,4 +383,5 @@ void arm_bl2_setup_next_ep_info(bl_mem_params_node_t *next_param_node)
 	assert(ep != NULL);
 
 	arm_transfer_list_populate_ep_info(next_param_node, secure_tl);
+#endif
 }

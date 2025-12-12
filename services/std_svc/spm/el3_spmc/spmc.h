@@ -110,6 +110,12 @@ struct mailbox {
 
 	/* Lock access to mailbox. */
 	spinlock_t lock;
+
+	/* The offset of the last transmitted RX fragment */
+	uint32_t last_rx_fragment_offset;
+
+	/* The offset of the next RX fragment to transmit */
+	uint32_t next_rx_fragment_offset;
 };
 
 /*
@@ -164,7 +170,7 @@ struct secure_partition_desc {
 	struct ffa_uuid uuid_array[SPMC_AT_EL3_PARTITION_MAX_UUIDS];
 
 	/* Number of UUIDs in uuid array. */
-	int num_uuids;
+	uint32_t num_uuids;
 
 	/* Partition Properties. */
 	uint32_t properties;

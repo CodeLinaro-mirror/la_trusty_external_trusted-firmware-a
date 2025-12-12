@@ -12,7 +12,7 @@ PLAT_INCLUDES		:=	-Iplat/imx/common/include		\
 				-Iplat/imx/imx8m/imx8mm/include		\
 				-Idrivers/imx/usdhc			\
 				-Iinclude/common/tbbr			\
-				-Iinclude/lib/libfdt
+				-Ilib/libfdt
 
 # Include GICv3 driver files
 include drivers/arm/gic/v3/gicv3.mk
@@ -190,8 +190,10 @@ ifeq (${MEASURED_BOOT},1)
     include ${MEASURED_BOOT_MK}
 
 BL2_SOURCES		+=	plat/imx/imx8m/imx8m_measured_boot.c	\
-				plat/imx/imx8m/imx8m_dyn_cfg_helpers.c	\
-				${EVENT_LOG_SOURCES}
+				plat/imx/imx8m/imx8m_dyn_cfg_helpers.c
+
+    BL2_LIBS += $(LIBEVLOG_LIBS)
+    BL2_INCLUDE_DIRS += $(LIBEVLOG_INCLUDE_DIRS)
 endif
 
 ifeq (${SPD},trusty)

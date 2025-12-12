@@ -10,6 +10,8 @@
  * IPI interrupts
  */
 
+#include <common/ep_info.h>
+#include <common/debug.h>
 #include <drivers/arm/gic_common.h>
 #include <lib/mmio.h>
 #include <lib/utils.h>
@@ -44,9 +46,11 @@ uint32_t pm_get_shutdown_scope(void)
  * pm_client_set_wakeup_sources - Set all devices with enabled interrupts as
  *                                wake sources in the XilPM.
  * @node_id: Node id of processor.
+ * @flag: 0 - Call from secure source.
+ *	  1 - Call from non-secure source.
  *
  */
-void pm_client_set_wakeup_sources(uint32_t node_id)
+void pm_client_set_wakeup_sources(uint32_t node_id, uint32_t flag)
 {
 	uint32_t reg_num, device_id;
 	uint8_t pm_wakeup_nodes_set[XPM_NODEIDX_DEV_MAX] = {0U};
@@ -83,7 +87,7 @@ void pm_client_set_wakeup_sources(uint32_t node_id)
 					device_id = PERIPH_DEVID((uint32_t)node_idx);
 					ret = pm_set_wakeup_source(node_id,
 								   device_id, 1U,
-								   SECURE_FLAG);
+								   flag);
 					pm_wakeup_nodes_set[node_idx] = (ret == PM_RET_SUCCESS) ?
 										 1U : 0U;
 				}
@@ -159,7 +163,7 @@ enum pm_ret_status pm_self_suspend(uint32_t nid,
 	 * Do client specific suspend operations
 	 * (e.g. set powerdown request bit)
 	 */
-	pm_client_suspend(proc, state);
+	pm_client_suspend(proc, state, flag);
 
 	/* Send request to the PLM */
 	PM_PACK_PAYLOAD6(payload, LIBPM_MODULE_ID, flag, PM_SELF_SUSPEND,
@@ -167,67 +171,6 @@ enum pm_ret_status pm_self_suspend(uint32_t nid,
 	ret = pm_ipi_send_sync(proc, payload, NULL, 0);
 
 exit_label:
-	return ret;
-}
-
-/**
- * pm_abort_suspend() - PM call to announce that a prior suspend request
- *                      is to be aborted.
- * @reason: Reason for the abort.
- * @flag: 0 - Call from secure source.
- *        1 - Call from non-secure source.
- *
- * Calling PU expects the PMU to abort the initiated suspend procedure.
- * This is a non-blocking call without any acknowledge.
- *
- * Return: Returns status, either success or error+reason.
- *
- */
-enum pm_ret_status pm_abort_suspend(enum pm_abort_reason reason, uint32_t flag)
-{
-	uint32_t payload[PAYLOAD_ARG_CNT];
-
-	/*
-	 * Do client specific abort suspend operations
-	 * (e.g. enable interrupts and clear powerdown request bit)
-	 */
-	pm_client_abort_suspend();
-
-	/* Send request to the PLM */
-	PM_PACK_PAYLOAD3(payload, LIBPM_MODULE_ID, flag, PM_ABORT_SUSPEND,
-			 reason, primary_proc->node_id);
-	return pm_ipi_send_sync(primary_proc, payload, NULL, 0);
-}
-
-/**
- * pm_req_suspend() - PM call to request for another PU or subsystem to
- *                    be suspended gracefully.
- * @target: Node id of the targeted PU or subsystem.
- * @ack: Flag to specify whether acknowledge is requested.
- * @latency: Requested wakeup latency (not supported)
- * @state: Requested state (not supported).
- * @flag: 0 - Call from secure source.
- *        1 - Call from non-secure source.
- *
- * Return: Returns status, either success or error+reason.
- *
- */
-enum pm_ret_status pm_req_suspend(uint32_t target, uint8_t ack,
-				  uint32_t latency, uint32_t state,
-				  uint32_t flag)
-{
-	uint32_t payload[PAYLOAD_ARG_CNT];
-	enum pm_ret_status ret = PM_RET_SUCCESS;
-
-	/* Send request to the PMU */
-	PM_PACK_PAYLOAD4(payload, LIBPM_MODULE_ID, flag, PM_REQ_SUSPEND, target,
-			 latency, state);
-	if (ack == (uint32_t)IPI_BLOCKING) {
-		ret = pm_ipi_send_sync(primary_proc, payload, NULL, 0);
-	} else {
-		ret = pm_ipi_send(primary_proc, payload);
-	}
-
 	return ret;
 }
 
@@ -384,14 +327,14 @@ enum pm_ret_status pm_set_wakeup_source(uint32_t target, uint32_t wkup_device,
 }
 
 /**
- * eemi_feature_check() - Returns the supported API version if supported.
- * @api_id: API ID to check.
+ * tfa_api_feature_check() - Returns the supported TF-A API version if supported.
+ * @api_id: TF-A specific API ID to check.
  * @ret_payload: pointer to array of PAYLOAD_ARG_CNT number of
  *               words Returned supported API version
  *
  * Return: Returns status, either success or error+reason.
  */
-enum pm_ret_status eemi_feature_check(uint32_t api_id, uint32_t *ret_payload)
+enum pm_ret_status tfa_api_feature_check(uint32_t api_id, uint32_t *ret_payload)
 {
 	enum pm_ret_status ret;
 
@@ -404,11 +347,13 @@ enum pm_ret_status eemi_feature_check(uint32_t api_id, uint32_t *ret_payload)
 		break;
 	case TF_A_PM_REGISTER_SGI:
 	case TF_A_FEATURE_CHECK:
+	case TF_A_CLEAR_PM_STATE:
 		ret_payload[0] = PM_API_BASE_VERSION;
 		ret = PM_RET_SUCCESS;
 		break;
 	default:
 		ret = PM_RET_ERROR_NO_FEATURE;
+		break;
 	}
 
 	return ret;
@@ -432,6 +377,13 @@ enum pm_ret_status pm_feature_check(uint32_t api_id, uint32_t *ret_payload,
 	uint32_t payload[PAYLOAD_ARG_CNT];
 	uint32_t module_id;
 	enum pm_ret_status ret;
+	static bool deprecation_warned;
+
+	if (!deprecation_warned) {
+		WARN("%s will be deprecated in 2027.1 release. Use tfa_api_feature_check() for TF-A specific APIs.\n",
+		     __func__);
+		deprecation_warned = true;
+	}
 
 	/* Return version of API which are implemented in TF-A only */
 	switch (api_id) {
@@ -439,33 +391,31 @@ enum pm_ret_status pm_feature_check(uint32_t api_id, uint32_t *ret_payload,
 	case PM_GET_TRUSTZONE_VERSION:
 		ret_payload[0] = PM_API_VERSION_2;
 		ret = PM_RET_SUCCESS;
-		goto exit_label;
+		break;
 	case TF_A_PM_REGISTER_SGI:
 		ret_payload[0] = PM_API_BASE_VERSION;
 		ret = PM_RET_SUCCESS;
-		goto exit_label;
+		break;
 	default:
+		module_id = (api_id & MODULE_ID_MASK) >> 8U;
+
+		/*
+		 * feature check should be done only for LIBPM module
+		 * If module_id is 0, then we consider it LIBPM module as default id
+		 */
+		if ((module_id > 0U) && (module_id != LIBPM_MODULE_ID)) {
+			ret = PM_RET_SUCCESS;
+			break;
+		}
+
+		PM_PACK_PAYLOAD2(payload, LIBPM_MODULE_ID, flag,
+				 PM_FEATURE_CHECK, api_id);
+		ret = pm_ipi_send_sync(primary_proc, payload, ret_payload, RET_PAYLOAD_ARG_CNT);
+
 		break;
 	}
 
-	module_id = (api_id & MODULE_ID_MASK) >> 8U;
-
-	/*
-	 * feature check should be done only for LIBPM module
-	 * If module_id is 0, then we consider it LIBPM module as default id
-	 */
-	if ((module_id > 0U) && (module_id != LIBPM_MODULE_ID)) {
-		ret = PM_RET_SUCCESS;
-		goto exit_label;
-	}
-
-	PM_PACK_PAYLOAD2(payload, LIBPM_MODULE_ID, flag,
-			PM_FEATURE_CHECK, api_id);
-	ret = pm_ipi_send_sync(primary_proc, payload, ret_payload, RET_PAYLOAD_ARG_CNT);
-
-exit_label:
 	return ret;
-
 }
 
 /**
@@ -529,7 +479,7 @@ enum pm_ret_status pm_get_chipid(uint32_t *value)
 {
 	uint32_t payload[PAYLOAD_ARG_CNT];
 
-	PM_PACK_PAYLOAD1(payload, LIBPM_MODULE_ID, SECURE_FLAG, PM_GET_CHIPID);
+	PM_PACK_PAYLOAD1(payload, LIBPM_MODULE_ID, SECURE, PM_GET_CHIPID);
 
 	return pm_ipi_send_sync(primary_proc, payload, value, 2);
 }

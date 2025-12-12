@@ -138,6 +138,20 @@ subsections:
         deprecated:
           - plat/allwinner
 
+      - title: Altera
+        scope: altera
+
+        subsections:
+          - title: Agilex3
+            scope: agilex3
+
+      - title: AMD
+        scope: amd
+
+        subsections:
+          - title: Versal Gen 2
+            scope: versal2
+
       - title: AMLogic
         scope: amlogic
 
@@ -228,6 +242,9 @@ subsections:
             subsections:
               - title: RD-1 AE
                 scope: rd1ae
+
+              - title: RD-Aspen
+                scope: rdaspen
 
       - title: Aspeed
         scope: aspeed
@@ -332,6 +349,13 @@ subsections:
           - title: MT8196
             scope: mt8196
 
+      - title: Nuvoton
+        scope: nuvoton
+
+        subsections:
+          - title: npcm845x
+            scope: npcm845x
+
       - title: NVIDIA
         scope: nvidia
 
@@ -412,6 +436,12 @@ subsections:
                 subsections:
                   - title: i.MX93
                     scope: imx93
+
+                  - title: i.MX94
+                    scope: imx94
+
+                  - title: i.MX95
+                    scope: imx95
 
           - title: Layerscape
             scope: layerscape
@@ -522,14 +552,21 @@ subsections:
             deprecated:
               - plat/qti/sc7180
 
-          - title: SC7280
-            scope: sc7280
+          - title: SC7280 Chrome
+            scope: sc7280_chrome
 
             deprecated:
               - plat/qti/sc7280
+              - sc7280
 
           - title: MSM8916
             scope: msm8916
+
+          - title: Kodiak
+            scope: kodiak
+
+          - title: RB3Gen2
+            scope: rb3gen2
 
       - title: Raspberry Pi
         scope: rpi
@@ -561,6 +598,9 @@ subsections:
                 deprecated:
                   - plat/rcar3
 
+              - title: R-Car 4
+                scope: rcar4
+
       - title: Rockchip
         scope: rockchip
 
@@ -571,6 +611,9 @@ subsections:
           - title: RK3288
             scope: rk3288
 
+          - title: RK3328
+            scope: rk3328
+
           - title: RK3399
             scope: rk3399
 
@@ -578,8 +621,8 @@ subsections:
               - rockchip/rk3399
               - rk3399/suspend
 
-          - title: RK3328
-            scope: rk3328
+          - title: RK3568
+            scope: rk3568
 
           - title: RK3576
             scope: rk3576
@@ -621,6 +664,12 @@ subsections:
             scope: stm32mp2
 
             subsections:
+              - title: STM32MP21
+                scope: stm32mp21
+
+              - title: STM32MP23
+                scope: stm32mp23
+
               - title: STM32MP25
                 scope: stm32mp25
 
@@ -664,20 +713,6 @@ subsections:
             deprecated:
               - plat/zynqmp
               - plat/xilinx/zynqmp
-
-      - title: AMD
-        scope: amd
-
-        subsections:
-          - title: Versal Gen 2
-            scope: versal2
-
-      - title: Nuvoton
-        scope: nuvoton
-
-        subsections:
-          - title: npcm845x
-            scope: npcm845x
 
   - title: Bootloader Images
     scope: bl
@@ -769,6 +804,9 @@ subsections:
       - title: ChromeOS
         scope: cros
 
+      - title: Live Firmware Activation
+        scope: lfa
+
       - title: Secure Payload Dispatcher
         scope: spd
 
@@ -803,6 +841,9 @@ subsections:
           - errata
           - errata_report
 
+      - title: Debug FS
+        scope: debugfs
+
       - title: EL3 Runtime
         scope: el3-runtime
 
@@ -828,13 +869,16 @@ subsections:
       - title: MPMM
         scope: mpmm
 
+      - title: Per-cpu
+        scope: per-cpu
+
       - title: PSCI
         scope: psci
 
       - title: ROMlib
         scope: romlib
 
-      - title: GPT
+      - title: Granule Protection Tables
         scope: gpt
 
         deprecated:
@@ -842,6 +886,9 @@ subsections:
 
       - title: SMCCC
         scope: smccc
+
+        deprecated:
+          - smcc
 
       - title: Translation Tables
         scope: xlat
@@ -990,6 +1037,9 @@ subsections:
             scope: gic
 
             subsections:
+              - title: GICv5
+                scope: gicv5
+
               - title: GICv3
                 scope: gicv3
 
@@ -1175,6 +1225,9 @@ subsections:
           - title: Clock
             scope: nxp-clk
 
+          - title: uSDHC
+            scope: nxp-mmc
+
       - title: Renesas
         scope: renesas-drivers
 
@@ -1352,6 +1405,12 @@ subsections:
                 scope: stm32mp2-fdts
 
                 subsections:
+                  - title: STM32MP21
+                    scope: stm32mp21-fdts
+
+                  - title: STM32MP23
+                    scope: stm32mp23-fdts
+
                   - title: STM32MP25
                     scope: stm32mp25-fdts
 
@@ -1434,6 +1493,9 @@ subsections:
         deprecated:
           - git-hooks
 
+      - title: Visual Studio Code
+        scope: vscode
+
   - title: Tools
     scope: tools
 
@@ -1483,9 +1545,6 @@ subsections:
 
           - title: R/ZG Layout Tool
             scope: rzg-layout
-
-      - title: Transfer List Compiler
-        scope: tlc
 
       - title: Chain of Trust device tree to C source file
         scope: cot-dt2c

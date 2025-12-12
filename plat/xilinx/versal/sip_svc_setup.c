@@ -13,22 +13,23 @@
 #include <common/runtime_svc.h>
 #include <tools_share/uuid.h>
 
+#include <custom_svc.h>
 #include "ipi_mailbox_svc.h"
 #include "pm_svc_main.h"
 
 /* SMC function IDs for SiP Service queries */
-#define VERSAL_SIP_SVC_UID		U(0x8200ff01)
-#define VERSAL_SIP_SVC_VERSION		U(0x8200ff03)
+#define VERSAL_SIP_SVC_UID		0x8200ff01U
+#define VERSAL_SIP_SVC_VERSION		0x8200ff03U
 
 /* SiP Service Calls version numbers */
-#define SIP_SVC_VERSION_MAJOR	U(0)
-#define SIP_SVC_VERSION_MINOR	U(2)
+#define SIP_SVC_VERSION_MAJOR	0U
+#define SIP_SVC_VERSION_MINOR	2U
 
 /* These macros are used to identify PM calls from the SMC function ID */
 #define SIP_FID_MASK	GENMASK(23, 16)
 #define XLNX_FID_MASK	GENMASK(23, 12)
-#define PM_FID_VALUE	0u
-#define IPI_FID_VALUE	0x1000u
+#define PM_FID_VALUE	0U
+#define IPI_FID_VALUE	0x1000U
 #define is_pm_fid(_fid) (((_fid) & XLNX_FID_MASK) == PM_FID_VALUE)
 #define is_ipi_fid(_fid) (((_fid) & XLNX_FID_MASK) == IPI_FID_VALUE)
 
@@ -61,7 +62,7 @@ static int32_t sip_svc_setup(void)
  * @x4: SMC64 Arguments 4 from kernel.
  * @cookie: Unused
  * @handle: Pointer to caller's context structure.
- * @flags: SECURE_FLAG or NON_SECURE_FLAG.
+ * @flags: SECURE or NON_SECURE.
  *
  * Handler for all SiP SMC calls. Handles standard SIP requests
  * and calls PM SMC handler if the call is for a PM-API function.
@@ -104,6 +105,11 @@ static uintptr_t sip_svc_smc_handler(uint32_t smc_fid,
 
 	case VERSAL_SIP_SVC_VERSION:
 		SMC_RET2(handle, SIP_SVC_VERSION_MAJOR, SIP_SVC_VERSION_MINOR);
+
+	case SOC_SIP_SVC_CUSTOM:
+	case SOC_SIP_SVC64_CUSTOM:
+		return custom_smc_handler(smc_fid, x1, x2, x3, x4, cookie,
+					  handle, flags);
 
 	default:
 		WARN("Unimplemented SiP Service Call: 0x%x\n", smc_fid);

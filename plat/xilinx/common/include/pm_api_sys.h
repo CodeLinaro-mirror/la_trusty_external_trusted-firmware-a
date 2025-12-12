@@ -29,18 +29,13 @@ enum pm_ret_status pm_self_suspend(uint32_t nid,
 				   uint32_t latency,
 				   uint32_t state,
 				   uintptr_t address, uint32_t flag);
-enum pm_ret_status pm_abort_suspend(enum pm_abort_reason reason, uint32_t flag);
-enum pm_ret_status pm_req_suspend(uint32_t target,
-				  uint8_t ack,
-				  uint32_t latency,
-				  uint32_t state, uint32_t flag);
 enum pm_ret_status pm_req_wakeup(uint32_t target, uint32_t set_address,
 				 uintptr_t address, uint8_t ack, uint32_t flag);
 enum pm_ret_status pm_set_wakeup_source(uint32_t target, uint32_t wkup_device,
 					uint8_t enable, uint32_t flag);
 enum pm_ret_status pm_get_callbackdata(uint32_t *data, size_t count, uint32_t flag,
 			 uint32_t ack);
-void pm_client_set_wakeup_sources(uint32_t node_id);
+void pm_client_set_wakeup_sources(uint32_t node_id, uint32_t flag);
 enum pm_ret_status pm_force_powerdown(uint32_t target, uint8_t ack,
 				      uint32_t flag);
 enum pm_ret_status pm_system_shutdown(uint32_t type, uint32_t subtype,
@@ -54,13 +49,14 @@ enum pm_ret_status pm_register_notifier(uint32_t device_id, uint32_t event,
 					uint32_t wake, uint32_t enable,
 					uint32_t flag);
 enum pm_ret_status pm_get_chipid(uint32_t *value);
-enum pm_ret_status eemi_feature_check(uint32_t api_id, uint32_t *ret_payload);
+enum pm_ret_status tfa_api_feature_check(uint32_t api_id, uint32_t *ret_payload);
 
 /*
  * Assigning of argument values into array elements.
  */
 #define PM_PACK_PAYLOAD1(pl, mid, flag, arg0) {	\
-	pl[0] = (uint32_t)(((uint32_t)(arg0) & 0xFFU) | ((mid) << 8U) | ((flag) << 24U)); \
+	pl[0] = (uint32_t)(((uint32_t)(arg0) & 0xFFU) | \
+		((uint32_t)(mid) << 8U) | ((uint32_t)(flag) << 24U)); \
 }
 
 #define PM_PACK_PAYLOAD2(pl, mid, flag, arg0, arg1) {		\

@@ -29,6 +29,14 @@ PLAT_INCLUDES		:=	-Iplat/arm/board/juno/include
 PLAT_BL_COMMON_SOURCES	:=	plat/arm/board/juno/${ARCH}/juno_helpers.S \
 				plat/arm/board/juno/juno_common.c
 
+ifeq (${SPMC_AT_EL3}, 1)
+PLAT_BL_COMMON_SOURCES	+=	plat/arm/board/juno/juno_el3_spmc.c
+endif
+
+ifeq (${HOB_LIST}, 1)
+include lib/hob/hob.mk
+endif
+
 # Flag to enable support for AArch32 state on JUNO
 JUNO_AARCH32_EL3_RUNTIME	:=	0
 $(eval $(call assert_boolean,JUNO_AARCH32_EL3_RUNTIME))
@@ -114,6 +122,16 @@ ifeq (${TRUSTED_BOARD_BOOT}, 1)
    ifeq (${COT_DESC_IN_DTB},0)
       BL2_SOURCES	+=	plat/arm/board/juno/juno_tbbr_cot_bl2.c
    endif
+endif
+
+ifeq (${MEASURED_BOOT},1)
+PLAT_INCLUDES		+=	-Iinclude/lib/psa
+
+BL1_SOURCES		+=	plat/arm/board/juno/juno_common_measured_boot.c	\
+				plat/arm/board/juno/juno_bl1_measured_boot.c
+
+BL2_SOURCES		+=	plat/arm/board/juno/juno_common_measured_boot.c	\
+				plat/arm/board/juno/juno_bl2_measured_boot.c
 endif
 
 endif
@@ -204,6 +222,13 @@ $(eval $(call TOOL_ADD_PAYLOAD,${FW_CONFIG},--fw-config,${FW_CONFIG}))
 $(eval $(call TOOL_ADD_PAYLOAD,${TB_FW_CONFIG},--tb-fw-config,${TB_FW_CONFIG}))
 # Add the HW_CONFIG to FIP and specify the same to certtool
 $(eval $(call TOOL_ADD_PAYLOAD,${HW_CONFIG},--hw-config,${HW_CONFIG}))
+
+
+ifeq (${SPD},spmd)
+ifneq ($(ARM_SPMC_MANIFEST_DTS),)
+FDT_SOURCES +=	${ARM_SPMC_MANIFEST_DTS}
+endif
+endif
 
 include drivers/arm/ethosn/ethosn_npu.mk
 include plat/arm/board/common/board_common.mk

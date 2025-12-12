@@ -81,7 +81,7 @@ $(eval $(call add_define_val,CONSOLE,CONSOLE_ID_${CONSOLE}))
 
 # Runtime console in default console in DEBUG build
 ifeq ($(DEBUG), 1)
-CONSOLE_RUNTIME ?= pl011
+CONSOLE_RUNTIME ?= $(CONSOLE)
 endif
 
 # Runtime console
@@ -96,6 +96,11 @@ endif
 ifeq (${TRANSFER_LIST},0)
 XILINX_OF_BOARD_DTB_ADDR ?= 0x1000000
 $(eval $(call add_define,XILINX_OF_BOARD_DTB_ADDR))
+endif
+
+ifeq (${SPD},spmd)
+SPMC_MANIFEST_DTB_ADDR ?= 0x9800000
+$(eval $(call add_define,SPMC_MANIFEST_DTB_ADDR))
 endif
 
 PLAT_INCLUDES		:=	-Iinclude/plat/arm/common/			\
@@ -116,6 +121,7 @@ PLAT_BL_COMMON_SOURCES	:=	\
 				drivers/delay_timer/generic_delay_timer.c	\
 				${GICV3_SOURCES}				\
 				drivers/arm/pl011/aarch64/pl011_console.S	\
+				plat/xilinx/common/plat_clkfunc.c		\
 				plat/common/aarch64/crash_console_helpers.S	\
 				plat/arm/common/arm_common.c			\
 				plat/common/plat_gicv3.c			\
@@ -127,14 +133,7 @@ PLAT_BL_COMMON_SOURCES	:=	\
 BL31_SOURCES		+=	drivers/arm/cci/cci.c				\
 				lib/cpus/aarch64/cortex_a78_ae.S		\
 				lib/cpus/aarch64/cortex_a78.S			\
-				plat/common/plat_psci_common.c			\
-				drivers/scmi-msg/base.c				\
-				drivers/scmi-msg/entry.c			\
-				drivers/scmi-msg/smt.c				\
-				drivers/scmi-msg/clock.c			\
-				drivers/scmi-msg/power_domain.c			\
-				drivers/scmi-msg/reset_domain.c			\
-				${PLAT_PATH}/scmi.c
+				plat/common/plat_psci_common.c
 
 ifeq ($(TFA_NO_PM), 0)
 BL31_SOURCES		+=	plat/xilinx/common/pm_service/pm_api_sys.c	\
@@ -143,7 +142,14 @@ BL31_SOURCES		+=	plat/xilinx/common/pm_service/pm_api_sys.c	\
 				${PLAT_PATH}/pm_service/pm_svc_main.c	\
 				${PLAT_PATH}/pm_service/pm_client.c
 else
-BL31_SOURCES		+=	${PLAT_PATH}/plat_psci.c
+BL31_SOURCES		+=	${PLAT_PATH}/plat_psci.c			\
+				drivers/scmi-msg/base.c				\
+				drivers/scmi-msg/entry.c			\
+				drivers/scmi-msg/smt.c				\
+				drivers/scmi-msg/clock.c			\
+				drivers/scmi-msg/power_domain.c			\
+				drivers/scmi-msg/reset_domain.c			\
+				${PLAT_PATH}/scmi.c
 endif
 
 BL31_SOURCES		+=	common/fdt_wrappers.c                           \
@@ -160,6 +166,20 @@ BL31_SOURCES		+=	common/fdt_wrappers.c                           \
 				${PLAT_PATH}/sip_svc_setup.c			\
 				${PLAT_PATH}/gicv3.c
 
+ifeq (${SPD},spmd)
+BL31_SOURCES		+=	plat/common/plat_spmd_manifest.c        \
+				common/uuid.c                           \
+				${LIBFDT_SRCS}                          \
+				${FDT_WRAPPERS_SOURCES}
+
+ARM_SPMC_MANIFEST_DTS	:=	${PLAT_PATH}/spmc_sel1_optee_manifest.dts
+
+FDT_SOURCES		+=	${ARM_SPMC_MANIFEST_DTS}
+
+VERSAL2_TOS_FW_CONFIG	:=	${BUILD_PLAT}/fdts/$(notdir $(basename ${ARM_SPMC_MANIFEST_DTS})).dtb
+
+$(eval $(call TOOL_ADD_PAYLOAD,${VERSAL2_TOS_FW_CONFIG},--tos-fw-config,${VERSAL2_TOS_FW_CONFIG}))
+endif
 
 ifeq ($(DEBUG),1)
 BL31_SOURCES            +=      ${PLAT_PATH}/plat_ocm_coherency.c
@@ -189,3 +209,9 @@ XLNX_DT_CFG	:= 0
 endif
 endif
 $(eval $(call add_define,XLNX_DT_CFG))
+
+ifdef CUSTOM_PKG_PATH
+include $(CUSTOM_PKG_PATH)/custom_pkg.mk
+else
+BL31_SOURCES		+=	plat/xilinx/common/custom_sip_svc.c
+endif

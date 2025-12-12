@@ -11,7 +11,8 @@
 #include <asm_macros.S>
 #include <assert_macros.S>
 #include <context.h>
-#include <lib/xlat_tables/xlat_tables_defs.h>
+#include <lib/el3_runtime/cpu_data.h>
+#include <lib/per_cpu/per_cpu_macros.S>
 
 	/*
 	 * Helper macro to initialise EL3 registers we care about.
@@ -57,16 +58,15 @@ feat_sctlr2_not_supported\@:
 
 #ifdef IMAGE_BL31
 	/* ---------------------------------------------------------------------
-	 * Initialise the per-cpu cache pointer to the CPU.
+	 * Initialise the per-cpu framework to utilize tpidr_el3.
+	 *
 	 * This is done early to enable crash reporting to have access to crash
 	 * stack. Since crash reporting depends on cpu_data to report the
 	 * unhandled exception, not doing so can lead to recursive exceptions
 	 * due to a NULL TPIDR_EL3.
 	 * ---------------------------------------------------------------------
 	 */
-	bl	plat_my_core_pos
-	bl	_cpu_data_by_index
-	msr	tpidr_el3, x0
+	per_cpu_init
 #endif /* IMAGE_BL31 */
 
 	/* ---------------------------------------------------------------------
@@ -331,6 +331,47 @@ feat_sctlr2_not_supported\@:
 		bl	inv_dcache_range
 #endif
 #endif
+#if defined(IMAGE_BL31)
+		adrp	x0, __PER_CPU_START__
+		add	x0, x0, :lo12:__PER_CPU_START__
+		adrp	x1, __PER_CPU_END__
+		add	x1, x1, :lo12:__PER_CPU_END__
+		sub	x1, x1, x0
+#if (PLATFORM_NODE_COUNT > 1)
+		mov	x9, x1
+#endif /* (PLATFORM_NODE_COUNT > 1) */
+		bl	zeromem
+#if (PLATFORM_NODE_COUNT > 1)
+		/*
+		 * Zero-initialize per-cpu sections defined by the platform.
+		 * Care must be taken to preserve and retain the clobbered
+		 * registers. A standard around the container for per-cpu nodes
+		 * is not yet defined.
+		 */
+		mov	x10, #1
+		mov	x11, #PLATFORM_NODE_COUNT
+
+		1:
+			cmp	x10, x11
+			b.hs	2f
+
+			mov	x0, x10
+			bl	plat_per_cpu_node_base
+			cmn	x0, #1
+			b.eq	3f
+
+			/* x1 contains size param */
+			mov	x1, x9
+			bl	zeromem
+
+		3:
+			add	x10, x10, #1
+			b	1b
+
+		2:
+#endif /* (PLATFORM_NODE_COUNT > 1) */
+#endif /* defined(IMAGE_BL31) */
+
 		adrp	x0, __BSS_START__
 		add	x0, x0, :lo12:__BSS_START__
 
@@ -470,7 +511,6 @@ feat_sctlr2_not_supported\@:
 	 *  available.
 	 *
 	 * CPTR_EL3.EZ: Set to one so that accesses to ZCR_EL3 do not trap
-	 * CPTR_EL3.TFP: Set to zero so that advanced SIMD operations don't trap
 	 * CPTR_EL3.ESM: Set to one so that SME related registers don't trap
 	 *
 	 * PSTATE.DIT: Set to one to enable the Data Independent Timing (DIT)
@@ -486,6 +526,7 @@ feat_sctlr2_not_supported\@:
 		mrs	x15, scr_el3
 		orr	x15, x15, #SCR_EA_BIT
 		orr	x15, x15, #SCR_SIF_BIT
+		bic	x15, x15, #SCR_TRNDR_BIT
 		msr	scr_el3, x15
 
 		mrs 	x15, pmcr_el0
@@ -495,7 +536,6 @@ feat_sctlr2_not_supported\@:
 		mrs	x15, cptr_el3
 		orr	x15, x15, #CPTR_EZ_BIT
 		orr	x15, x15, #ESM_BIT
-		bic	x15, x15, #TFP_BIT
 		msr	cptr_el3, x15
 
 #if ENABLE_FEAT_DIT

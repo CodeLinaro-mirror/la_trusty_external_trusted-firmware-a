@@ -23,16 +23,14 @@ static u_register_t init_mdcr_el2_hpmn(u_register_t mdcr_el2)
 
 static u_register_t mtpmu_disable_el3(u_register_t mdcr_el3)
 {
-	if (!is_feat_mtpmu_supported()) {
-		return mdcr_el3;
+	if (is_feat_mtpmu_supported()) {
+		/*
+		 * MDCR_EL3.MTPME = 0
+		 * FEAT_MTPMU is disabled. The Effective value of PMEVTYPER<n>_EL0.MT is
+		 * zero.
+		 */
+		mdcr_el3 &= ~MDCR_MTPME_BIT;
 	}
-
-	/*
-	 * MDCR_EL3.MTPME = 0
-	 * FEAT_MTPMU is disabled. The Effective value of PMEVTYPER<n>_EL0.MT is
-	 * zero.
-	 */
-	mdcr_el3 &= ~MDCR_MTPME_BIT;
 
 	return mdcr_el3;
 }
@@ -83,10 +81,17 @@ void pmuv3_enable(cpu_context_t *ctx)
 	 *
 	 * MDCR_EL3.TPM: Set to zero so that EL0, EL1, and EL2 System register
 	 *  accesses to all Performance Monitors registers do not trap to EL3.
+	 *
+	 * MDCR_EL3.PMEE set to 0b01 to delegate PMU IRQ and Profiling exception
+	 * control to MDCR_EL2, to allow lower ELs own this policy.
 	 */
 	mdcr_el3_val |= MDCR_SCCD_BIT | MDCR_MCCD_BIT | MDCR_EnPM2_BIT;
 	mdcr_el3_val &=	~(MDCR_MPMX_BIT | MDCR_SPME_BIT | MDCR_TPM_BIT);
 	mdcr_el3_val = mtpmu_disable_el3(mdcr_el3_val);
+
+	if (is_feat_ebep_supported()) {
+		mdcr_el3_val |= MDCR_PMEE(MDCR_PMEE_CTRL_EL2);
+	}
 
 	write_ctx_reg(state, CTX_MDCR_EL3, mdcr_el3_val);
 }
@@ -118,17 +123,14 @@ void pmuv3_init_el3(void)
 
 static u_register_t mtpmu_disable_el2(u_register_t mdcr_el2)
 {
-	if (!is_feat_mtpmu_supported()) {
-		return mdcr_el2;
+	if (is_feat_mtpmu_supported()) {
+		/*
+		 * MDCR_EL2.MTPME = 0
+		 * FEAT_MTPMU is disabled. The Effective value of PMEVTYPER<n>_EL0.MT is
+		 * zero.
+		 */
+		mdcr_el2 &= ~MDCR_EL2_MTPME;
 	}
-
-	/*
-	 * MDCR_EL2.MTPME = 0
-	 * FEAT_MTPMU is disabled. The Effective value of PMEVTYPER<n>_EL0.MT is
-	 * zero.
-	 */
-	mdcr_el2 &= ~MDCR_EL2_MTPME;
-
 	return mdcr_el2;
 }
 

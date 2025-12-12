@@ -8,6 +8,7 @@
 #include <assert.h>
 
 #include <common/debug.h>
+#include <common/ep_info.h>
 #include <lib/mmio.h>
 #include <lib/psci/psci.h>
 #include <plat/arm/common/plat_arm.h>
@@ -76,9 +77,6 @@ static void versal_net_pwr_domain_off(const psci_power_state_t *target_state)
 			__func__, i, target_state->pwr_domain_state[i]);
 	}
 
-	/* Prevent interrupts from spuriously waking up this cpu */
-	plat_arm_gic_cpuif_disable();
-
 	/*
 	 * Send request to PMC to power down the appropriate APU CPU
 	 * core.
@@ -87,15 +85,15 @@ static void versal_net_pwr_domain_off(const psci_power_state_t *target_state)
 	 * invoking CPU_on function, during which resume address will
 	 * be set.
 	 */
-	ret = pm_feature_check((uint32_t)PM_SELF_SUSPEND, &version_type[0], SECURE_FLAG);
+	ret = pm_feature_check((uint32_t)PM_SELF_SUSPEND, &version_type[0], NON_SECURE);
 	if (ret == (uint32_t)PM_RET_SUCCESS) {
 		fw_api_version = version_type[0] & 0xFFFFU;
 		if (fw_api_version >= 3U) {
 			(void)pm_self_suspend(proc->node_id, MAX_LATENCY, PM_STATE_CPU_OFF, 0,
-					      SECURE_FLAG);
+					      NON_SECURE);
 		} else {
 			(void)pm_self_suspend(proc->node_id, MAX_LATENCY, PM_STATE_CPU_IDLE, 0,
-					      SECURE_FLAG);
+					      NON_SECURE);
 		}
 	}
 
@@ -133,9 +131,9 @@ static void __dead2 versal_net_system_reset_scope(uint32_t scope)
 	 * Send the system reset request to the firmware if power down request
 	 * is not received from firmware.
 	 */
-	if (!pwrdwn_req_received) {
+	if (!pm_pwrdwn_req_status()) {
 		(void)pm_system_shutdown(XPM_SHUTDOWN_TYPE_RESET,
-					 scope, SECURE_FLAG);
+					 scope, NON_SECURE);
 
 		/*
 		 * Wait for system shutdown request completed and idle callback
@@ -225,10 +223,8 @@ static void versal_net_pwr_domain_suspend(const psci_power_state_t *target_state
 			__func__, i, target_state->pwr_domain_state[i]);
 	}
 
-	plat_arm_gic_cpuif_disable();
-
 	if (target_state->pwr_domain_state[1] > PLAT_MAX_RET_STATE) {
-		plat_arm_gic_save();
+		gic_save();
 	}
 
 	state = (target_state->pwr_domain_state[1] > PLAT_MAX_RET_STATE) ?
@@ -236,7 +232,7 @@ static void versal_net_pwr_domain_suspend(const psci_power_state_t *target_state
 
 	/* Send request to PMC to suspend this core */
 	(void)pm_self_suspend(proc->node_id, MAX_LATENCY, state, versal_net_sec_entry,
-			SECURE_FLAG);
+			      NON_SECURE);
 
 	/* TODO: disable coherency */
 
@@ -247,12 +243,6 @@ exit_label:
 static void versal_net_pwr_domain_on_finish(const psci_power_state_t *target_state)
 {
 	(void)target_state;
-
-	/* Enable the gic cpu interface */
-	plat_arm_gic_pcpu_init();
-
-	/* Program the gic per-cpu distributor or re-distributor interface */
-	plat_arm_gic_cpuif_enable();
 }
 
 /**
@@ -282,10 +272,8 @@ static void versal_net_pwr_domain_suspend_finish(const psci_power_state_t *targe
 
 	/* APU was turned off, so restore GIC context */
 	if (target_state->pwr_domain_state[1] > PLAT_MAX_RET_STATE) {
-		plat_arm_gic_resume();
+		gic_resume();
 	}
-
-	plat_arm_gic_cpuif_enable();
 
 exit_label:
 	return;
@@ -300,7 +288,7 @@ static void __dead2 versal_net_system_off(void)
 {
 	/* Send the power down request to the PMC */
 	(void)pm_system_shutdown(XPM_SHUTDOWN_TYPE_SHUTDOWN,
-			  pm_get_shutdown_scope(), SECURE_FLAG);
+				 pm_get_shutdown_scope(), NON_SECURE);
 
 	while (true) {
 		wfi();

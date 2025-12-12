@@ -8,6 +8,7 @@
 #define RMMD_PRIVATE_H
 
 #include <context.h>
+#include <lib/psci/psci_lib.h>
 #include <services/rmmd_svc.h>
 
 /*******************************************************************************
@@ -39,6 +40,7 @@
  */
 typedef struct rmmd_rmm_context {
 	uint64_t c_rt_ctx;
+	uint64_t activation_token;
 	cpu_context_t cpu_ctx;
 } rmmd_rmm_context_t;
 
@@ -65,6 +67,9 @@ int rmmd_el3_ide_key_set_stop(uint64_t ecam_address, uint64_t rp_id, uint64_t id
 			      uint64_t request_id, uint64_t cookie);
 int rmmd_el3_ide_km_pull_response(uint64_t ecam_address, uint64_t rp_id, uint64_t *req_resp,
 				  uint64_t *request_id, uint64_t *cookie_ptr);
+
+/* Memory reservation for RMM */
+int rmmd_reserve_memory(size_t size, uint64_t *arg);
 
 /* Assembly helpers */
 uint64_t rmmd_rmm_enter(uint64_t *c_rt_ctx);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2025, Arm Limited and Contributors. All rights reserved.
  * Copyright (c) 2023, NVIDIA Corporation. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
@@ -340,7 +340,7 @@ typedef struct plat_psci_ops {
 	int (*validate_ns_entrypoint)(uintptr_t ns_entrypoint);
 	void (*get_sys_suspend_power_state)(
 				    psci_power_state_t *req_state);
-	int (*get_pwr_lvl_state_idx)(plat_local_state_t pwr_domain_state,
+	unsigned int (*get_pwr_lvl_state_idx)(plat_local_state_t pwr_domain_state,
 				    int pwrlvl);
 	int (*translate_power_state_by_mpidr)(u_register_t mpidr,
 				    unsigned int power_state,
@@ -376,7 +376,6 @@ int psci_features(unsigned int psci_fid);
 #if PSCI_OS_INIT_MODE
 int psci_set_suspend_mode(unsigned int mode);
 #endif
-void psci_power_down_wfi(void);
 void psci_arch_setup(void);
 
 #endif /*__ASSEMBLER__*/

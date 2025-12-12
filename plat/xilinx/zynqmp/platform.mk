@@ -119,7 +119,7 @@ $(eval $(call add_define_val,ZYNQMP_CONSOLE,ZYNQMP_CONSOLE_ID_${ZYNQMP_CONSOLE})
 
 # Runtime console in default console in DEBUG build
 ifeq ($(DEBUG), 1)
-CONSOLE_RUNTIME ?= cadence
+CONSOLE_RUNTIME ?= $(ZYNQMP_CONSOLE)
 endif
 
 # Runtime console
@@ -162,7 +162,7 @@ TF_CFLAGS_aarch64	+=	-mbranch-protection=none
 ifdef CUSTOM_PKG_PATH
 include $(CUSTOM_PKG_PATH)/custom_pkg.mk
 else
-BL31_SOURCES		+=	plat/xilinx/zynqmp/custom_sip_svc.c
+BL31_SOURCES		+=	plat/xilinx/common/custom_sip_svc.c
 endif
 
 ifneq (${RESET_TO_BL31},1)

@@ -272,7 +272,7 @@ void disable_mpu_icache_el2(void);
 #define write_daifset(val) SYSREG_WRITE_CONST(daifset, val)
 
 
-#if ENABLE_FEAT_D128 && !defined(SPD_tspd)
+#if ENABLE_FEAT_D128 && !IMAGE_BL32
 /* Don't use mrrs/msrr read/write implementation with tspd,
  * While using SPD=tspd, tspd compiles with current arch_helpers
  * thus trying to use mrrs/msrr read/write from Secure-world.
@@ -305,18 +305,47 @@ DEFINE_SYSREG_RW_FUNCS(vttbr_el2)
 DEFINE_RENAME_SYSREG_RW_FUNCS(rcwmask_el1, RCWMASK_EL1)
 DEFINE_RENAME_SYSREG_RW_FUNCS(rcwsmask_el1, RCWSMASK_EL1)
 
-#endif /* ENABLE_FEAT_D128 && !defined(SPD_tspd) */
+#endif /* ENABLE_FEAT_D128 && !IMAGE_BL32 */
 
+DEFINE_IDREG_READ_FUNC(id_pfr0_el1)
 DEFINE_IDREG_READ_FUNC(id_pfr1_el1)
+DEFINE_RENAME_IDREG_READ_FUNC(id_pfr2_el1, ID_PFR2_EL1)
+DEFINE_IDREG_READ_FUNC(id_afr0_el1)
+DEFINE_IDREG_READ_FUNC(id_dfr0_el1)
+DEFINE_RENAME_IDREG_READ_FUNC(id_dfr1_el1, ID_DFR1_EL1)
+DEFINE_IDREG_READ_FUNC(id_mmfr0_el1)
+DEFINE_IDREG_READ_FUNC(id_mmfr1_el1)
+DEFINE_IDREG_READ_FUNC(id_mmfr2_el1)
+DEFINE_IDREG_READ_FUNC(id_mmfr3_el1)
+DEFINE_IDREG_READ_FUNC(id_mmfr4_el1)
+DEFINE_IDREG_READ_FUNC(id_mmfr5_el1)
+DEFINE_IDREG_READ_FUNC(id_isar0_el1)
+DEFINE_IDREG_READ_FUNC(id_isar1_el1)
+DEFINE_IDREG_READ_FUNC(id_isar2_el1)
+DEFINE_IDREG_READ_FUNC(id_isar3_el1)
+DEFINE_IDREG_READ_FUNC(id_isar4_el1)
+DEFINE_IDREG_READ_FUNC(id_isar5_el1)
+DEFINE_RENAME_IDREG_READ_FUNC(id_isar6_el1, ID_ISAR6_EL1)
+DEFINE_IDREG_READ_FUNC(mvfr0_el1)
+DEFINE_IDREG_READ_FUNC(mvfr1_el1)
+DEFINE_IDREG_READ_FUNC(mvfr2_el1)
+
 DEFINE_IDREG_READ_FUNC(id_aa64isar0_el1)
 DEFINE_IDREG_READ_FUNC(id_aa64isar1_el1)
 DEFINE_RENAME_IDREG_READ_FUNC(id_aa64isar2_el1, ID_AA64ISAR2_EL1)
+DEFINE_RENAME_IDREG_READ_FUNC(id_aa64isar3_el1, ID_AA64ISAR3_EL1)
 DEFINE_IDREG_READ_FUNC(id_aa64pfr0_el1)
 DEFINE_IDREG_READ_FUNC(id_aa64pfr1_el1)
 DEFINE_RENAME_IDREG_READ_FUNC(id_aa64pfr2_el1, ID_AA64PFR2_EL1)
 DEFINE_IDREG_READ_FUNC(id_aa64dfr0_el1)
 DEFINE_IDREG_READ_FUNC(id_aa64dfr1_el1)
-DEFINE_IDREG_READ_FUNC(id_afr0_el1)
+DEFINE_RENAME_IDREG_READ_FUNC(id_aa64zfr0_el1, ID_AA64ZFR0_EL1)
+DEFINE_RENAME_IDREG_READ_FUNC(id_aa64fpfr0_el1, ID_AA64FPFR0_EL1)
+DEFINE_RENAME_IDREG_READ_FUNC(id_aa64dfr2_el1, ID_AA64DFR2_EL1)
+DEFINE_IDREG_READ_FUNC(id_aa64afr0_el1)
+DEFINE_IDREG_READ_FUNC(id_aa64afr1_el1)
+DEFINE_RENAME_IDREG_READ_FUNC(gmid_el1, GMID_EL1)
+
 DEFINE_SYSREG_READ_FUNC(CurrentEl)
 DEFINE_SYSREG_READ_FUNC(ctr_el0)
 DEFINE_SYSREG_RW_FUNCS(daif)
@@ -559,6 +588,12 @@ DEFINE_SYSREG_RW_FUNCS(spsr_fiq)
 DEFINE_SYSREG_RW_FUNCS(dacr32_el2)
 DEFINE_SYSREG_RW_FUNCS(ifsr32_el2)
 
+/* GICv5 System Registers */
+DEFINE_RENAME_SYSREG_RW_FUNCS(icc_ppi_domainr0_el3, ICC_PPI_DOMAINR0_EL3)
+DEFINE_RENAME_SYSREG_RW_FUNCS(icc_ppi_domainr1_el3, ICC_PPI_DOMAINR1_EL3)
+DEFINE_RENAME_SYSREG_RW_FUNCS(icc_ppi_domainr2_el3, ICC_PPI_DOMAINR2_EL3)
+DEFINE_RENAME_SYSREG_RW_FUNCS(icc_ppi_domainr3_el3, ICC_PPI_DOMAINR3_EL3)
+
 /* GICv3 System Registers */
 
 DEFINE_RENAME_SYSREG_RW_FUNCS(icc_sre_el1, ICC_SRE_EL1)
@@ -747,6 +782,7 @@ DEFINE_RENAME_SYSREG_RW_FUNCS(clusterpmovsclr_el1, CLUSTERPMOVSCLR_EL1)
 DEFINE_RENAME_SYSREG_RW_FUNCS(clusterpmselr_el1, CLUSTERPMSELR_EL1)
 DEFINE_RENAME_SYSREG_RW_FUNCS(clusterpmxevcntr_el1, CLUSTERPMXEVCNTR_EL1)
 DEFINE_RENAME_SYSREG_RW_FUNCS(clusterpmxevtyper_el1, CLUSTERPMXEVTYPER_EL1)
+DEFINE_RENAME_SYSREG_RW_FUNCS(clusterpmmdcr_el3, CLUSTERPMMDCR_EL3)
 
 /* CPU Power/Performance Management registers */
 DEFINE_RENAME_SYSREG_RW_FUNCS(cpuppmcr_el3, CPUPPMCR_EL3)
@@ -763,6 +799,15 @@ DEFINE_RENAME_SYSREG_RW_FUNCS(fpmr, FPMR)
 
 /* FEAT_MEC Registers */
 DEFINE_RENAME_SYSREG_READ_FUNC(mecidr_el2, MECIDR_EL2)
+
+DEFINE_RENAME_IDREG_READ_FUNC(id_aa64mmfr4_el1, ID_AA64MMFR4_EL1)
+
+/* FEAT_FGWTE3 Registers */
+DEFINE_RENAME_SYSREG_RW_FUNCS(fgwte3_el3, FGWTE3_EL3)
+
+/* Armv9.3 MPAM_PE_BW_CTRL Registers */
+DEFINE_RENAME_SYSREG_RW_FUNCS(mpambw2_el2, MPAMBW2_EL2)
+DEFINE_RENAME_SYSREG_RW_FUNCS(mpambw3_el3, MPAMBW3_EL3)
 
 #define IS_IN_EL(x) \
 	(GET_EL(read_CurrentEl()) == MODE_EL##x)
@@ -805,6 +850,14 @@ static inline uint64_t el_implemented(unsigned int el)
 
 		return (read_id_aa64pfr0_el1() >> shift) & ID_AA64PFR0_ELX_MASK;
 	}
+}
+
+/*
+ * Read number of break points available.
+ */
+static inline unsigned int read_brps_id_field(void)
+{
+	return EXTRACT(ID_AA64DFR1_BRP, read_id_aa64dfr1_el1());
 }
 
 /*
@@ -934,6 +987,9 @@ static inline void tlbirpalos_512m(uintptr_t addr)
 
 #define read_clusterpmxevtyper()	read_clusterpmxevtyper_el1()
 #define write_clusterpmxevtyper(_v)	write_clusterpmxevtyper_el1(_v)
+
+#define read_clusterpmmdcr()		read_clusterpmmdcr_el3()
+#define write_clusterpmmdcr(_v)		write_clusterpmmdcr_el3(_v)
 
 #if ERRATA_SPECULATIVE_AT
 /*
