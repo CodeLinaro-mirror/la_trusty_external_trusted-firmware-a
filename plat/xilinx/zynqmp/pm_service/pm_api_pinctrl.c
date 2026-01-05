@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2018-2020, Arm Limited and Contributors. All rights reserved.
- * Copyright (c) 2022-2023, Advanced Micro Devices, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Advanced Micro Devices, Inc. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -123,7 +123,7 @@ static struct pinctrl_function pinctrl_functions[MAX_FUNCTION] =  {
 		.name = "qspi0",
 		.regval = 0x02,
 		.group_base = PINCTRL_GRP_QSPI0_0,
-		.group_size = PINCTRL_GRP_QSPI0_0 - PINCTRL_GRP_QSPI0_0 + 1U,
+		.group_size = PINCTRL_GRP_QSPI0_1 - PINCTRL_GRP_QSPI0_0 + 1U,
 	},
 	[PINCTRL_FUNC_QSPI_FBCLK] = {
 		.name = "qspi_fbclk",
@@ -135,7 +135,7 @@ static struct pinctrl_function pinctrl_functions[MAX_FUNCTION] =  {
 		.name = "qspi_ss",
 		.regval = 0x02,
 		.group_base = PINCTRL_GRP_QSPI_SS,
-		.group_size = PINCTRL_GRP_QSPI_SS - PINCTRL_GRP_QSPI_SS + 1U,
+		.group_size = PINCTRL_GRP_QSPI_SS_1 - PINCTRL_GRP_QSPI_SS + 1U,
 	},
 	[PINCTRL_FUNC_SPI0] = {
 		.name = "spi0",
@@ -383,6 +383,7 @@ static struct zynqmp_pin_group zynqmp_pin_groups[MAX_PIN] = {
 	[PINCTRL_PIN_0] = {
 		.groups = &((uint16_t []) {
 			PINCTRL_GRP_QSPI0_0,
+			PINCTRL_GRP_QSPI0_1,
 			PINCTRL_GRP_RESERVED,
 			PINCTRL_GRP_RESERVED,
 			PINCTRL_GRP_TESTSCAN0_0,
@@ -401,6 +402,7 @@ static struct zynqmp_pin_group zynqmp_pin_groups[MAX_PIN] = {
 	[PINCTRL_PIN_1] = {
 		.groups = &((uint16_t []) {
 			PINCTRL_GRP_QSPI0_0,
+			PINCTRL_GRP_QSPI0_1,
 			PINCTRL_GRP_RESERVED,
 			PINCTRL_GRP_RESERVED,
 			PINCTRL_GRP_TESTSCAN0_0,
@@ -419,6 +421,7 @@ static struct zynqmp_pin_group zynqmp_pin_groups[MAX_PIN] = {
 	[PINCTRL_PIN_2] = {
 		.groups = &((uint16_t []) {
 			PINCTRL_GRP_QSPI0_0,
+			PINCTRL_GRP_QSPI0_1,
 			PINCTRL_GRP_RESERVED,
 			PINCTRL_GRP_RESERVED,
 			PINCTRL_GRP_TESTSCAN0_0,
@@ -437,6 +440,7 @@ static struct zynqmp_pin_group zynqmp_pin_groups[MAX_PIN] = {
 	[PINCTRL_PIN_3] = {
 		.groups = &((uint16_t []) {
 			PINCTRL_GRP_QSPI0_0,
+			PINCTRL_GRP_QSPI0_1,
 			PINCTRL_GRP_RESERVED,
 			PINCTRL_GRP_RESERVED,
 			PINCTRL_GRP_TESTSCAN0_0,
@@ -455,6 +459,7 @@ static struct zynqmp_pin_group zynqmp_pin_groups[MAX_PIN] = {
 	[PINCTRL_PIN_4] = {
 		.groups = &((uint16_t []) {
 			PINCTRL_GRP_QSPI0_0,
+			PINCTRL_GRP_QSPI0_1,
 			PINCTRL_GRP_RESERVED,
 			PINCTRL_GRP_RESERVED,
 			PINCTRL_GRP_TESTSCAN0_0,
@@ -473,6 +478,7 @@ static struct zynqmp_pin_group zynqmp_pin_groups[MAX_PIN] = {
 	[PINCTRL_PIN_5] = {
 		.groups = &((uint16_t []) {
 			PINCTRL_GRP_QSPI_SS,
+			PINCTRL_GRP_QSPI_SS_1,
 			PINCTRL_GRP_RESERVED,
 			PINCTRL_GRP_RESERVED,
 			PINCTRL_GRP_TESTSCAN0_0,
@@ -1991,13 +1997,16 @@ enum pm_ret_status pm_api_pinctrl_get_num_functions(uint32_t *nfuncs)
 enum pm_ret_status pm_api_pinctrl_get_num_func_groups(uint32_t fid,
 						      uint32_t *ngroups)
 {
-	if (fid >= MAX_FUNCTION) {
-		return PM_RET_ERROR_ARGS;
+	enum pm_ret_status status = PM_RET_SUCCESS;
+
+	if (fid >= (uint32_t)MAX_FUNCTION) {
+		status = PM_RET_ERROR_ARGS;
+	} else {
+
+		*ngroups = pinctrl_functions[fid].group_size;
 	}
 
-	*ngroups = pinctrl_functions[fid].group_size;
-
-	return PM_RET_SUCCESS;
+	return status;
 }
 
 /**
@@ -2011,7 +2020,7 @@ enum pm_ret_status pm_api_pinctrl_get_num_func_groups(uint32_t fid,
  */
 void pm_api_pinctrl_get_function_name(uint32_t fid, char *name)
 {
-	if (fid >= MAX_FUNCTION) {
+	if (fid >= (uint32_t)MAX_FUNCTION) {
 		(void)memcpy(name, END_OF_FUNCTION, FUNCTION_NAME_LEN);
 	} else {
 		(void)memcpy(name, pinctrl_functions[fid].name, FUNCTION_NAME_LEN);
@@ -2044,9 +2053,11 @@ enum pm_ret_status pm_api_pinctrl_get_function_groups(uint32_t fid,
 	uint16_t grps;
 	uint16_t end_of_grp_offset;
 	uint16_t i;
+	enum pm_ret_status status = PM_RET_SUCCESS;
 
-	if (fid >= MAX_FUNCTION) {
-		return PM_RET_ERROR_ARGS;
+	if (fid >= (uint32_t)MAX_FUNCTION) {
+		status = PM_RET_ERROR_ARGS;
+		goto exit_label;
 	}
 
 	(void)memset(groups, END_OF_GROUPS, GROUPS_PAYLOAD_LEN);
@@ -2058,10 +2069,11 @@ enum pm_ret_status pm_api_pinctrl_get_function_groups(uint32_t fid,
 		if ((grps + index + i) >= end_of_grp_offset) {
 			break;
 		}
-		groups[i] = (grps + index + i);
+		groups[i] = (uint16_t)(grps + index + i);
 	}
 
-	return PM_RET_SUCCESS;
+exit_label:
+	return status;
 }
 
 /**
@@ -2089,22 +2101,26 @@ enum pm_ret_status pm_api_pinctrl_get_pin_groups(uint32_t pin,
 {
 	uint32_t i;
 	const uint16_t *grps;
+	enum pm_ret_status status = PM_RET_SUCCESS;
 
-	if (pin >= MAX_PIN) {
-		return PM_RET_ERROR_ARGS;
+	if (pin >= (uint32_t)MAX_PIN) {
+		status = PM_RET_ERROR_ARGS;
+		goto exit_label;
 	}
 
 	(void)memset(groups, END_OF_GROUPS, GROUPS_PAYLOAD_LEN);
 
 	grps = *zynqmp_pin_groups[pin].groups;
 	if (grps == NULL) {
-		return PM_RET_SUCCESS;
+		status = PM_RET_SUCCESS;
+		goto exit_label;
 	}
 
 	/* Skip groups till index */
 	for (i = 0; i < index; i++) {
 		if (grps[i] == (uint16_t)END_OF_GROUPS) {
-			return PM_RET_SUCCESS;
+			status = PM_RET_SUCCESS;
+			goto exit_label;
 		}
 	}
 
@@ -2115,5 +2131,6 @@ enum pm_ret_status pm_api_pinctrl_get_pin_groups(uint32_t pin,
 		}
 	}
 
-	return PM_RET_SUCCESS;
+exit_label:
+	return status;
 }

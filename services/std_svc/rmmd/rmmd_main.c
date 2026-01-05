@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2024, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2021-2025, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -19,6 +19,7 @@
 #include <lib/el3_runtime/context_mgmt.h>
 #include <lib/el3_runtime/cpu_data.h>
 #include <lib/el3_runtime/pubsub.h>
+#include <lib/extensions/mpam.h>
 #include <lib/extensions/pmuv3.h>
 #include <lib/extensions/sys_reg_trace.h>
 #include <lib/gpt_rme/gpt_rme.h>
@@ -33,6 +34,8 @@
 #include <smccc_helpers.h>
 #include <lib/extensions/sme.h>
 #include <lib/extensions/sve.h>
+#include <lib/extensions/spe.h>
+#include <lib/extensions/trbe.h>
 #include "rmmd_initial_context.h"
 #include "rmmd_private.h"
 
@@ -119,13 +122,25 @@ static void rmm_el2_context_init(el2_sysregs_t *regs)
 
 static void manage_extensions_realm(cpu_context_t *ctx)
 {
-	pmuv3_enable(ctx);
-
 	/*
 	 * Enable access to TPIDR2_EL0 if SME/SME2 is enabled for Non Secure world.
 	 */
 	if (is_feat_sme_supported()) {
 		sme_enable(ctx);
+	}
+
+	/*
+	 * SPE and TRBE cannot be fully disabled from EL3 registers alone, only
+	 * sysreg access can. In case the EL1 controls leave them active on
+	 * context switch, we want the owning security state to be NS so Realm
+	 * can't be DOSed.
+	 */
+	if (is_feat_spe_supported()) {
+		spe_disable(ctx);
+	}
+
+	if (is_feat_trbe_supported()) {
+		trbe_disable(ctx);
 	}
 }
 
@@ -154,6 +169,16 @@ static void manage_extensions_realm_per_world(void)
 	 */
 	if (is_feat_sme_supported()) {
 		sme_enable_per_world(&per_world_context[CPU_CONTEXT_REALM]);
+	}
+
+	/*
+	 * If FEAT_MPAM is supported and enabled, then disable trapping access
+	 * to the MPAM registers for Realm world. Instead, RMM will configure
+	 * the access to be trapped by itself so it can inject undefined aborts
+	 * back to the Realm.
+	 */
+	if (is_feat_mpam_supported()) {
+		mpam_enable_per_world(&per_world_context[CPU_CONTEXT_REALM]);
 	}
 }
 
@@ -456,6 +481,41 @@ static int rmm_el3_ifc_get_feat_register(uint64_t feat_reg_idx,
 	return E_RMM_OK;
 }
 
+/*
+ * Update encryption key associated with @mecid.
+ */
+static int rmmd_mecid_key_update(uint64_t mecid)
+{
+	uint64_t mecid_width, mecid_width_mask;
+	int ret;
+
+	/*
+	 * Check whether FEAT_MEC is supported by the hardware. If not, return
+	 * unknown SMC.
+	 */
+	if (is_feat_mec_supported() == false) {
+		return E_RMM_UNK;
+	}
+
+	/*
+	 * Check whether the mecid parameter is at most MECIDR_EL2.MECIDWidthm1 + 1
+	 * in length.
+	 */
+	mecid_width = ((read_mecidr_el2() >> MECIDR_EL2_MECIDWidthm1_SHIFT) &
+		MECIDR_EL2_MECIDWidthm1_MASK) + 1;
+	mecid_width_mask = ((1 << mecid_width) - 1);
+	if ((mecid & ~mecid_width_mask) != 0U) {
+		return E_RMM_INVAL;
+	}
+
+	ret = plat_rmmd_mecid_key_update(mecid);
+
+	if (ret != 0) {
+		return E_RMM_UNK;
+	}
+	return E_RMM_OK;
+}
+
 /*******************************************************************************
  * This function handles RMM-EL3 interface SMCs
  ******************************************************************************/
@@ -488,12 +548,12 @@ uint64_t rmmd_rmm_el3_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2,
 	case RMM_GTSI_UNDELEGATE:
 		ret = gpt_undelegate_pas(x1, PAGE_SIZE_4KB, SMC_FROM_REALM);
 		SMC_RET1(handle, gpt_to_gts_error(ret, smc_fid, x1));
-	case RMM_ATTEST_GET_PLAT_TOKEN:
-		ret = rmmd_attest_get_platform_token(x1, &x2, x3, &remaining_len);
-		SMC_RET3(handle, ret, x2, remaining_len);
 	case RMM_ATTEST_GET_REALM_KEY:
 		ret = rmmd_attest_get_signing_key(x1, &x2, x3);
 		SMC_RET2(handle, ret, x2);
+	case RMM_ATTEST_GET_PLAT_TOKEN:
+		ret = rmmd_attest_get_platform_token(x1, &x2, x3, &remaining_len);
+		SMC_RET3(handle, ret, x2, remaining_len);
 	case RMM_EL3_FEATURES:
 		ret = rmm_el3_ifc_get_feat_register(x1, &x2);
 		SMC_RET2(handle, ret, x2);
@@ -501,10 +561,44 @@ uint64_t rmmd_rmm_el3_handler(uint32_t smc_fid, uint64_t x1, uint64_t x2,
 	case RMM_EL3_TOKEN_SIGN:
 		return rmmd_el3_token_sign(handle, x1, x2, x3, x4);
 #endif
+
+#if RMMD_ENABLE_IDE_KEY_PROG
+	case RMM_IDE_KEY_PROG:
+	{
+		rp_ide_key_info_t ide_key_info;
+
+		ide_key_info.keyqw0 = x4;
+		ide_key_info.keyqw1 = SMC_GET_GP(handle, CTX_GPREG_X5);
+		ide_key_info.keyqw2 = SMC_GET_GP(handle, CTX_GPREG_X6);
+		ide_key_info.keyqw3 = SMC_GET_GP(handle, CTX_GPREG_X7);
+		ide_key_info.ifvqw0 = SMC_GET_GP(handle, CTX_GPREG_X8);
+		ide_key_info.ifvqw1 = SMC_GET_GP(handle, CTX_GPREG_X9);
+		uint64_t x10 = SMC_GET_GP(handle, CTX_GPREG_X10);
+		uint64_t x11 = SMC_GET_GP(handle, CTX_GPREG_X11);
+
+		ret = rmmd_el3_ide_key_program(x1, x2, x3, &ide_key_info, x10, x11);
+		SMC_RET1(handle, ret);
+	}
+	case RMM_IDE_KEY_SET_GO:
+		ret = rmmd_el3_ide_key_set_go(x1, x2, x3, x4, SMC_GET_GP(handle, CTX_GPREG_X5));
+		SMC_RET1(handle, ret);
+	case RMM_IDE_KEY_SET_STOP:
+		ret = rmmd_el3_ide_key_set_stop(x1, x2, x3, x4, SMC_GET_GP(handle, CTX_GPREG_X5));
+		SMC_RET1(handle, ret);
+	case RMM_IDE_KM_PULL_RESPONSE: {
+		uint64_t req_resp = 0, req_id = 0, cookie_var = 0;
+
+		ret = rmmd_el3_ide_km_pull_response(x1, x2, &req_resp, &req_id, &cookie_var);
+		SMC_RET4(handle, ret, req_resp, req_id, cookie_var);
+	}
+#endif /* RMMD_ENABLE_IDE_KEY_PROG */
 	case RMM_BOOT_COMPLETE:
 		VERBOSE("RMMD: running rmmd_rmm_sync_exit\n");
 		rmmd_rmm_sync_exit(x1);
 
+	case RMM_MECID_KEY_UPDATE:
+		ret = rmmd_mecid_key_update(x1);
+		SMC_RET1(handle, ret);
 	default:
 		WARN("RMMD: Unsupported RMM-EL3 call 0x%08x\n", smc_fid);
 		SMC_RET1(handle, SMC_UNK);

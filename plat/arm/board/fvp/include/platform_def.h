@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2024, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2014-2025, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -54,7 +54,10 @@
 #if ENABLE_RME
 #define PLAT_ARM_RMM_BASE		(RMM_BASE)
 #define PLAT_ARM_RMM_SIZE		(RMM_LIMIT - RMM_BASE)
-#endif
+
+/* Protected physical address size */
+#define PLAT_ARM_PPS			(SZ_1T)
+#endif /* ENABLE_RME */
 
 /*
  * Max size of SPMC is 2MB for fvp. With SPMD enabled this value corresponds to
@@ -65,7 +68,7 @@
 #define PLAT_ARM_SPMC_SIZE		UL(0x200000)  /* 2 MB */
 #endif
 
-/* virtual address used by dynamic mem_protect for chunk_base */
+/* Virtual address used by dynamic mem_protect for chunk_base */
 #define PLAT_ARM_MEM_PROTEC_VA_FRAME	UL(0xc0000000)
 
 /* No SCP in FVP */
@@ -170,6 +173,8 @@
 # elif SPMC_AT_EL3
 #  define PLAT_ARM_MMAP_ENTRIES		13
 #  define MAX_XLAT_TABLES		11
+#  define PLAT_SP_IMAGE_MMAP_REGIONS	30
+#  define PLAT_SP_IMAGE_MAX_XLAT_TABLES	10
 # else
 #  define PLAT_ARM_MMAP_ENTRIES		9
 #  if USE_DEBUGFS
@@ -201,7 +206,7 @@
 #  define PLAT_ARM_MMAP_ENTRIES		12
 #  define MAX_XLAT_TABLES		6
 # else
-#  define PLAT_ARM_MMAP_ENTRIES		11
+#  define PLAT_ARM_MMAP_ENTRIES		12
 #  define MAX_XLAT_TABLES		5
 # endif /* (IMAGE_BL2 && ENABLE_RME) */
 #else
@@ -220,8 +225,9 @@ defined(IMAGE_BL2) && MEASURED_BOOT
  * In case of PSA Crypto API, few algorithms like ECDSA needs bigger BL1 RW
  * area.
  */
-#if TF_MBEDTLS_KEY_ALG_ID == TF_MBEDTLS_RSA_AND_ECDSA || PSA_CRYPTO
-#define PLAT_ARM_MAX_BL1_RW_SIZE	UL(0xC000)
+#if TF_MBEDTLS_KEY_ALG_ID == TF_MBEDTLS_RSA_AND_ECDSA || PSA_CRYPTO || \
+FVP_TRUSTED_SRAM_SIZE == 512
+#define PLAT_ARM_MAX_BL1_RW_SIZE	UL(0xD000)
 #else
 #define PLAT_ARM_MAX_BL1_RW_SIZE	UL(0xB000)
 #endif
@@ -301,9 +307,15 @@ defined(IMAGE_BL2) && MEASURED_BOOT
  * calculated using the current SP_MIN PROGBITS debug size plus the sizes of
  * BL2 and BL1-RW
  */
+#if TRANSFER_LIST
+# define PLAT_ARM_MAX_BL32_SIZE		(PLAT_ARM_TRUSTED_SRAM_SIZE - \
+					 ARM_SHARED_RAM_SIZE - \
+					 PLAT_ARM_FW_HANDOFF_SIZE)
+#else
 # define PLAT_ARM_MAX_BL32_SIZE		(PLAT_ARM_TRUSTED_SRAM_SIZE - \
 					 ARM_SHARED_RAM_SIZE - \
 					 ARM_FW_CONFIGS_SIZE)
+#endif /* TRANSFER_LIST */
 #endif /* RESET_TO_SP_MIN */
 #endif
 
@@ -396,11 +408,22 @@ defined(IMAGE_BL2) && MEASURED_BOOT
 #define PLAT_ARM_CLUSTER_TO_CCN_ID_MAP	1, 5, 7, 11
 
 /* System timer related constants */
-#define PLAT_ARM_NSTIMER_FRAME_ID		U(1)
+#define PLAT_ARM_NSTIMER_FRAME_ID	U(1)
 
 /* Mailbox base address */
 #define PLAT_ARM_TRUSTED_MAILBOX_BASE	ARM_TRUSTED_SRAM_BASE
 
+/* PCIe memory region 1 (Base Platform RevC only) */
+#define PLAT_ARM_PCI_MEM_1_BASE		(ULL(0x50000000))
+#define PLAT_ARM_PCI_MEM_1_SIZE		(SZ_256M) /* 256MB */
+
+/*
+ * PCIe memory region 2 (Base Platform RevC only)
+ * The full size of the second PCI memory region is 256GB
+ * but for now we only allocate the L1 GPTs for the first 3GB.
+ */
+#define PLAT_ARM_PCI_MEM_2_BASE		(ULL(0x4000000000))
+#define	PLAT_ARM_PCI_MEM_2_SIZE		(3 * SZ_1G) /* 3GB */
 
 /* TrustZone controller related constants
  *
@@ -486,12 +509,19 @@ defined(IMAGE_BL2) && MEASURED_BOOT
 
 /*
  * Maximum size of Event Log buffer used in Measured Boot Event Log driver
+ * TODO: calculate maximum EventLog size using the calculation:
+ * Maximum size of Event Log * Number of images
  */
-#if ENABLE_RME && (defined(SPD_tspd) || defined(SPD_opteed) || defined(SPD_spmd))
-/* Account for additional measurements of secure partitions and SPM. */
-#define	PLAT_ARM_EVENT_LOG_MAX_SIZE		UL(0x800)
+#if (defined(SPD_spmd)) || (ENABLE_RME && (defined(SPD_tspd) || defined(SPD_opteed)))
+/*
+ * Account for additional measurements of secure partitions and SPM.
+ * Also, account for OP-TEE running with maximum number of SPs.
+ */
+#define PLAT_ARM_EVENT_LOG_MAX_SIZE		UL(0x800)
+#elif defined(IMAGE_BL1) && TRANSFER_LIST
+#define PLAT_ARM_EVENT_LOG_MAX_SIZE		UL(0x200)
 #else
-#define	PLAT_ARM_EVENT_LOG_MAX_SIZE		UL(0x400)
+#define PLAT_ARM_EVENT_LOG_MAX_SIZE		UL(0x400)
 #endif
 
 /*

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2025, Arm Limited and Contributors. All rights reserved.
  * Copyright (c) 2020-2022, NVIDIA Corporation. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
@@ -251,7 +251,7 @@
 #define ID_AA64DFR0_PMUVER_SHIFT	U(8)
 #define ID_AA64DFR0_PMUVER_MASK		U(0xf)
 #define ID_AA64DFR0_PMUVER_PMUV3	U(1)
-#define ID_AA64DFR0_PMUVER_PMUV3P8	U(8)
+#define ID_AA64DFR0_PMUVER_PMUV3P9	U(9)
 #define ID_AA64DFR0_PMUVER_IMP_DEF	U(0xf)
 
 /* ID_AA64DFR0_EL1.SEBEP definitions */
@@ -317,15 +317,19 @@
 
 /* ID_AA64ISAR2_EL1 definitions */
 #define ID_AA64ISAR2_EL1		S3_0_C0_C6_2
+#define ID_AA64ISAR2_EL1_MOPS_SHIFT	U(16)
+#define ID_AA64ISAR2_EL1_MOPS_MASK	ULL(0xf)
 
-/* ID_AA64PFR2_EL1 definitions */
-#define ID_AA64PFR2_EL1			S3_0_C0_C4_2
+#define MOPS_IMPLEMENTED		ULL(0x1)
 
 #define ID_AA64ISAR2_GPA3_SHIFT		U(8)
 #define ID_AA64ISAR2_GPA3_MASK		ULL(0xf)
 
 #define ID_AA64ISAR2_APA3_SHIFT		U(12)
 #define ID_AA64ISAR2_APA3_MASK		ULL(0xf)
+
+#define ID_AA64ISAR2_SYSREG128_SHIFT	U(32)
+#define ID_AA64ISAR2_SYSREG128_MASK	ULL(0xf)
 
 /* ID_AA64MMFR0_EL1 definitions */
 #define ID_AA64MMFR0_EL1_PARANGE_SHIFT	U(0)
@@ -406,6 +410,9 @@
 #define ID_AA64MMFR3_EL1_D128_MASK		ULL(0xf)
 #define D128_IMPLEMENTED			ULL(0x1)
 
+#define ID_AA64MMFR3_EL1_MEC_SHIFT		U(28)
+#define ID_AA64MMFR3_EL1_MEC_MASK		ULL(0xf)
+
 #define ID_AA64MMFR3_EL1_S2POE_SHIFT		U(20)
 #define ID_AA64MMFR3_EL1_S2POE_MASK		ULL(0xf)
 
@@ -456,6 +463,8 @@
 #define RNG_TRAP_IMPLEMENTED		ULL(0x1)
 
 /* ID_AA64PFR2_EL1 definitions */
+#define ID_AA64PFR2_EL1				S3_0_C0_C4_2
+
 #define ID_AA64PFR2_EL1_MTEPERM_SHIFT		U(0)
 #define ID_AA64PFR2_EL1_MTEPERM_MASK		ULL(0xf)
 
@@ -464,6 +473,11 @@
 
 #define ID_AA64PFR2_EL1_MTEFAR_SHIFT		U(8)
 #define ID_AA64PFR2_EL1_MTEFAR_MASK		ULL(0xf)
+
+#define ID_AA64PFR2_EL1_FPMR_SHIFT		U(32)
+#define ID_AA64PFR2_EL1_FPMR_MASK		ULL(0xf)
+
+#define FPMR_IMPLEMENTED			ULL(0x1)
 
 #define VDISR_EL2				S3_4_C12_C1_1
 #define VSESR_EL2				S3_4_C5_C2_3
@@ -592,6 +606,11 @@
 #define SCTLR_EPAN_BIT		(ULL(1) << 57)
 #define SCTLR_RESET_VAL		SCTLR_EL3_RES1
 
+#define SCTLR2_EnPACM_BIT	(ULL(1) << 7)
+
+/* SCTLR2 currently has no RES1 fields so reset to 0 */
+#define SCTLR2_RESET_VAL	ULL(0)
+
 /* CPACR_EL1 definitions */
 #define CPACR_EL1_FPEN(x)	((x) << 20)
 #define CPACR_EL1_FP_TRAP_EL0	UL(0x1)
@@ -605,6 +624,8 @@
 #define SCR_NSE_SHIFT		U(62)
 #define SCR_FGTEN2_BIT		(UL(1) << 59)
 #define SCR_NSE_BIT		(ULL(1) << SCR_NSE_SHIFT)
+#define SCR_EnFPM_BIT		(ULL(1) << 50)
+#define SCR_MECEn_BIT		(UL(1) << 49)
 #define SCR_GPF_BIT		(UL(1) << 48)
 #define SCR_D128En_BIT		(UL(1) << 47)
 #define SCR_TWEDEL_SHIFT	U(30)
@@ -648,15 +669,19 @@
 
 /* MDCR_EL3 definitions */
 #define MDCR_EBWE_BIT		(ULL(1) << 43)
-#define MDCR_E3BREC		(ULL(1) << 38)
-#define MDCR_E3BREW		(ULL(1) << 37)
+#define MDCR_EnPMS3_BIT		(ULL(1) << 42)
+#define MDCR_E3BREC_BIT		(ULL(1) << 38)
+#define MDCR_E3BREW_BIT		(ULL(1) << 37)
 #define MDCR_EnPMSN_BIT		(ULL(1) << 36)
 #define MDCR_MPMX_BIT		(ULL(1) << 35)
 #define MDCR_MCCD_BIT		(ULL(1) << 34)
 #define MDCR_SBRBE_SHIFT	U(32)
-#define MDCR_SBRBE_MASK		ULL(0x3)
+#define MDCR_SBRBE(x)		((x) << MDCR_SBRBE_SHIFT)
+#define MDCR_SBRBE_ALL		ULL(0x3)
+#define MDCR_SBRBE_NS		ULL(0x1)
 #define MDCR_NSTB(x)		((x) << 24)
 #define MDCR_NSTB_EL1		ULL(0x3)
+#define MDCR_NSTB_EL3		ULL(0x2)
 #define MDCR_NSTBE_BIT		(ULL(1) << 26)
 #define MDCR_MTPME_BIT		(ULL(1) << 28)
 #define MDCR_TDCC_BIT		(ULL(1) << 27)
@@ -673,10 +698,13 @@
 #define MDCR_SPD32_ENABLE	ULL(0x3)
 #define MDCR_NSPB(x)		((x) << 12)
 #define MDCR_NSPB_EL1		ULL(0x3)
+#define MDCR_NSPB_EL3		ULL(0x2)
 #define MDCR_NSPBE_BIT		(ULL(1) << 11)
 #define MDCR_TDOSA_BIT		(ULL(1) << 10)
 #define MDCR_TDA_BIT		(ULL(1) << 9)
+#define MDCR_EnPM2_BIT		(ULL(1) << 7)
 #define MDCR_TPM_BIT		(ULL(1) << 6)
+#define MDCR_RLTE_BIT		(ULL(1) << 0)
 #define MDCR_EL3_RESET_VAL	MDCR_MTPME_BIT
 
 /* MDCR_EL2 definitions */
@@ -834,6 +862,7 @@
 #define SPSR_PPEND_BIT		BIT(33)
 #define SPSR_EXLOCK_BIT_AARCH64	BIT_64(34)
 #define SPSR_NZCV		(SPSR_V_BIT | SPSR_C_BIT | SPSR_Z_BIT | SPSR_N_BIT)
+#define SPSR_PACM_BIT_AARCH64	BIT_64(35)
 
 #define DISABLE_ALL_EXCEPTIONS \
 		(DAIF_FIQ_BIT | DAIF_IRQ_BIT | DAIF_ABT_BIT | DAIF_DBG_BIT)
@@ -1125,6 +1154,7 @@
  ******************************************************************************/
 #define ID_AA64SMFR0_EL1		S3_0_C0_C4_5
 #define SMCR_EL3			S3_6_C1_C2_6
+#define SVCR				S3_3_C4_C2_2
 
 /* ID_AA64SMFR0_EL1 definitions */
 #define ID_AA64SMFR0_EL1_SME_FA64_SHIFT		U(63)
@@ -1509,8 +1539,14 @@
 /*******************************************************************************
  * FEAT_SCTLR2 - Extension to SCTLR_ELx Registers
  ******************************************************************************/
+#define SCTLR2_EL3		S3_6_C1_C0_3
 #define SCTLR2_EL2		S3_4_C1_C0_3
 #define SCTLR2_EL1		S3_0_C1_C0_3
+
+/*******************************************************************************
+ * FEAT_BRBE - Branch Record Buffer Extension Registers
+ ******************************************************************************/
+#define BRBCR_EL2		S2_4_C9_C0_0
 
 /*******************************************************************************
  * FEAT_LS64_ACCDATA - LoadStore64B with status data
@@ -1521,6 +1557,11 @@
  * Definitions for DynamicIQ Shared Unit registers
  ******************************************************************************/
 #define CLUSTERPWRDN_EL1	S3_0_c15_c3_6
+
+/*******************************************************************************
+ * FEAT_FPMR - Floating point Mode Register
+ ******************************************************************************/
+#define FPMR			S3_3_C4_C4_2
 
 /* CLUSTERPWRDN_EL1 register definitions */
 #define DSU_CLUSTER_PWR_OFF	0
@@ -1533,12 +1574,10 @@
  ******************************************************************************/
 
 #define CPUPPMCR_EL3			S3_6_C15_C2_0
-#define CPUPPMCR_EL3_MPMMPINCTL_SHIFT	UINT64_C(0)
-#define CPUPPMCR_EL3_MPMMPINCTL_MASK	UINT64_C(0x1)
+#define CPUPPMCR_EL3_MPMMPINCTL_BIT	BIT(0)
 
 #define CPUMPMMCR_EL3			S3_6_C15_C2_1
-#define CPUMPMMCR_EL3_MPMM_EN_SHIFT	UINT64_C(0)
-#define CPUMPMMCR_EL3_MPMM_EN_MASK	UINT64_C(0x1)
+#define CPUMPMMCR_EL3_MPMM_EN_BIT	BIT(0)
 
 /* alternative system register encoding for the "sb" speculation barrier */
 #define SYSREG_SB			S0_3_C3_C0_7
@@ -1555,5 +1594,12 @@
 #define CLUSTERPMCR_E_BIT		BIT(0)
 #define CLUSTERPMCR_N_SHIFT		U(11)
 #define CLUSTERPMCR_N_MASK		U(0x1f)
+
+/*******************************************************************************
+ * FEAT_MEC - Memory Encryption Contexts
+ ******************************************************************************/
+#define MECIDR_EL2			S3_4_C10_C8_7
+#define MECIDR_EL2_MECIDWidthm1_MASK	U(0xf)
+#define MECIDR_EL2_MECIDWidthm1_SHIFT	U(0)
 
 #endif /* ARCH_H */

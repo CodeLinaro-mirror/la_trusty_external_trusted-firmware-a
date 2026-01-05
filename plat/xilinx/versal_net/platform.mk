@@ -1,6 +1,6 @@
 # Copyright (c) 2018-2022, Arm Limited and Contributors. All rights reserved.
 # Copyright (c) 2021-2022, Xilinx, Inc. All rights reserved.
-# Copyright (c) 2022-2023, Advanced Micro Devices, Inc. All rights reserved.
+# Copyright (c) 2022-2025, Advanced Micro Devices, Inc. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -68,8 +68,12 @@ endif
 $(eval $(call add_define_val,VERSAL_NET_CONSOLE,VERSAL_NET_CONSOLE_ID_${VERSAL_NET_CONSOLE}))
 
 ifdef XILINX_OF_BOARD_DTB_ADDR
+XLNX_DT_CFG     := 1
 $(eval $(call add_define,XILINX_OF_BOARD_DTB_ADDR))
+else
+XLNX_DT_CFG     := 0
 endif
+$(eval $(call add_define,XLNX_DT_CFG))
 
 # Runtime console in default console in DEBUG build
 ifeq ($(DEBUG), 1)
@@ -137,7 +141,14 @@ BL31_SOURCES		+=	plat/xilinx/common/plat_fdt.c			\
 				${PLAT_PATH}/bl31_versal_net_setup.c		\
 				common/fdt_fixup.c				\
 				common/fdt_wrappers.c				\
-				plat/arm/common/arm_gicv3.c 			\
+				plat/common/plat_gicv3_base.c			\
 				${LIBFDT_SRCS}					\
 				${PLAT_PATH}/sip_svc_setup.c			\
 				${XLAT_TABLES_LIB_SRCS}
+
+SDEI_SUPPORT := 0
+EL3_EXCEPTION_HANDLING := $(SDEI_SUPPORT)
+ifeq (${SDEI_SUPPORT},1)
+BL31_SOURCES		+=	plat/common/aarch64/plat_ehf.c          \
+				plat/xilinx/versal_net/versal_net_sdei.c
+endif

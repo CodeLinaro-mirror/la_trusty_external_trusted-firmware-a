@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2018-2021, Arm Limited and Contributors. All rights reserved.
- * Copyright (c) 2022-2024, Advanced Micro Devices, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Advanced Micro Devices, Inc. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -22,32 +22,40 @@
 #include "pm_ipi.h"
 #include "pm_svc_main.h"
 
+#define SEC_ENTRY_ADDRESS_MASK		0xFFFFFFFFUL
+#define RESUME_ADDR_SET			0x1UL
+
 static uintptr_t versal_sec_entry;
 
 static int32_t versal_pwr_domain_on(u_register_t mpidr)
 {
 	int32_t cpu_id = plat_core_pos_by_mpidr(mpidr);
 	const struct pm_proc *proc;
+	int32_t ret = PSCI_E_INTERN_FAIL;
 
 	VERBOSE("%s: mpidr: 0x%lx\n", __func__, mpidr);
 
 	if (cpu_id == -1) {
-		return PSCI_E_INTERN_FAIL;
+		goto exit_label;
 	}
 
 	proc = pm_get_proc((uint32_t)cpu_id);
 	if (proc == NULL) {
-		return PSCI_E_INTERN_FAIL;
+		goto exit_label;
 	}
 
 	/* Send request to PMC to wake up selected ACPU core */
-	(void)pm_req_wakeup(proc->node_id, (versal_sec_entry & 0xFFFFFFFFU) | 0x1U,
-			    versal_sec_entry >> 32, 0, SECURE_FLAG);
+	(void)pm_req_wakeup(proc->node_id,
+			    (uint32_t)((versal_sec_entry & SEC_ENTRY_ADDRESS_MASK) |
+			    RESUME_ADDR_SET), versal_sec_entry >> 32, 0, SECURE_FLAG);
 
 	/* Clear power down request */
 	pm_client_wakeup(proc);
 
-	return PSCI_E_SUCCESS;
+	ret = PSCI_E_SUCCESS;
+
+exit_label:
+	return ret;
 }
 
 /**
@@ -128,6 +136,13 @@ static void versal_pwr_domain_suspend_finish(
 
 static void versal_pwr_domain_on_finish(const psci_power_state_t *target_state)
 {
+	/*
+	 * Typecasting to void to intentionally retain the variable and avoid
+	 * MISRA violation for unused parameters. This may be used in the
+	 * future if specific action is required based on CPU power state.
+	 */
+	(void)target_state;
+
 	/* Enable the gic cpu interface */
 	plat_versal_gic_pcpu_init();
 
@@ -190,6 +205,18 @@ static void __dead2 versal_system_reset(void)
 	}
 }
 
+static int32_t versal_validate_ns_entrypoint(uint64_t ns_entrypoint)
+{
+	int32_t ret = PSCI_E_SUCCESS;
+
+	if (((ns_entrypoint >= PLAT_DDR_LOWMEM_MAX) && (ns_entrypoint <= PLAT_DDR_HIGHMEM_MAX)) ||
+		((ns_entrypoint >= BL31_BASE) && (ns_entrypoint <= BL31_LIMIT))) {
+		ret = PSCI_E_INVALID_ADDRESS;
+	}
+
+	return ret;
+}
+
 /**
  * versal_pwr_domain_off() - This function performs actions to turn off core.
  * @target_state: Targated state.
@@ -221,8 +248,9 @@ static void versal_pwr_domain_off(const psci_power_state_t *target_state)
 	 * invoking CPU_on function, during which resume address will
 	 * be set.
 	 */
-	ret = pm_feature_check((uint32_t)PM_SELF_SUSPEND, &version_type[0], SECURE_FLAG);
-	if (ret == PM_RET_SUCCESS) {
+	ret = (uint32_t)pm_feature_check((uint32_t)PM_SELF_SUSPEND,
+					 &version_type[0], SECURE_FLAG);
+	if (ret == (uint32_t)PM_RET_SUCCESS) {
 		fw_api_version = version_type[0] & 0xFFFFU;
 		if (fw_api_version >= 3U) {
 			(void)pm_self_suspend(proc->node_id, MAX_LATENCY, PM_STATE_CPU_OFF, 0,
@@ -246,6 +274,7 @@ static void versal_pwr_domain_off(const psci_power_state_t *target_state)
 static int32_t versal_validate_power_state(uint32_t power_state,
 				       psci_power_state_t *req_state)
 {
+	int32_t ret = PSCI_E_SUCCESS;
 	VERBOSE("%s: power_state: 0x%x\n", __func__, power_state);
 
 	uint32_t pstate = psci_get_pstate_type(power_state);
@@ -261,10 +290,10 @@ static int32_t versal_validate_power_state(uint32_t power_state,
 
 	/* We expect the 'state id' to be zero */
 	if (psci_get_pstate_id(power_state) != 0U) {
-		return PSCI_E_INVALID_PARAMS;
+		ret = PSCI_E_INVALID_PARAMS;
 	}
 
-	return PSCI_E_SUCCESS;
+	return ret;
 }
 
 /**
@@ -286,6 +315,7 @@ static const struct plat_psci_ops versal_nopmc_psci_ops = {
 	.pwr_domain_suspend_finish	= versal_pwr_domain_suspend_finish,
 	.system_off			= versal_system_off,
 	.system_reset			= versal_system_reset,
+	.validate_ns_entrypoint		= versal_validate_ns_entrypoint,
 	.validate_power_state		= versal_validate_power_state,
 	.get_sys_suspend_power_state	= versal_get_sys_suspend_power_state,
 };
@@ -293,7 +323,7 @@ static const struct plat_psci_ops versal_nopmc_psci_ops = {
 /*******************************************************************************
  * Export the platform specific power ops.
  ******************************************************************************/
-int32_t plat_setup_psci_ops(uintptr_t sec_entrypoint,
+int plat_setup_psci_ops(uintptr_t sec_entrypoint,
 			const struct plat_psci_ops **psci_ops)
 {
 	versal_sec_entry = sec_entrypoint;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2024, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2014-2025, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -45,18 +45,6 @@ void bl31_plat_runtime_setup(void)
 {
 }
 
-/*
- * Helper function for platform_get_pos() when platform compatibility is
- * disabled. This is to enable SPDs using the older platform API to continue
- * to work.
- */
-unsigned int platform_core_pos_helper(unsigned long mpidr)
-{
-	int idx = plat_core_pos_by_mpidr(mpidr);
-	assert(idx >= 0);
-	return idx;
-}
-
 #if SDEI_SUPPORT
 /*
  * Function that handles spurious SDEI interrupts while events are masked.
@@ -78,19 +66,27 @@ int plat_sdei_validate_entry_point(uintptr_t ep, unsigned int client_mode)
 
 const char *get_el_str(unsigned int el)
 {
+	const char *mode = NULL;
+
 	switch (el) {
 	case MODE_EL3:
-		return "EL3";
+		mode = "EL3";
+		break;
 	case MODE_EL2:
-		return "EL2";
+		mode = "EL2";
+		break;
 	case MODE_EL1:
-		return "EL1";
+		mode = "EL1";
+		break;
 	case MODE_EL0:
-		return "EL0";
+		mode = "EL0";
+		break;
 	default:
 		assert(false);
-		return NULL;
+		break;
 	}
+
+	return mode;
 }
 
 #if FFH_SUPPORT

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2022-2025, Arm Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -66,7 +66,7 @@ check_feature(int state, unsigned long field, const char *feat_name,
 static void read_feat_pauth(void)
 {
 #if (ENABLE_PAUTH == FEAT_STATE_ALWAYS) || (CTX_INCLUDE_PAUTH_REGS == FEAT_STATE_ALWAYS)
-	feat_detect_panic(is_armv8_3_pauth_present(), "PAUTH");
+	feat_detect_panic(is_feat_pauth_present(), "PAUTH");
 #endif
 }
 
@@ -280,6 +280,18 @@ static unsigned int read_feat_d128_id_field(void)
 			     ID_AA64MMFR3_EL1_D128_MASK);
 }
 
+static unsigned int read_feat_fpmr_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64pfr2_el1(), ID_AA64PFR2_EL1_FPMR_SHIFT,
+			     ID_AA64PFR2_EL1_FPMR_MASK);
+}
+
+static unsigned int read_feat_mops_id_field(void)
+{
+	return ISOLATE_FIELD(read_id_aa64isar2_el1(), ID_AA64ISAR2_EL1_MOPS_SHIFT,
+			     ID_AA64ISAR2_EL1_MOPS_MASK);
+}
+
 /***********************************************************************************
  * TF-A supports many Arm architectural features starting from arch version
  * (8.0 till 8.7+). These features are mostly enabled through build flags. This
@@ -318,7 +330,7 @@ void detect_arch_features(void)
 	 * revisions so that we catch them as they come along
 	 */
 	check_feature(FEAT_STATE_ALWAYS, read_feat_pmuv3_id_field(),
-		      "PMUv3", 1, ID_AA64DFR0_PMUVER_PMUV3P8);
+		      "PMUv3", 1, ID_AA64DFR0_PMUVER_PMUV3P9);
 
 	/* v8.1 features */
 	check_feature(ENABLE_FEAT_PAN, read_feat_pan_id_field(), "PAN", 1, 3);
@@ -337,6 +349,8 @@ void detect_arch_features(void)
 	check_feature(ENABLE_FEAT_DIT, read_feat_dit_id_field(), "DIT", 1, 1);
 	check_feature(ENABLE_FEAT_AMU, read_feat_amu_id_field(),
 		      "AMUv1", 1, 2);
+	check_feature(ENABLE_FEAT_MOPS, read_feat_mops_id_field(),
+		      "MOPS", 1, 1);
 	check_feature(ENABLE_FEAT_MPAM, read_feat_mpam_version(),
 		      "MPAM", 1, 17);
 	check_feature(CTX_INCLUDE_NEVE_REGS, read_feat_nv_id_field(),
@@ -405,6 +419,8 @@ void detect_arch_features(void)
 		      "SME", 1, 2);
 	check_feature(ENABLE_SME2_FOR_NS, read_feat_sme_id_field(),
 		      "SME2", 2, 2);
+	check_feature(ENABLE_FEAT_FPMR, read_feat_fpmr_id_field(),
+		      "FPMR", 1, 1);
 
 	/* v9.3 features */
 	check_feature(ENABLE_FEAT_D128, read_feat_d128_id_field(),
@@ -413,6 +429,7 @@ void detect_arch_features(void)
 	/* v9.4 features */
 	check_feature(ENABLE_FEAT_GCS, read_feat_gcs_id_field(), "GCS", 1, 1);
 	check_feature(ENABLE_RME, read_feat_rme_id_field(), "RME", 1, 1);
+	check_feature(ENABLE_FEAT_PAUTH_LR, is_feat_pauth_lr_present(), "PAUTH_LR", 1, 1);
 
 	if (tainted) {
 		panic();
