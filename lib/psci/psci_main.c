@@ -28,7 +28,7 @@ int psci_cpu_on(u_register_t target_cpu,
 
 {
 	int rc;
-	entry_point_info_t *ep;
+	entry_point_info_t *ep = NULL;
 	unsigned int target_idx = (unsigned int)plat_core_pos_by_mpidr(target_cpu);
 
 	/* Validate the target CPU */
@@ -64,9 +64,6 @@ int psci_cpu_suspend(unsigned int power_state,
 	psci_power_state_t state_info = { {PSCI_LOCAL_STATE_RUN} };
 	plat_local_state_t cpu_pd_state;
 	unsigned int cpu_idx = plat_my_core_pos();
-#if PSCI_OS_INIT_MODE
-	plat_local_state_t prev[PLAT_MAX_PWR_LVL];
-#endif
 
 #if ERRATA_SME_POWER_DOWN
 	/*
@@ -103,7 +100,7 @@ int psci_cpu_suspend(unsigned int power_state,
 		panic();
 	}
 
-	/* Fast path for CPU standby.*/
+	/* Fast path for local CPU standby, won't interact with higher power levels. */
 	if (is_cpu_standby_req(is_power_down_state, target_pwrlvl)) {
 		if  (psci_plat_pm_ops->cpu_standby == NULL) {
 			return PSCI_E_INVALID_PARAMS;
@@ -115,18 +112,6 @@ int psci_cpu_suspend(unsigned int power_state,
 		 */
 		cpu_pd_state = state_info.pwr_domain_state[PSCI_CPU_PWR_LVL];
 		psci_set_cpu_local_state(cpu_pd_state);
-
-#if PSCI_OS_INIT_MODE
-		/*
-		 * If in OS-initiated mode, save a copy of the previous
-		 * requested local power states and update the new requested
-		 * local power states for this CPU.
-		 */
-		if (psci_suspend_mode == OS_INIT) {
-			psci_update_req_local_pwr_states(target_pwrlvl, cpu_idx,
-							 &state_info, prev);
-		}
-#endif
 
 #if ENABLE_PSCI_STAT
 		plat_psci_stat_accounting_start(&state_info);
@@ -142,16 +127,6 @@ int psci_cpu_suspend(unsigned int power_state,
 
 		/* Upon exit from standby, set the state back to RUN. */
 		psci_set_cpu_local_state(PSCI_LOCAL_STATE_RUN);
-
-#if PSCI_OS_INIT_MODE
-		/*
-		 * If in OS-initiated mode, restore the previous requested
-		 * local power states for this CPU.
-		 */
-		if (psci_suspend_mode == OS_INIT) {
-			psci_restore_req_local_pwr_states(cpu_idx, prev);
-		}
-#endif
 
 #if ENABLE_RUNTIME_INSTRUMENTATION
 		PMF_CAPTURE_TIMESTAMP(rt_instr_svc,
@@ -300,7 +275,7 @@ int psci_affinity_info(u_register_t target_affinity,
 	flush_cpu_data_by_index(target_idx,
 				psci_svc_cpu_data.aff_info_state);
 
-	return psci_get_aff_info_state_by_idx(target_idx);
+	return (int)psci_get_aff_info_state_by_idx(target_idx);
 }
 
 int psci_migrate(u_register_t target_cpu)
@@ -309,8 +284,9 @@ int psci_migrate(u_register_t target_cpu)
 	u_register_t resident_cpu_mpidr = 0;
 
 	/* Validate the target cpu */
-	if (!is_valid_mpidr(target_cpu))
+	if (!is_valid_mpidr(target_cpu)) {
 		return PSCI_E_INVALID_PARAMS;
+	}
 
 	rc = psci_spd_migrate_info(&resident_cpu_mpidr);
 	if (rc != PSCI_TOS_UP_MIG_CAP) {
@@ -341,7 +317,7 @@ int psci_migrate(u_register_t target_cpu)
 
 int psci_migrate_info_type(void)
 {
-	u_register_t resident_cpu_mpidr;
+	u_register_t resident_cpu_mpidr = 0;
 
 	return psci_spd_migrate_info(&resident_cpu_mpidr);
 }
@@ -356,8 +332,9 @@ u_register_t psci_migrate_info_up_cpu(void)
 	 * psci_spd_migrate_info() returns.
 	 */
 	rc = psci_spd_migrate_info(&resident_cpu_mpidr);
-	if ((rc != PSCI_TOS_NOT_UP_MIG_CAP) && (rc != PSCI_TOS_UP_MIG_CAP))
+	if ((rc != PSCI_TOS_NOT_UP_MIG_CAP) && (rc != PSCI_TOS_UP_MIG_CAP)) {
 		return (u_register_t)(register_t) PSCI_E_INVALID_PARAMS;
+	}
 
 	return resident_cpu_mpidr;
 }
@@ -368,12 +345,14 @@ int psci_node_hw_state(u_register_t target_cpu,
 	int rc;
 
 	/* Validate target_cpu */
-	if (!is_valid_mpidr(target_cpu))
+	if (!is_valid_mpidr(target_cpu)) {
 		return PSCI_E_INVALID_PARAMS;
+	}
 
 	/* Validate power_level against PLAT_MAX_PWR_LVL */
-	if (power_level > PLAT_MAX_PWR_LVL)
+	if (power_level > PLAT_MAX_PWR_LVL) {
 		return PSCI_E_INVALID_PARAMS;
+	}
 
 	/*
 	 * Dispatch this call to platform to query power controller, and pass on
@@ -467,9 +446,12 @@ u_register_t psci_smc_handler(uint32_t smc_fid,
 			  void *handle,
 			  u_register_t flags)
 {
+	(void)x4;
+	(void)cookie;
+	(void)handle;
 	u_register_t ret;
 
-	if (is_caller_secure(flags)) {
+	if (!is_caller_non_secure(flags)) {
 		return (u_register_t)SMC_UNK;
 	}
 

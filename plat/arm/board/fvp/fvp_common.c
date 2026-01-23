@@ -68,6 +68,10 @@ arm_config_t arm_config;
 
 #define MAP_DEVICE1	MAP_REGION_FLAT(DEVICE1_BASE,			\
 					DEVICE1_SIZE,			\
+					MT_DEVICE | MT_RW | EL3_PAS)
+
+#define MAP_CCN		MAP_REGION_FLAT(CCN_BASE,			\
+					CCN_SIZE,			\
 					MT_DEVICE | MT_RW | MT_SECURE)
 
 #if FVP_GICR_REGION_PROTECTION
@@ -115,7 +119,7 @@ const mmap_region_t plat_arm_mmap[] = {
 	V2M_MAP_IOFPGA,
 	MAP_DEVICE0,
 #if FVP_INTERCONNECT_DRIVER == FVP_CCN
-	MAP_DEVICE1,
+	MAP_CCN,
 #endif
 #if TRUSTED_BOARD_BOOT
 	/* To access the Root of Trust Public Key registers. */
@@ -133,7 +137,7 @@ const mmap_region_t plat_arm_mmap[] = {
 	V2M_MAP_IOFPGA,
 	MAP_DEVICE0,
 #if FVP_INTERCONNECT_DRIVER == FVP_CCN
-	MAP_DEVICE1,
+	MAP_CCN,
 #endif
 	ARM_MAP_NS_DRAM1,
 #ifdef __aarch64__
@@ -208,6 +212,9 @@ const mmap_region_t plat_arm_mmap[] = {
 	MAP_GICD_MEM,
 	MAP_GICR_MEM,
 #else
+#if FVP_INTERCONNECT_DRIVER == FVP_CCN
+	MAP_CCN,
+#endif
 	MAP_DEVICE1,
 #endif /* FVP_GICR_REGION_PROTECTION */
 	ARM_V2M_MAP_MEM_PROTECT,
@@ -242,6 +249,8 @@ const mmap_region_t plat_arm_secure_partition_mmap[] = {
 	ARM_SP_IMAGE_NS_BUF_MMAP,
 	ARM_SP_IMAGE_RW_MMAP,
 	ARM_SPM_BUF_EL0_MMAP,
+	ARM_SP_PSEUDO_NS_CRB_MMAP,
+	ARM_SP_PSEUDO_S_CRB_MMAP,
 	{0}
 };
 #endif
@@ -254,6 +263,9 @@ const mmap_region_t plat_arm_mmap[] = {
 #endif
 	V2M_MAP_IOFPGA,
 	MAP_DEVICE0,
+#if FVP_INTERCONNECT_DRIVER == FVP_CCN
+	MAP_CCN,
+#endif
 	MAP_DEVICE1,
 	{0}
 };
@@ -572,6 +584,13 @@ int32_t plat_get_soc_revision(void)
 			  V2M_SYS_ID_REV_MASK) & SOC_ID_REV_MASK);
 }
 
+/* Get SoC name */
+int32_t plat_get_soc_name(char *soc_name)
+{
+	snprintf(soc_name, SMCCC_SOC_NAME_LEN, "Arm Platform Revision %d",
+			plat_get_soc_revision());
+	return SMC_ARCH_CALL_SUCCESS;
+}
 #if ENABLE_RME
 
 /* BDF mappings for RP0 RC0 */
@@ -773,8 +792,8 @@ int plat_rmmd_load_manifest(struct rmm_manifest *manifest)
 	/* Set number of consoles */
 	num_consoles = FVP_RMM_CONSOLE_COUNT;
 
-	/* Set number of device non-coherent address ranges based on DT */
-	num_ncoh_regions = FCONF_GET_PROPERTY(hw_config, pci_props, num_ncoh_regions);
+	/* Set number of device non-coherent address ranges for FVP RevC */
+	num_ncoh_regions = 2;
 
 	/* Set number of SMMUs */
 	num_smmus = FVP_RMM_SMMU_COUNT;
@@ -907,11 +926,27 @@ int plat_rmmd_load_manifest(struct rmm_manifest *manifest)
 	(void)memset((void *)ncoh_region_ptr, 0,
 			sizeof(struct memory_bank) * num_ncoh_regions);
 
+	/* Set number of device non-coherent address ranges based on DT */
+	num_ncoh_regions = FCONF_GET_PROPERTY(hw_config, pci_props, num_ncoh_regions);
+	/* At least 1 PCIe region need to be described in DT */
+	assert((num_ncoh_regions > 0) && (num_ncoh_regions <= 2));
+
 	for (unsigned long i = 0UL; i < num_ncoh_regions; i++) {
 		ncoh_region_ptr[i].base =
 			FCONF_GET_PROPERTY(hw_config, pci_props, ncoh_regions[i].base);
 		ncoh_region_ptr[i].size =
 			FCONF_GET_PROPERTY(hw_config, pci_props, ncoh_regions[i].size);
+	}
+
+	/*
+	 * Workaround if the DT does not specify the 2nd PCIe region. This code can be
+	 * removed when upstream DT is updated to have 2nd PCIe region.
+	 */
+	if (num_ncoh_regions == 1) {
+		num_ncoh_regions++;
+		/* Add 3GB of 2nd PCIe region */
+		ncoh_region_ptr[1].base = 0x4000000000;
+		ncoh_region_ptr[1].size = 0xc0000000;
 	}
 
 	/* Update checksum */
@@ -1008,7 +1043,7 @@ int plat_rmmd_load_manifest(struct rmm_manifest *manifest)
 /*
  * Update encryption key associated with @mecid.
  */
-int plat_rmmd_mecid_key_update(uint16_t mecid)
+int plat_rmmd_mecid_key_update(uint16_t mecid, unsigned int reason)
 {
 	/*
 	 * FVP does not provide an interface to change the encryption key associated

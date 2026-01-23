@@ -13,13 +13,20 @@
 
 #include <common/debug.h>
 #include <drivers/auth/crypto_mod.h>
-#include <drivers/measured_boot/event_log/event_log.h>
+#include <event_measure.h>
+#include <event_print.h>
+#include <lib/xlat_tables/xlat_tables_v2.h>
+
 #include "drtm_main.h"
 #include "drtm_measurements.h"
-#include <lib/xlat_tables/xlat_tables_v2.h>
 
 /* Event Log buffer */
 static uint8_t drtm_event_log[PLAT_DRTM_EVENT_LOG_MAX_SIZE];
+static const struct event_log_hash_info crypto_hash_info = {
+	.func = crypto_mod_calc_hash,
+	.ids = (const uint32_t[]){ CRYPTO_MD_ID },
+	.count = 1U,
+};
 
 /*
  * Calculate and write hash of various payloads as per DRTM specification
@@ -76,8 +83,18 @@ static int drtm_event_log_measure_and_record(uintptr_t data_base,
 static void drtm_event_log_init(uint8_t *event_log_start,
 				uint8_t *event_log_finish)
 {
-	event_log_buf_init(event_log_start, event_log_finish);
-	event_log_write_specid_event();
+	int rc = event_log_init_and_reg(event_log_start, event_log_finish,
+					&crypto_hash_info);
+	if (rc < 0) {
+		ERROR("Failed to initialize event log (%d).\n", rc);
+		panic();
+	}
+
+	rc = event_log_write_specid_event();
+	if (rc < 0) {
+		ERROR("Failed to write Specification ID Event (%d).\n", rc);
+		panic();
+	}
 }
 
 enum drtm_retc drtm_take_measurements(const struct_drtm_dl_args *a)
@@ -138,7 +155,8 @@ enum drtm_retc drtm_take_measurements(const struct_drtm_dl_args *a)
 	/* PCR-17: End of DCE measurements. */
 	rc = drtm_event_log_measure_and_record((uintptr_t)drtm_event_arm_sep_data,
 					       strlen(drtm_event_arm_sep_data),
-					       DRTM_EVENT_ARM_SEPARATOR, NULL,
+					       DRTM_EVENT_ARM_SEPARATOR,
+					       drtm_event_arm_sep_data,
 					       PCR_17);
 	CHECK_RC(rc, drtm_event_log_measure_and_record(DRTM_EVENT_ARM_SEPARATOR));
 
@@ -188,7 +206,7 @@ enum drtm_retc drtm_take_measurements(const struct_drtm_dl_args *a)
 
 	/* PCR-18: Measure the DLME image entry point. */
 	dlme_img_ep = DL_ARGS_GET_DLME_ENTRY_POINT(a);
-	drtm_event_log_measure_and_record((uintptr_t)&dlme_img_ep,
+	drtm_event_log_measure_and_record((uintptr_t)&(a->dlme_img_ep_off),
 					  sizeof(dlme_img_ep),
 					  DRTM_EVENT_ARM_DLME_EP, NULL,
 					  PCR_18);
@@ -197,7 +215,8 @@ enum drtm_retc drtm_take_measurements(const struct_drtm_dl_args *a)
 	/* PCR-18: End of DCE measurements. */
 	rc = drtm_event_log_measure_and_record((uintptr_t)drtm_event_arm_sep_data,
 					       strlen(drtm_event_arm_sep_data),
-					       DRTM_EVENT_ARM_SEPARATOR, NULL,
+					       DRTM_EVENT_ARM_SEPARATOR,
+					       drtm_event_arm_sep_data,
 					       PCR_18);
 	CHECK_RC(rc,
 		 drtm_event_log_measure_and_record(DRTM_EVENT_ARM_SEPARATOR));

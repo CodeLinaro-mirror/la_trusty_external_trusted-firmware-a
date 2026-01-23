@@ -10,6 +10,9 @@
 # poised to handle dependencies, as all build variables would have a default
 # value by then.
 
+# Warning level to give to the compiler
+W				:= 0
+
 # Use T32 by default
 AARCH32_INSTRUCTION_SET		:= T32
 
@@ -85,9 +88,6 @@ DYN_DISABLE_AUTH		:= 0
 # Enable the Maximum Power Mitigation Mechanism on supporting cores.
 ENABLE_MPMM			:= 0
 
-# Enable support for powerdown abandons
-FEAT_PABANDON			:= 0
-
 # Flag to Enable Position Independant support (PIE)
 ENABLE_PIE			:= 0
 
@@ -139,6 +139,9 @@ FIP_NAME			:= fip.bin
 
 # Default FWU_FIP file name
 FWU_FIP_NAME			:= fwu_fip.bin
+
+# Default BL2 FIP file name
+BL2_FIP_NAME			:= bl2_fip.bin
 
 # By default firmware encryption with SSK
 FW_ENC_STATUS			:= 0
@@ -201,7 +204,7 @@ DISCRETE_TPM			:= 0
 # Option to enable the DICE Protection Environmnet as a Measured Boot backend
 DICE_PROTECTION_ENVIRONMENT	:=0
 
-# NS timer register save and restore
+# NS timer register save and restore (deprecated)
 NS_TIMER_SWITCH			:= 0
 
 # Include lib/libc in the final image
@@ -299,6 +302,10 @@ USE_COHERENT_MEM		:= 1
 # Build option to add debugfs support
 USE_DEBUGFS			:= 0
 
+# Build option to enable passing the FDT in x0 to BL33, following the kernel
+# convention.
+USE_KERNEL_DT_CONVENTION	:= 0
+
 # Build option to fconf based io
 ARM_IO_IN_DTB			:= 0
 
@@ -348,11 +355,6 @@ ENABLE_LTO			:= 0
 # Use SPD=spmd and SPMD_SPM_AT_SEL2=1 or ENABLE_RME=1 to enable
 # CTX_INCLUDE_EL2_REGS.
 CTX_INCLUDE_EL2_REGS		:= 0
-
-# Enable Memory tag extension which is supported for architecture greater
-# than Armv8.5-A
-# By default it is set to "no"
-SUPPORT_STACK_MEMTAG		:= no
 
 # Select workaround for AT speculative behaviour.
 ERRATA_SPECULATIVE_AT		:= 0
@@ -429,6 +431,9 @@ CTX_INCLUDE_MPAM_REGS		:= 0
 # Enable context memory usage reporting during BL31 setup.
 PLATFORM_REPORT_CTX_MEM_USE	:= 0
 
+# Request a custom addition to the BL31 linker script
+PLAT_EXTRA_LD_SCRIPT		:= 0
+
 # Enable early console
 EARLY_CONSOLE			:= 0
 
@@ -443,3 +448,16 @@ RMMD_ENABLE_EL3_TOKEN_SIGN	:= 0
 # This flag is temporary and it is expected once the interface is
 # finalized, this flag will be removed.
 RMMD_ENABLE_IDE_KEY_PROG	:= 0
+
+# Live firmware activation support
+LFA_SUPPORT			:= 0
+
+# Enable support for arm DSU driver.
+USE_DSU_DRIVER			:= 0
+
+# Define the separation of BL2 flag, by default it is disabled.
+SEPARATE_BL2_FIP		:=	0
+
+# Disable NUMA awareness for per-CPU framework by default. Platforms should
+# enable this feature by setting PLATFORM_NODE_COUNT > 1
+PLATFORM_NODE_COUNT		:= 1

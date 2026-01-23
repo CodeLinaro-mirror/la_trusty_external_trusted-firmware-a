@@ -17,9 +17,18 @@
 #include <lib/el3_runtime/context_el1.h>
 #endif /* (CTX_INCLUDE_EL2_REGS && IMAGE_BL31) */
 
-#include <lib/el3_runtime/cpu_data.h>
 #include <lib/el3_runtime/simd_ctx.h>
 #include <lib/utils_def.h>
+#include <platform_def.h> /* For CACHE_WRITEBACK_GRANULE */
+
+#define	CPU_CONTEXT_SECURE	UL(0)
+#define	CPU_CONTEXT_NS		UL(1)
+#if ENABLE_RME
+#define	CPU_CONTEXT_REALM	UL(2)
+#define	CPU_CONTEXT_NUM		UL(3)
+#else
+#define	CPU_CONTEXT_NUM		UL(2)
+#endif
 
 /*******************************************************************************
  * Constants that allow assembler code to access members of and the 'gp_regs'
@@ -168,12 +177,19 @@
  ******************************************************************************/
 #define CTX_CPTR_EL3			U(0x0)
 #define CTX_MPAM3_EL3			U(0x8)
+#if (ENABLE_FEAT_IDTE3 && IMAGE_BL31)
+#define CTX_IDREGS_EL3			U(0x10)
+#define CTX_PERWORLD_EL3STATE_END	U(0x78)
+#else
 #define CTX_PERWORLD_EL3STATE_END	U(0x10)
+#endif /* ENABLE_FEAT_IDTE3 && IMAGE_BL31 */
 
 #ifndef __ASSEMBLER__
 
 #include <stdint.h>
 
+#include <assert.h>
+#include <common/ep_info.h>
 #include <lib/cassert.h>
 
 /*
@@ -235,6 +251,24 @@ DEFINE_REG_STRUCT(pauth, CTX_PAUTH_REGS_ALL);
 #define write_ctx_reg(ctx, offset, val)	(((ctx)->ctx_regs[(offset) >> DWORD_SHIFT]) \
 					 = (uint64_t) (val))
 
+#if ENABLE_FEAT_IDTE3
+typedef struct perworld_idreg {
+	u_register_t id_aa64pfr0_el1;
+	u_register_t id_aa64pfr1_el1;
+	u_register_t id_aa64pfr2_el1;
+	u_register_t id_aa64smfr0_el1;
+	u_register_t id_aa64isar0_el1;
+	u_register_t id_aa64isar1_el1;
+	u_register_t id_aa64isar2_el1;
+	u_register_t id_aa64isar3_el1;
+	u_register_t id_aa64mmfr0_el1;
+	u_register_t id_aa64mmfr1_el1;
+	u_register_t id_aa64mmfr2_el1;
+	u_register_t id_aa64mmfr3_el1;
+	u_register_t id_aa64mmfr4_el1;
+} perworld_idregs_t;
+#endif
+
 /*
  * Top-level context structure which is used by EL3 firmware to preserve
  * the state of a core at the next lower EL in a given security state and
@@ -269,7 +303,10 @@ typedef struct cpu_context {
 	el1_sysregs_t el1_sysregs_ctx;
 #endif
 
-} cpu_context_t;
+	/* TODO: the CACHE_WRITEBACK_GRANULE alignment is not necessary if this is
+	 * contained in a per-cpu data structure (i.e. cpu_data_t).
+	 */
+} __aligned(CACHE_WRITEBACK_GRANULE) cpu_context_t;
 
 /*
  * Per-World Context.
@@ -278,9 +315,26 @@ typedef struct cpu_context {
 typedef struct per_world_context {
 	uint64_t ctx_cptr_el3;
 	uint64_t ctx_mpam3_el3;
+#if (ENABLE_FEAT_IDTE3 && IMAGE_BL31)
+	perworld_idregs_t idregs;
+#endif
 } per_world_context_t;
 
-extern per_world_context_t per_world_context[CPU_DATA_CONTEXT_NUM];
+static inline uint8_t get_cpu_context_index(size_t security_state)
+{
+	if (security_state == SECURE) {
+		return CPU_CONTEXT_SECURE;
+#if ENABLE_RME
+	} else  if (security_state == REALM) {
+		return CPU_CONTEXT_REALM;
+#endif
+	} else {
+		assert(security_state == NON_SECURE);
+		return CPU_CONTEXT_NS;
+	}
+}
+
+extern per_world_context_t per_world_context[CPU_CONTEXT_NUM];
 
 /* Macros to access members of the 'cpu_context_t' structure */
 #define get_el3state_ctx(h)	(&((cpu_context_t *) h)->el3state_ctx)

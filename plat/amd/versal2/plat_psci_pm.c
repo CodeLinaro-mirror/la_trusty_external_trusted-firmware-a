@@ -8,12 +8,14 @@
 #include <assert.h>
 
 #include <common/debug.h>
+#include <common/ep_info.h>
 #include <drivers/delay_timer.h>
 #include <lib/mmio.h>
 #include <lib/psci/psci.h>
 #include <plat/arm/common/plat_arm.h>
 #include <plat/common/platform.h>
 #include <plat_arm.h>
+#include <plat_fdt.h>
 
 #include "def.h"
 #include <ipi.h>
@@ -25,6 +27,9 @@
 #include "pm_svc_main.h"
 
 static uintptr_t sec_entry;
+
+/* 1 sec of wait timeout for receiving idle callback */
+#define IDLE_CB_WAIT_TIMEOUT	(1000000U)
 
 static int32_t versal2_pwr_domain_on(u_register_t mpidr)
 {
@@ -83,8 +88,8 @@ static void versal2_pwr_domain_off(const psci_power_state_t *target_state)
 	 * invoking CPU_on function, during which resume address will
 	 * be set.
 	 */
-	pm_ret = pm_self_suspend(proc->node_id, MAX_LATENCY, PM_STATE_CPU_IDLE, 0,
-			      SECURE_FLAG);
+	pm_ret = pm_self_suspend(proc->node_id, MAX_LATENCY, PM_STATE_CPU_OFF, 0,
+				 NON_SECURE);
 
 	if (pm_ret != PM_RET_SUCCESS) {
 		ERROR("Failed to power down CPU %d\n", cpu_id);
@@ -110,14 +115,14 @@ static void __dead2 versal2_system_reset(void)
 	 * Send the system reset request to the firmware if power down request
 	 * is not received from firmware.
 	 */
-	if (pwrdwn_req_received == false) {
+	if (pm_pwrdwn_req_status() == false) {
 		/*
 		 * TODO: shutdown scope for this reset needs be revised once
 		 * we have a clearer understanding of the overall reset scoping
 		 * including the implementation of SYSTEM_RESET2.
 		 */
 		pm_ret = pm_system_shutdown(XPM_SHUTDOWN_TYPE_RESET,
-					 pm_get_shutdown_scope(), SECURE_FLAG);
+					 pm_get_shutdown_scope(), NON_SECURE);
 
 		if (pm_ret != PM_RET_SUCCESS) {
 			WARN("System shutdown failed\n");
@@ -176,7 +181,7 @@ static void versal2_pwr_domain_suspend(const psci_power_state_t *target_state)
 
 	/* Send request to PMC to suspend this core */
 	ret = pm_self_suspend(proc->node_id, MAX_LATENCY, state, sec_entry,
-			      SECURE_FLAG);
+			      NON_SECURE);
 
 	if (ret != PM_RET_SUCCESS) {
 		ERROR("Failed to power down CPU %d\n", cpu_id);
@@ -184,6 +189,34 @@ static void versal2_pwr_domain_suspend(const psci_power_state_t *target_state)
 
 err:
 	return;
+}
+
+static int32_t versal2_validate_ns_entrypoint(uint64_t ns_entrypoint)
+{
+	int32_t ret = PSCI_E_SUCCESS;
+	struct reserve_mem_range *rmr;
+	uint32_t index = 0, counter = 0;
+
+	rmr = get_reserved_entries_fdt(&counter);
+
+	VERBOSE("Validate ns_entry point %lx\n", ns_entrypoint);
+
+	if (counter != 0) {
+		while (index < counter) {
+			if ((ns_entrypoint >= rmr[index].base) &&
+				       (ns_entrypoint <= rmr[index].size)) {
+				ret = PSCI_E_INVALID_ADDRESS;
+				break;
+			}
+			index++;
+		}
+	} else {
+		if ((ns_entrypoint >= BL31_BASE) && (ns_entrypoint <= BL31_LIMIT)) {
+			ret = PSCI_E_INVALID_ADDRESS;
+		}
+	}
+
+	return ret;
 }
 
 static void versal2_pwr_domain_on_finish(const psci_power_state_t *target_state)
@@ -239,15 +272,31 @@ err:
  */
 static void __dead2 versal2_system_off(void)
 {
+	uint64_t timeout;
 	enum pm_ret_status ret;
+
+	request_cpu_pwrdwn();
 
 	/* Send the power down request to the PMC */
 	ret = pm_system_shutdown(XPM_SHUTDOWN_TYPE_SHUTDOWN,
-				 pm_get_shutdown_scope(), SECURE_FLAG);
+				 pm_get_shutdown_scope(), NON_SECURE);
 
 	if (ret != PM_RET_SUCCESS) {
 		ERROR("System shutdown failed\n");
 	}
+
+	/*
+	 * Wait for system shutdown request completed and idle callback
+	 * not received.
+	 */
+	timeout = timeout_init_us(IDLE_CB_WAIT_TIMEOUT);
+	do {
+		ret = ipi_mb_enquire_status(primary_proc->ipi->local_ipi_id,
+					    primary_proc->ipi->remote_ipi_id);
+		udelay(100);
+	} while ((ret != (int32_t)IPI_MB_STATUS_RECV_PENDING) && !timeout_elapsed(timeout));
+
+	(void)psci_cpu_off();
 
 	while (true) {
 		wfi();
@@ -312,6 +361,7 @@ static const struct plat_psci_ops versal2_nopmc_psci_ops = {
 	.pwr_domain_suspend_finish      = versal2_pwr_domain_suspend_finish,
 	.system_off                     = versal2_system_off,
 	.system_reset                   = versal2_system_reset,
+	.validate_ns_entrypoint		= versal2_validate_ns_entrypoint,
 	.validate_power_state           = versal2_validate_power_state,
 	.get_sys_suspend_power_state    = versal2_get_sys_suspend_power_state,
 };

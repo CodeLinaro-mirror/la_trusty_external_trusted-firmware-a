@@ -23,9 +23,6 @@
 #define NODE_TYPE_MASK_BITS     GENMASK_32(5, 0)
 #define NODE_INDEX_MASK_BITS    GENMASK_32(13, 0)
 #define NODE_CLASS_MASK         (NODE_CLASS_MASK_BITS << NODE_CLASS_SHIFT)
-#define NODE_SUBCLASS_MASK      (NODE_SUBCLASS_MASK_BITS << NODE_SUBCLASS_SHIFT)
-#define NODE_TYPE_MASK          (NODE_TYPE_MASK_BITS << NODE_TYPE_SHIFT)
-#define NODE_INDEX_MASK         (NODE_INDEX_MASK_BITS << NODE_INDEX_SHIFT)
 
 #define NODEID(CLASS, SUBCLASS, TYPE, INDEX)	\
 	     ((((CLASS) & NODE_CLASS_MASK_BITS) << NODE_CLASS_SHIFT) | \
@@ -33,11 +30,7 @@
 	     (((TYPE) & NODE_TYPE_MASK_BITS) << NODE_TYPE_SHIFT) | \
 	     (((INDEX) & NODE_INDEX_MASK_BITS) << NODE_INDEX_SHIFT))
 
-#define NODECLASS(ID)		(((ID) & NODE_CLASS_MASK) >> NODE_CLASS_SHIFT)
-#define NODESUBCLASS(ID)	(((ID) & NODE_SUBCLASS_MASK) >> \
-				NODE_SUBCLASS_SHIFT)
-#define NODETYPE(ID)		(((ID) & NODE_TYPE_MASK) >> NODE_TYPE_SHIFT)
-#define NODEINDEX(ID)		(((ID) & NODE_INDEX_MASK) >> NODE_INDEX_SHIFT)
+#define NODECLASS(ID)           (((ID) & NODE_CLASS_MASK) >> NODE_CLASS_SHIFT)
 
 /*********************************************************************
  * Enum definitions
@@ -198,6 +191,9 @@ enum pm_device_node_idx {
 	XPM_NODEIDX_DEV_GT_8 = 0x51,
 	XPM_NODEIDX_DEV_GT_9 = 0x52,
 	XPM_NODEIDX_DEV_GT_10 = 0x53,
+
+	/* MMI devices */
+	XPM_NODEIDX_DEV_MMI_GEM = 0x13A,
 
 #if defined(PLAT_versal_net)
 	XPM_NODEIDX_DEV_ACPU_0_0 = 0xAF,

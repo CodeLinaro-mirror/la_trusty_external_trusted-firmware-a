@@ -153,6 +153,9 @@
 /* ATF build version */
 #define INTEL_SIP_SMC_ATF_BUILD_VER					0xC200009B
 
+/* IO96B ECC Error Injection */
+#define INTEL_SIP_SMC_INJECT_IO96B_ECC_ERR				0xC200009C
+
 #define INTEL_SIP_SMC_FCS_SHA_MODE_MASK					0xF
 #define INTEL_SIP_SMC_FCS_DIGEST_SIZE_MASK				0xF
 #define INTEL_SIP_SMC_FCS_DIGEST_SIZE_OFFSET				4U
@@ -163,6 +166,8 @@
 #define SYSMGR_ECC_DBE_COLD_RST_MASK					(SYSMGR_ECC_OCRAM_MASK |\
 									SYSMGR_ECC_DDR0_MASK |\
 									SYSMGR_ECC_DDR1_MASK)
+#define IOSSM_ECC_ERR_INJ_DELAY_USECS					(40U)
+#define IOSSM_CMD_STATUS_RESP_READY					BIT(0)
 
 /* Non-mailbox SMC Call */
 #define INTEL_SIP_SMC_SVC_VERSION					0xC2000200
@@ -217,7 +222,6 @@ typedef enum {
 } config_type;
 
 /* Function Definitions */
-bool is_size_4_bytes_aligned(uint32_t size);
 bool is_address_in_ddr_range(uint64_t addr, uint64_t size);
 
 /* ECC DBE */
@@ -255,6 +259,12 @@ uintptr_t sip_smc_handler_v2(uint32_t smc_fid,
 #define SMC_RET_ARGS_FOUR							(4)
 #define SMC_RET_ARGS_FIVE							(5)
 #define SMC_RET_ARGS_SIX							(6)
+#define SMC_RET_ARGS_SEVEN							(7)
+#define SMC_RET_ARGS_EIGHT							(8)
+#define SMC_RET_ARGS_NINE							(9)
+#define SMC_RET_ARGS_TEN							(10)
+
+#define MBOX_GEN_CMD_MAX_WORDS							(0x1000)
 
 /*
  * SiP SVC Version3 SMC Functions IDs
@@ -277,6 +287,14 @@ uintptr_t sip_smc_handler_v2(uint32_t smc_fid,
 
 #define ALTERA_SIP_SMC_ASYNC_HWMON_READTEMP					(0x420000E8)
 #define ALTERA_SIP_SMC_ASYNC_HWMON_READVOLT					(0x420000E9)
+
+/* RSU related commands */
+#define ALTERA_SIP_SMC_ASYNC_RSU_GET_SPT					(0x420000EA)
+#define ALTERA_SIP_SMC_ASYNC_RSU_GET_STATUS					(0x420000EB)
+#define ALTERA_SIP_SMC_ASYNC_RSU_NOTIFY						(0x420000EC)
+
+/* V3 Generic mailbox command. */
+#define ALTERA_SIP_SMC_ASYNC_GEN_MBOX_CMD					(0x420000EE)
 
 /* FCS crypto service VAB/SDOS commands */
 #define ALTERA_SIP_SMC_ASYNC_FCS_RANDOM_NUMBER					(0x4200012C)
@@ -344,6 +362,8 @@ uintptr_t sip_smc_handler_v2(uint32_t smc_fid,
 
 #define GET_CLIENT_ID(x)							(((x) & 0xF0) >> 4)
 #define GET_JOB_ID(x)								((x) & 0x0F)
+#define GET_ADDR64(high, low)							(((uint64_t)(high) \
+										   << 32) | (low))
 #endif	/* SIP_SVC_V3 */
 
 #endif /* SOCFPGA_SIP_SVC_H */

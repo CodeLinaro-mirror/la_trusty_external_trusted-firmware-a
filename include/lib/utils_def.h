@@ -86,11 +86,20 @@
 #define EXTRACT(regfield, reg) \
 	(((reg) & MASK(regfield)) >> (regfield##_SHIFT))
 
+#define UPDATE_REG_FIELD(regfield, reg, val) \
+	do { \
+		(reg) &= ~(MASK(regfield)); \
+		(reg) |= ((uint64_t)(val) << (regfield##_SHIFT)); \
+	} while (0)
+
 /*
  * This variant of div_round_up can be used in macro definition but should not
  * be used in C code as the `div` parameter is evaluated twice.
  */
 #define DIV_ROUND_UP_2EVAL(n, d)	(((n) + (d) - 1) / (d))
+
+/* round `n` up to a multiple of `r` */
+#define ROUND_UP_2EVAL(n, r)		((((n) + (r) - 1) / (r)) * (r))
 
 #define div_round_up(val, div) __extension__ ({	\
 	__typeof__(div) _div = (div);		\
@@ -129,10 +138,10 @@
  * round_down() is similar but rounds the value down instead.
  */
 #define round_boundary(value, boundary)		\
-	((__typeof__(value))((boundary) - 1))
+	((__typeof__(value))((boundary) - ((__typeof__(value))1U)))
 
 #define round_up(value, boundary)		\
-	((((value) - 1) | round_boundary(value, boundary)) + 1)
+	((((value) - ((__typeof__(value))1U)) | round_boundary(value, boundary)) + ((__typeof__(value))1U))
 
 #define round_down(value, boundary)		\
 	((value) & ~round_boundary(value, boundary))

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2022-2025, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -28,6 +28,9 @@
 #include <services/spmd_svc.h>
 #include "spmc.h"
 #include "spmc_shared_mem.h"
+#if TRANSFER_LIST
+#include <transfer_list.h>
+#endif
 
 #include <platform_def.h>
 
@@ -44,6 +47,9 @@
 
 /* Declare the maximum number of SPs and El3 LPs. */
 #define MAX_SP_LP_PARTITIONS (SECURE_PARTITION_COUNT + MAX_EL3_LP_DESCS_COUNT)
+
+#define FFA_VERSION_SPMC_MAJOR U(1)
+#define FFA_VERSION_SPMC_MINOR U(2)
 
 /*
  * Allocate a secure partition descriptor to describe each SP in the system that
@@ -217,12 +223,13 @@ static uint64_t spmc_smc_return(uint32_t smc_fid,
 				void *handle,
 				void *cookie,
 				uint64_t flags,
-				uint16_t dst_id)
+				uint16_t dst_id,
+				uint32_t sp_ffa_version)
 {
 	/* If the destination is in the normal world always go via the SPMD. */
 	if (ffa_is_normal_world_id(dst_id)) {
 		return spmd_smc_handler(smc_fid, x1, x2, x3, x4,
-					cookie, handle, flags);
+					cookie, handle, flags, sp_ffa_version);
 	}
 	/*
 	 * If the caller is secure and we want to return to the secure world,
@@ -234,7 +241,7 @@ static uint64_t spmc_smc_return(uint32_t smc_fid,
 	/* If we originated in the normal world then switch contexts. */
 	else if (!secure_origin && ffa_is_secure_world_id(dst_id)) {
 		return spmd_smc_switch_state(smc_fid, secure_origin, x1, x2,
-					     x3, x4, handle, flags);
+					     x3, x4, handle, flags, sp_ffa_version);
 	} else {
 		/* Unknown State. */
 		panic();
@@ -348,6 +355,18 @@ static bool direct_msg_receivable(uint32_t properties, uint16_t dir_req_fnum)
 }
 
 /*******************************************************************************
+ * Helper function to obtain the FF-A version of the calling partition.
+ ******************************************************************************/
+uint32_t get_partition_ffa_version(bool secure_origin)
+{
+	if (secure_origin) {
+		return spmc_get_current_sp_ctx()->ffa_version;
+	} else {
+		return spmc_get_hyp_ctx()->ffa_version;
+	}
+}
+
+/*******************************************************************************
  * Handle direct request messages and route to the appropriate destination.
  ******************************************************************************/
 static uint64_t direct_req_smc_handler(uint32_t smc_fid,
@@ -366,9 +385,15 @@ static uint64_t direct_req_smc_handler(uint32_t smc_fid,
 	struct el3_lp_desc *el3_lp_descs;
 	struct secure_partition_desc *sp;
 	unsigned int idx;
+	uint32_t ffa_version = get_partition_ffa_version(secure_origin);
 
 	dir_req_funcid = (smc_fid != FFA_MSG_SEND_DIRECT_REQ2_SMC64) ?
 		FFA_FNUM_MSG_SEND_DIRECT_REQ : FFA_FNUM_MSG_SEND_DIRECT_REQ2;
+
+	if ((dir_req_funcid == FFA_FNUM_MSG_SEND_DIRECT_REQ2) &&
+			ffa_version < MAKE_FFA_VERSION(U(1), U(2))) {
+		return spmc_ffa_error_return(handle, FFA_ERROR_NOT_SUPPORTED);
+	}
 
 	/*
 	 * Sanity check for DIRECT_REQ:
@@ -469,7 +494,7 @@ static uint64_t direct_req_smc_handler(uint32_t smc_fid,
 	}
 
 	return spmc_smc_return(smc_fid, secure_origin, x1, x2, x3, x4,
-			       handle, cookie, flags, dst_id);
+			       handle, cookie, flags, dst_id, sp->ffa_version);
 }
 
 /*******************************************************************************
@@ -586,7 +611,7 @@ static uint64_t direct_resp_smc_handler(uint32_t smc_fid,
 	}
 
 	return spmc_smc_return(smc_fid, secure_origin, x1, x2, x3, x4,
-			       handle, cookie, flags, dst_id);
+			       handle, cookie, flags, dst_id, sp->ffa_version);
 }
 
 /*******************************************************************************
@@ -666,7 +691,7 @@ static uint64_t msg_wait_handler(uint32_t smc_fid,
 		return spmd_smc_switch_state(FFA_NORMAL_WORLD_RESUME, secure_origin,
 					     FFA_PARAM_MBZ, FFA_PARAM_MBZ,
 					     FFA_PARAM_MBZ, FFA_PARAM_MBZ,
-					     handle, flags);
+					     handle, flags, sp->ffa_version);
 	}
 
 	/* Protect the runtime state of a S-EL0 SP with a lock. */
@@ -676,7 +701,7 @@ static uint64_t msg_wait_handler(uint32_t smc_fid,
 
 	/* Forward the response to the Normal world. */
 	return spmc_smc_return(smc_fid, secure_origin, x1, x2, x3, x4,
-			       handle, cookie, flags, FFA_NWD_ID);
+			       handle, cookie, flags, FFA_NWD_ID, sp->ffa_version);
 }
 
 static uint64_t ffa_error_handler(uint32_t smc_fid,
@@ -743,7 +768,7 @@ static uint64_t ffa_error_handler(uint32_t smc_fid,
 			panic();
 		} else
 			return spmc_smc_return(smc_fid, secure_origin, x1, x2, x3, x4,
-					       handle, cookie, flags, dst_id);
+					       handle, cookie, flags, dst_id, sp->ffa_version);
 	}
 
 	return spmc_ffa_error_return(handle, FFA_ERROR_NOT_SUPPORTED);
@@ -786,20 +811,8 @@ static uint64_t ffa_version_handler(uint32_t smc_fid,
 		spmc_get_hyp_ctx()->ffa_version = requested_version;
 	}
 
-	SMC_RET1(handle, MAKE_FFA_VERSION(FFA_VERSION_MAJOR,
-					  FFA_VERSION_MINOR));
-}
-
-/*******************************************************************************
- * Helper function to obtain the FF-A version of the calling partition.
- ******************************************************************************/
-uint32_t get_partition_ffa_version(bool secure_origin)
-{
-	if (secure_origin) {
-		return spmc_get_current_sp_ctx()->ffa_version;
-	} else {
-		return spmc_get_hyp_ctx()->ffa_version;
-	}
+	SMC_RET1(handle, MAKE_FFA_VERSION(FFA_VERSION_SPMC_MAJOR,
+					  FFA_VERSION_SPMC_MINOR));
 }
 
 static uint64_t rxtx_map_handler(uint32_t smc_fid,
@@ -1024,11 +1037,10 @@ static int partition_info_get_handler_v1_1(uint32_t *uuid,
 
 	/* Deal with physical SP's. */
 	for (index = 0U; index < SECURE_PARTITION_COUNT; index++) {
-		int uuid_index;
+		uint32_t uuid_index;
 		uint32_t *sp_uuid;
 
-		for (uuid_index = 0;
-		     uuid_index < sp_desc[index].num_uuids;
+		for (uuid_index = 0; uuid_index < sp_desc[index].num_uuids;
 		     uuid_index++) {
 			sp_uuid = sp_desc[index].uuid_array[uuid_index].uuid;
 
@@ -1086,10 +1098,12 @@ static uint32_t partition_info_get_handler_count_only(uint32_t *uuid)
 
 	/* Deal with physical SP's. */
 	for (index = 0U; index < SECURE_PARTITION_COUNT; index++) {
-		int uuid_index;
+		uint32_t uuid_index;
 
-		for (uuid_index = 0; uuid_index < sp_desc[index].num_uuids; uuid_index++) {
-			uint32_t *sp_uuid = sp_desc[index].uuid_array[uuid_index].uuid;
+		for (uuid_index = 0; uuid_index < sp_desc[index].num_uuids;
+		     uuid_index++) {
+			uint32_t *sp_uuid =
+				sp_desc[index].uuid_array[uuid_index].uuid;
 
 			if (null_uuid) {
 				(partition_count)++;
@@ -1188,10 +1202,11 @@ static uint64_t partition_info_get_handler(uint32_t smc_fid,
 		 */
 
 		/* Obtain the v1.1 format of the descriptors. */
-		ret = partition_info_get_handler_v1_1(uuid, partitions,
-						      (MAX_SP_LP_PARTITIONS *
-						      SPMC_AT_EL3_PARTITION_MAX_UUIDS),
-						      &partition_count);
+		ret = partition_info_get_handler_v1_1(
+			uuid, partitions,
+			(MAX_SP_LP_PARTITIONS *
+			 SPMC_AT_EL3_PARTITION_MAX_UUIDS),
+			&partition_count);
 
 		/* Check if an error occurred during discovery. */
 		if (ret != 0) {
@@ -1290,7 +1305,7 @@ static uint64_t ffa_features_retrieve_request(bool secure_origin,
 		 * an invalid call. If v1.0 check and store whether the SP
 		 * has requested the use of the NS bit.
 		 */
-		if (sp->ffa_version >= MAKE_FFA_VERSION(1, 1)) {
+		if (spmc_compatible_version(sp->ffa_version, 1, 1)) {
 			if ((input_properties &
 			     FFA_FEATURES_RET_REQ_NS_BIT) == 0U) {
 				return spmc_ffa_error_return(handle,
@@ -1559,7 +1574,7 @@ static uint64_t ffa_run_handler(uint32_t smc_fid,
 	}
 
 	return spmc_smc_return(smc_fid, secure_origin, x1, 0, 0, 0,
-			       handle, cookie, flags, target_id);
+			       handle, cookie, flags, target_id, sp->ffa_version);
 }
 
 static uint64_t rx_release_handler(uint32_t smc_fid,
@@ -1909,7 +1924,11 @@ static uint64_t ffa_mem_perm_get_handler(uint32_t smc_fid,
 	struct secure_partition_desc *sp;
 	unsigned int idx;
 	uintptr_t base_va = (uintptr_t)x1;
-	uint32_t tf_attr = 0;
+	uint64_t max_page_count = x2 + 1;
+	uint64_t page_count = 0;
+	uint32_t base_page_attr = 0;
+	uint32_t page_attr = 0;
+	unsigned int table_level;
 	int ret;
 
 	/* This request cannot originate from the Normal world. */
@@ -1941,17 +1960,49 @@ static uint64_t ffa_mem_perm_get_handler(uint32_t smc_fid,
 		return spmc_ffa_error_return(handle, FFA_ERROR_DENIED);
 	}
 
+	base_va &= ~(PAGE_SIZE_MASK);
+
 	/* Request the permissions */
-	ret = xlat_get_mem_attributes_ctx(sp->xlat_ctx_handle, base_va, &tf_attr);
+	ret = xlat_get_mem_attributes_ctx(sp->xlat_ctx_handle, base_va,
+			&base_page_attr, &table_level);
 	if (ret != 0) {
 		return spmc_ffa_error_return(handle,
 					     FFA_ERROR_INVALID_PARAMETER);
 	}
 
-	/* Convert TF-A permission to FF-A permissions attributes. */
-	x2 = mmap_perm_to_ffa_perm(tf_attr);
+	/*
+	 * Caculate how many pages in this block entry from base_va including
+	 * its page.
+	 */
+	page_count = ((XLAT_BLOCK_SIZE(table_level) -
+			(base_va & XLAT_BLOCK_MASK(table_level))) >> PAGE_SIZE_SHIFT);
+	base_va += XLAT_BLOCK_SIZE(table_level);
 
-	SMC_RET3(handle, FFA_SUCCESS_SMC32, 0, x2);
+	while ((page_count < max_page_count) && (base_va != 0x00)) {
+		ret = xlat_get_mem_attributes_ctx(sp->xlat_ctx_handle, base_va,
+				&page_attr, &table_level);
+		if (ret != 0) {
+			return spmc_ffa_error_return(handle,
+						     FFA_ERROR_INVALID_PARAMETER);
+		}
+
+		if (page_attr != base_page_attr) {
+			break;
+		}
+
+		base_va += XLAT_BLOCK_SIZE(table_level);
+		page_count += (XLAT_BLOCK_SIZE(table_level) >> PAGE_SIZE_SHIFT);
+	}
+
+	if (page_count > max_page_count) {
+		page_count = max_page_count;
+	}
+
+	/* Convert TF-A permission to FF-A permissions attributes. */
+	x2 = mmap_perm_to_ffa_perm(base_page_attr);
+
+	/* x3 should be page count - 1 */
+	SMC_RET4(handle, FFA_SUCCESS_SMC32, 0, x2, --page_count);
 }
 
 /*******************************************************************************
@@ -1968,7 +2019,6 @@ static int sp_manifest_parse(void *sp_manifest, int offset,
 	uint32_t config_32;
 	int uuid_size;
 	const fdt32_t *prop;
-	int i;
 
 	/*
 	 * Look for the mandatory fields that are expected to be present in
@@ -1986,12 +2036,13 @@ static int sp_manifest_parse(void *sp_manifest, int offset,
 		return -FDT_ERR_NOTFOUND;
 	}
 
-	if (uuid_size > sizeof(sp->uuid_array)) {
-		ERROR("Too many UUIDs in manifest, truncating list\n");
-		uuid_size = sizeof(sp->uuid_array);
+	sp->num_uuids = (uint32_t)uuid_size / sizeof(struct ffa_uuid);
+	if (sp->num_uuids > ARRAY_SIZE(sp->uuid_array)) {
+		ERROR("Too many UUIDs (%d) in manifest, maximum is %zd\n",
+		      sp->num_uuids, ARRAY_SIZE(sp->uuid_array));
+		return -FDT_ERR_BADVALUE;
 	}
 
-	sp->num_uuids = uuid_size / sizeof(struct ffa_uuid);
 	ret = fdt_read_uint32_array(sp_manifest, node, "uuid",
 				    (uuid_size / sizeof(uint32_t)),
 				    sp->uuid_array[0].uuid);
@@ -2000,13 +2051,15 @@ static int sp_manifest_parse(void *sp_manifest, int offset,
 		return ret;
 	}
 
-	for (i = 0; i < sp->num_uuids; i++) {
-		int j;
-		for (j = 0; j < i; j++) {
-			if (memcmp(&sp->uuid_array[i], &sp->uuid_array[j], sizeof(struct ffa_uuid)) == 0) {
+	for (uint32_t i = 0; i < sp->num_uuids; i++) {
+		for (uint32_t j = 0; j < i; j++) {
+			if (memcmp(&sp->uuid_array[i], &sp->uuid_array[j],
+				   sizeof(struct ffa_uuid)) == 0) {
 				ERROR("Duplicate UUIDs in manifest: 0x%x 0x%x 0x%x 0x%x\n",
-				      sp->uuid_array[i].uuid[0], sp->uuid_array[i].uuid[1],
-				      sp->uuid_array[i].uuid[2], sp->uuid_array[i].uuid[3]);
+				      sp->uuid_array[i].uuid[0],
+				      sp->uuid_array[i].uuid[1],
+				      sp->uuid_array[i].uuid[2],
+				      sp->uuid_array[i].uuid[3]);
 				return -FDT_ERR_BADVALUE;
 			}
 		}
@@ -2054,31 +2107,6 @@ static int sp_manifest_parse(void *sp_manifest, int offset,
 	}
 
 	sp->properties = config_32;
-
-	ret = fdt_read_uint32(sp_manifest, node,
-			      "vm-availability-messages", &config_32);
-	if (ret != 0) {
-		WARN("Missing VM availability messaging.\n");
-	} else if ((sp->properties & FFA_PARTITION_DIRECT_REQ_RECV) == 0) {
-		ERROR("VM availability messaging requested without "
-		      "direct message receive support.\n");
-		return -EINVAL;
-	} else {
-		/* Validate this entry. */
-		if ((config_32 & ~(FFA_VM_AVAILABILITY_CREATED |
-				  FFA_VM_AVAILABILITY_DESTROYED)) != 0U) {
-			WARN("Invalid VM availability messaging (0x%x)\n",
-			     config_32);
-			return -EINVAL;
-		}
-
-		if ((config_32 & FFA_VM_AVAILABILITY_CREATED) != 0U) {
-			sp->properties |= FFA_PARTITION_VM_CREATED;
-		}
-		if ((config_32 & FFA_VM_AVAILABILITY_DESTROYED) != 0U) {
-			sp->properties |= FFA_PARTITION_VM_DESTROYED;
-		}
-	}
 
 	ret = fdt_read_uint32(sp_manifest, node,
 			      "execution-ctx-count", &config_32);
@@ -2153,6 +2181,31 @@ static int sp_manifest_parse(void *sp_manifest, int offset,
 		}
 	}
 
+	ret = fdt_read_uint32(sp_manifest, node,
+			      "vm-availability-messages", &config_32);
+	if (ret != 0) {
+		WARN("Missing VM availability messaging.\n");
+	} else if ((sp->properties & FFA_PARTITION_DIRECT_REQ_RECV) == 0) {
+		ERROR("VM availability messaging requested without "
+		      "direct message receive support.\n");
+		return -EINVAL;
+	} else {
+		/* Validate this entry. */
+		if ((config_32 & ~(FFA_VM_AVAILABILITY_CREATED |
+				  FFA_VM_AVAILABILITY_DESTROYED)) != 0U) {
+			WARN("Invalid VM availability messaging (0x%x)\n",
+			     config_32);
+			return -EINVAL;
+		}
+
+		if ((config_32 & FFA_VM_AVAILABILITY_CREATED) != 0U) {
+			sp->properties |= FFA_PARTITION_VM_CREATED;
+		}
+		if ((config_32 & FFA_VM_AVAILABILITY_DESTROYED) != 0U) {
+			sp->properties |= FFA_PARTITION_VM_DESTROYED;
+		}
+	}
+
 	return 0;
 }
 
@@ -2166,10 +2219,12 @@ static int find_and_prepare_sp_context(void)
 {
 	void *sp_manifest;
 	uintptr_t manifest_base;
-	uintptr_t manifest_base_align;
+	uintptr_t manifest_base_align __maybe_unused;
 	entry_point_info_t *next_image_ep_info;
 	int32_t ret, boot_info_reg = -1;
 	struct secure_partition_desc *sp;
+	struct transfer_list_header *tl __maybe_unused;
+	struct transfer_list_entry *te __maybe_unused;
 
 	next_image_ep_info = bl31_plat_get_next_image_ep_info(SECURE);
 	if (next_image_ep_info == NULL) {
@@ -2177,6 +2232,18 @@ static int find_and_prepare_sp_context(void)
 		return -ENOENT;
 	}
 
+
+#if TRANSFER_LIST && !RESET_TO_BL31
+	tl = (struct transfer_list_header *)next_image_ep_info->args.arg3;
+	te = transfer_list_find(tl, TL_TAG_DT_FFA_MANIFEST);
+	if (te == NULL) {
+		WARN("Secure Partition manifest absent.\n");
+		return -ENOENT;
+	}
+
+	sp_manifest = (void *)transfer_list_entry_data(te);
+	manifest_base = (uintptr_t)sp_manifest;
+#else
 	sp_manifest = (void *)next_image_ep_info->args.arg0;
 	if (sp_manifest == NULL) {
 		WARN("Secure Partition manifest absent.\n");
@@ -2201,6 +2268,7 @@ static int find_and_prepare_sp_context(void)
 		ERROR("Error while mapping SP manifest (%d).\n", ret);
 		return ret;
 	}
+#endif
 
 	ret = fdt_node_offset_by_compatible(sp_manifest, -1,
 					    "arm,ffa-manifest-1.0");
@@ -2399,11 +2467,10 @@ static void initalize_ns_ep_descs(void)
  ******************************************************************************/
 void spmc_populate_attrs(spmc_manifest_attribute_t *spmc_attrs)
 {
-	spmc_attrs->major_version = FFA_VERSION_MAJOR;
-	spmc_attrs->minor_version = FFA_VERSION_MINOR;
+	spmc_attrs->major_version = FFA_VERSION_SPMC_MAJOR;
+	spmc_attrs->minor_version = FFA_VERSION_SPMC_MINOR;
 	spmc_attrs->exec_state = MODE_RW_64;
 	spmc_attrs->spmc_id = FFA_SPMC_ID;
-	spmc_attrs->sp_ffa_version = spmc_get_current_sp_ctx()->ffa_version;
 }
 
 /*******************************************************************************
@@ -2656,5 +2723,5 @@ static uint64_t spmc_sp_interrupt_handler(uint32_t id,
 	return spmd_smc_switch_state(FFA_INTERRUPT, false,
 				     FFA_PARAM_MBZ, FFA_PARAM_MBZ,
 				     FFA_PARAM_MBZ, FFA_PARAM_MBZ,
-				     handle, 0ULL);
+				     handle, 0ULL, sp->ffa_version);
 }

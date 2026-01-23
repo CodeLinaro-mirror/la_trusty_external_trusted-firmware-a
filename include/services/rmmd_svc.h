@@ -169,11 +169,12 @@
  * Function code to support update of MEC keys.
  * The arguments of this SMC are:
  * 	arg0 - Function ID.
- * 	arg1 - MECID
+ * 	arg1 - [63:48]: Res0, [47:32]: MECID, [31:1]: Res0, [0]: MEC refresh
+ * 	       reason
  * The return arguments are:
  * 	ret0 - Status/Error
  */
-#define RMM_MECID_KEY_UPDATE			SMC64_RMMD_EL3_FID(U(6))
+#define RMM_MEC_REFRESH				SMC64_RMMD_EL3_FID(U(6))
 
 /* ECC Curve types for attest key generation */
 #define ATTEST_KEY_CURVE_ECC_SECP384R1		U(0)
@@ -258,6 +259,19 @@ typedef struct rp_ide_key_info {
  */
 #define RMM_IDE_KM_PULL_RESPONSE		SMC64_RMMD_EL3_FID(U(10))
 
+/* Starting RMM-EL3 interface version 0.7 */
+/*
+ * Reserve memory for the RMM.
+ * The arguments to this SMC are:
+ *     arg0 - Function ID.
+ *     arg1 - Size of memory to be reserved (in bytes).
+ *     arg2 - Flags and alignment requirements.
+ * The return arguments are:
+ *     ret0 - Status/error.
+ *     ret1 - Physical address of the reserved memory area.
+ */
+#define RMM_RESERVE_MEMORY			SMC64_RMMD_EL3_FID(U(11))
+
 /*
  * RMM_BOOT_COMPLETE originates on RMM when the boot finishes (either cold
  * or warm boot). This is handled by the RMM-EL3 interface SMC handler.
@@ -279,7 +293,7 @@ typedef struct rp_ide_key_info {
  * Increase this when a bug is fixed, or a feature is added without
  * breaking compatibility.
  */
-#define RMM_EL3_IFC_VERSION_MINOR	(U(6))
+#define RMM_EL3_IFC_VERSION_MINOR	(U(8))
 
 #define RMM_EL3_INTERFACE_VERSION				\
 	(((RMM_EL3_IFC_VERSION_MAJOR << 16) & 0x7FFFF) |	\
@@ -293,6 +307,8 @@ typedef struct rp_ide_key_info {
 #include <stdint.h>
 
 int rmmd_setup(void);
+int rmmd_primary_activate(void);
+int rmmd_secondary_activate(void);
 uint64_t rmmd_rmi_handler(uint32_t smc_fid,
 		uint64_t x1,
 		uint64_t x2,

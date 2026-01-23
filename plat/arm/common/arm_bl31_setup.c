@@ -17,16 +17,25 @@
 #include <lib/fconf/fconf.h>
 #include <lib/gpt_rme/gpt_rme.h>
 #include <lib/mmio.h>
+#include <services/lfa_svc.h>
 #if TRANSFER_LIST
-#include <lib/transfer_list.h>
+#include <transfer_list.h>
 #endif
 #include <lib/xlat_tables/xlat_tables_compat.h>
 #include <plat/arm/common/plat_arm.h>
+#include <plat/arm/common/plat_arm_lfa_components.h>
 #include <plat/common/platform.h>
 #include <platform_def.h>
 
 struct transfer_list_header *secure_tl;
 struct transfer_list_header *ns_tl __unused;
+
+#if USE_GIC_DRIVER == 3
+uintptr_t arm_gicr_base_addrs[2] = {
+	PLAT_ARM_GICR_BASE,	/* GICR Base address of the primary CPU */
+	0U			/* Zero Termination */
+};
+#endif
 
 /*
  * Placeholder variables for copying the arguments that have been passed to
@@ -129,6 +138,12 @@ struct entry_point_info *bl31_plat_get_next_image_ep_info(uint32_t type)
 	}
 #if ENABLE_RME
 	else if (type == REALM) {
+#if LFA_SUPPORT
+		if (lfa_is_prime_complete(LFA_RMM_COMPONENT)) {
+			rmm_image_ep_info.pc =
+					RMM_BASE + RMM_BANK_SIZE;
+		}
+#endif /* LFA_SUPPORT */
 		next_image_info = &rmm_image_ep_info;
 	}
 #endif
@@ -172,7 +187,7 @@ void __init arm_bl31_early_platform_setup(u_register_t arg0, u_register_t arg1,
 	 */
 	bl33_image_ep_info.pc = plat_get_ns_image_entrypoint();
 
-	bl33_image_ep_info.spsr = arm_get_spsr_for_bl33_entry();
+	bl33_image_ep_info.spsr = arm_get_spsr(BL33_IMAGE_ID);
 	SET_SECURITY_STATE(bl33_image_ep_info.h.attr, NON_SECURE);
 
 	bl33_image_ep_info.args.arg0 = PLAT_ARM_TRANSFER_LIST_DTB_OFFSET;
@@ -215,9 +230,11 @@ void __init arm_bl31_early_platform_setup(u_register_t arg0, u_register_t arg1,
 #endif /* RESET_TO_BL31 */
 #else /* (!TRANSFER_LIST) */
 #if RESET_TO_BL31
-	/* There are no parameters from BL2 if BL31 is a reset vector */
-	assert((uintptr_t)arg0 == 0U);
-	assert((uintptr_t)arg3 == 0U);
+	/* If BL31 is a reset vector, the parameters must be ignored */
+	(void)arg0;
+	(void)arg1;
+	(void)arg2;
+	(void)arg3;
 
 # ifdef BL32_BASE
 	/* Populate entry point information for BL32 */
@@ -227,7 +244,7 @@ void __init arm_bl31_early_platform_setup(u_register_t arg0, u_register_t arg1,
 				0);
 	SET_SECURITY_STATE(bl32_image_ep_info.h.attr, SECURE);
 	bl32_image_ep_info.pc = BL32_BASE;
-	bl32_image_ep_info.spsr = arm_get_spsr_for_bl32_entry();
+	bl32_image_ep_info.spsr = arm_get_spsr(BL32_IMAGE_ID);
 
 #if defined(SPD_spmd)
 	bl32_image_ep_info.args.arg0 = ARM_SPMC_MANIFEST_BASE;
@@ -245,8 +262,7 @@ void __init arm_bl31_early_platform_setup(u_register_t arg0, u_register_t arg1,
 	 * is located and the entry state information
 	 */
 	bl33_image_ep_info.pc = plat_get_ns_image_entrypoint();
-
-	bl33_image_ep_info.spsr = arm_get_spsr_for_bl33_entry();
+	bl33_image_ep_info.spsr = arm_get_spsr(BL33_IMAGE_ID);
 	SET_SECURITY_STATE(bl33_image_ep_info.h.attr, NON_SECURE);
 
 #if ENABLE_RME
@@ -322,34 +338,35 @@ void __init arm_bl31_early_platform_setup(u_register_t arg0, u_register_t arg1,
 #endif
 #endif /* RESET_TO_BL31 */
 
-#if ARM_LINUX_KERNEL_AS_BL33
+#if USE_KERNEL_DT_CONVENTION
 	/*
-	 * According to the file ``Documentation/arm64/booting.txt`` of the
-	 * Linux kernel tree, Linux expects the physical address of the device
-	 * tree blob (DTB) in x0, while x1-x3 are reserved for future use and
-	 * must be 0.
-	 * Repurpose the option to load Hafnium hypervisor in the normal world.
-	 * It expects its manifest address in x0. This is essentially the linux
-	 * dts (passed to the primary VM) by adding 'hypervisor' and chosen
-	 * nodes specifying the Hypervisor configuration.
+	 * Only use the default DT base address if TF-A has not supplied one.
+	 * This can occur when the DT is side-loaded and its memory location
+	 * is unknown (e.g., RESET_TO_BL31).
 	 */
-#if RESET_TO_BL31
-	bl33_image_ep_info.args.arg0 = (u_register_t)ARM_PRELOADED_DTB_BASE;
-#else
-	bl33_image_ep_info.args.arg0 = arg2;
-#endif /* RESET_TO_BL31 */
+
+	if (bl33_image_ep_info.args.arg0 == 0U) {
+		bl33_image_ep_info.args.arg0 = HW_CONFIG_BASE;
+	}
+
+#if ARM_LINUX_KERNEL_AS_BL33
 	bl33_image_ep_info.args.arg1 = 0U;
 	bl33_image_ep_info.args.arg2 = 0U;
 	bl33_image_ep_info.args.arg3 = 0U;
-#endif /* ARM_LINUX_KERNEL_AS_BL33 */
+#endif
+#endif
 #endif /* TRANSFER_LIST */
 }
 
 void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 		u_register_t arg2, u_register_t arg3)
 {
+	/* Initialize the console to provide early debug support */
+	arm_console_boot_init();
+
 	arm_bl31_early_platform_setup(arg0, arg1, arg2, arg3);
 
+#if !HW_ASSISTED_COHERENCY
 	/*
 	 * Initialize Interconnect for this cluster during cold boot.
 	 * No need for locks as no other CPU is active.
@@ -365,6 +382,7 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
 	 * clusters.
 	 */
 	plat_arm_interconnect_enter_coherency();
+#endif
 }
 
 /*******************************************************************************
@@ -517,6 +535,10 @@ void arm_free_init_memory(void)
 void __init bl31_platform_setup(void)
 {
 	arm_bl31_platform_setup();
+
+#if USE_GIC_DRIVER == 3
+	gic_set_gicr_frames(arm_gicr_base_addrs);
+#endif
 }
 
 void bl31_plat_runtime_setup(void)

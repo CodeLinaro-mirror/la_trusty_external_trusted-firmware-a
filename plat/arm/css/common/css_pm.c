@@ -12,7 +12,7 @@
 #include <bl31/interrupt_mgmt.h>
 #include <common/debug.h>
 #include <drivers/arm/css/css_scp.h>
-#include <drivers/arm/css/dsu.h>
+#include <drivers/arm/dsu.h>
 #include <lib/cassert.h>
 #include <plat/arm/common/plat_arm.h>
 
@@ -87,7 +87,9 @@ static void css_pwr_domain_on_finisher_common(
 #if PRESERVE_DSU_PMU_REGS
 		cluster_on_dsu_pmu_context_restore();
 #endif
+#if !HW_ASSISTED_COHERENCY
 		plat_arm_interconnect_enter_coherency();
+#endif
 	}
 }
 
@@ -131,7 +133,9 @@ static void css_power_down_common(const psci_power_state_t *target_state)
 #if PRESERVE_DSU_PMU_REGS
 		cluster_off_dsu_pmu_context_save();
 #endif
+#if !HW_ASSISTED_COHERENCY
 		plat_arm_interconnect_exit_coherency();
+#endif
 	}
 }
 

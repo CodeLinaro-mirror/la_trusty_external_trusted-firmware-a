@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2024, Arm Limited and Contributors. All rights reserved.
+ * Copyright (c) 2021-2025, Renesas Electronics Corporation. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -53,8 +54,9 @@ uintptr_t page_align(uintptr_t value, unsigned dir)
 	/* Round up the limit to the next page boundary */
 	if ((value & PAGE_SIZE_MASK) != 0U) {
 		value &= ~PAGE_SIZE_MASK;
-		if (dir == UP)
+		if (dir == UP) {
 			value += PAGE_SIZE;
+		}
 	}
 
 	return value;
@@ -70,12 +72,12 @@ uintptr_t page_align(uintptr_t value, unsigned dir)
  ******************************************************************************/
 static int load_image(unsigned int image_id, image_info_t *image_data)
 {
-	uintptr_t dev_handle;
-	uintptr_t image_handle;
-	uintptr_t image_spec;
+	uintptr_t dev_handle = 0ULL;
+	uintptr_t image_handle = 0ULL;
+	uintptr_t image_spec = 0ULL;
 	uintptr_t image_base;
-	size_t image_size;
-	size_t bytes_read;
+	size_t image_size = 0ULL;
+	size_t bytes_read = 0ULL;
 	int io_result;
 
 	assert(image_data != NULL);
@@ -103,17 +105,23 @@ static int load_image(unsigned int image_id, image_info_t *image_data)
 
 	/* Find the size of the image */
 	io_result = io_size(image_handle, &image_size);
-	if ((io_result != 0) || (image_size == 0U)) {
+	if (io_result != 0) {
 		WARN("Failed to determine the size of the image id=%u (%i)\n",
 			image_id, io_result);
-		goto exit;
+		goto exit_load_image;
+	}
+
+	if (image_size == 0U) {
+		WARN("image id=%u size is zero\n", image_id);
+		io_result = -EIO;
+		goto exit_load_image;
 	}
 
 	/* Check that the image size to load is within limit */
 	if (image_size > image_data->image_max_size) {
 		WARN("Image id=%u size out of bounds\n", image_id);
 		io_result = -EFBIG;
-		goto exit;
+		goto exit_load_image;
 	}
 
 	/*
@@ -127,13 +135,13 @@ static int load_image(unsigned int image_id, image_info_t *image_data)
 	io_result = io_read(image_handle, image_base, image_size, &bytes_read);
 	if ((io_result != 0) || (bytes_read < image_size)) {
 		WARN("Failed to load image id=%u (%i)\n", image_id, io_result);
-		goto exit;
+		goto exit_load_image;
 	}
 
 	INFO("Image id=%u loaded: 0x%lx - 0x%lx\n", image_id, image_base,
 	     (uintptr_t)(image_base + image_size));
 
-exit:
+exit_load_image:
 	(void)io_close(image_handle);
 	/* Ignore improbable/unrecoverable error in 'close' */
 

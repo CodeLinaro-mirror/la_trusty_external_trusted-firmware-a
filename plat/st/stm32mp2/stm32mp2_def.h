@@ -10,16 +10,35 @@
 #include <common/tbbr/tbbr_img_def.h>
 #ifndef __ASSEMBLER__
 #include <drivers/st/bsec.h>
-#endif
-#include <drivers/st/stm32mp25_rcc.h>
-#ifndef __ASSEMBLER__
 #include <drivers/st/stm32mp2_clk.h>
+#include <drivers/st/stm32mp2_risaf.h>
+#include <drivers/st/stm32mp_rifsc_regs.h>
 #endif
+#if STM32MP21
+#include <drivers/st/stm32mp21_pwr.h>
+#include <drivers/st/stm32mp21_rcc.h>
+#else /* STM32MP21 */
 #include <drivers/st/stm32mp2_pwr.h>
+#include <drivers/st/stm32mp25_rcc.h>
+#endif /* STM32MP21 */
+#if STM32MP21
+#include <dt-bindings/clock/st,stm32mp21-rcc.h>
+#include <dt-bindings/clock/stm32mp21-clksrc.h>
+#include <dt-bindings/reset/st,stm32mp21-rcc.h>
+#endif /* STM32MP21 */
+#if STM32MP23
 #include <dt-bindings/clock/stm32mp25-clks.h>
 #include <dt-bindings/clock/stm32mp25-clksrc.h>
-#include <dt-bindings/gpio/stm32-gpio.h>
 #include <dt-bindings/reset/stm32mp25-resets.h>
+#endif /* STM32MP23 */
+#if STM32MP25
+#include <dt-bindings/clock/stm32mp25-clks.h>
+#include <dt-bindings/clock/stm32mp25-clksrc.h>
+#include <dt-bindings/reset/stm32mp25-resets.h>
+#endif /* STM32MP25 */
+#include <dt-bindings/gpio/stm32-gpio.h>
+#include <dt-bindings/soc/rif.h>
+#include <dt-bindings/soc/stm32mp25-rif.h>
 
 #ifndef __ASSEMBLER__
 #include <boot_api.h>
@@ -75,6 +94,20 @@
 #define SRAM1_SIZE_FOR_TFA			U(0x00010000)
 #define RETRAM_BASE				U(0x0E080000)
 #define RETRAM_SIZE				U(0x00020000)
+
+#if defined(IMAGE_BL2) && STM32MP_USB_PROGRAMMER
+#define STM32MP_USB_DWC3_SIZE			PAGE_SIZE
+#define STM32MP_USB_DWC3_BASE			(STM32MP_SYSRAM_BASE + \
+						 STM32MP_SYSRAM_SIZE - \
+						 STM32MP_SYSRAM_DEVICE_SIZE)
+
+#define STM32MP_SYSRAM_DEVICE_SIZE		STM32MP_USB_DWC3_SIZE
+#define STM32MP_SYSRAM_DEVICE_BASE		STM32MP_USB_DWC3_BASE
+
+#define STM32MP_SYSRAM_MEM_SIZE			(STM32MP_SYSRAM_SIZE - \
+						 STM32MP_SYSRAM_DEVICE_SIZE)
+#define STM32MP_SYSRAM_MEM_BASE			STM32MP_SYSRAM_BASE
+#endif /* IMAGE_BL2 && STM32MP_USB_PROGRAMMER */
 
 /* DDR configuration */
 #define STM32MP_DDR_BASE			U(0x80000000)
@@ -134,7 +167,7 @@ enum ddr_type {
  * MAX_MMAP_REGIONS is usually:
  * BL stm32mp2_mmap size + mmap regions in *_plat_arch_setup
  */
-#if defined(IMAGE_BL31)
+#if STM32MP_USB_PROGRAMMER || defined(IMAGE_BL31)
 #define MAX_MMAP_REGIONS			7
 #else
 #define MAX_MMAP_REGIONS			6
@@ -261,6 +294,13 @@ enum ddr_type {
 #define STM32MP_SDMMC3_BASE			U(0x48240000)
 
 /*******************************************************************************
+ * STM32MP2 OSPI
+ ******************************************************************************/
+/* OSPI 1 & 2 memory map area */
+#define STM32MP_OSPI_MM_BASE			U(0x60000000)
+#define STM32MP_OSPI_MM_SIZE			U(0x10000000)
+
+/*******************************************************************************
  * STM32MP2 BSEC / OTP
  ******************************************************************************/
 /*
@@ -371,6 +411,11 @@ static inline uintptr_t tamp_bkpr(uint32_t idx)
 #endif
 
 /*******************************************************************************
+ * STM32MP2 USB
+ ******************************************************************************/
+#define USB_DWC3_BASE				U(0x48300000)
+
+/*******************************************************************************
  * STM32MP2 DDRCTRL
  ******************************************************************************/
 #define DDRCTRL_BASE				U(0x48040000)
@@ -386,7 +431,7 @@ static inline uintptr_t tamp_bkpr(uint32_t idx)
 #define DDRPHYC_BASE				U(0x48C00000)
 
 /*******************************************************************************
- * Miscellaneous STM32MP1 peripherals base address
+ * Miscellaneous STM32MP2 peripherals base address
  ******************************************************************************/
 #define BSEC_BASE				U(0x44000000)
 #define DBGMCU_BASE				U(0x4A010000)
@@ -398,8 +443,64 @@ static inline uintptr_t tamp_bkpr(uint32_t idx)
 /*******************************************************************************
  * STM32MP RIF
  ******************************************************************************/
+#define RIFSC_BASE				U(0x42080000)
+#define RISAB1_BASE				U(0x420F0000)
+#define RISAB2_BASE				U(0x42100000)
 #define RISAB3_BASE				U(0x42110000)
 #define RISAB5_BASE				U(0x42130000)
+
+#define RISAF1_INST				0
+#define RISAF2_INST				1
+#define RISAF4_INST				3
+#define RISAF5_INST				4
+#define RISAF_MAX_INSTANCE			5
+
+#define RISAF1_BASE				U(0x420A0000)
+#define RISAF2_BASE				U(0x420B0000)
+#define RISAF4_BASE				U(0x420D0000)
+#define RISAF5_BASE				U(0x420E0000)
+
+#define USE_RISAF2
+#define USE_RISAF4
+
+#ifdef USE_RISAF1
+#define RISAF1_MAX_REGION			4
+#else
+#define RISAF1_MAX_REGION			0
+#endif
+#ifdef USE_RISAF2
+#define RISAF2_MAX_REGION			4
+#else
+#define RISAF2_MAX_REGION			0
+#endif
+#ifdef USE_RISAF4
+/* Consider only encrypted region maximum number, to save memory consumption */
+#define RISAF4_MAX_REGION			4
+#else
+#define RISAF4_MAX_REGION			0
+#endif
+#ifdef USE_RISAF5
+#define RISAF5_MAX_REGION			2
+#else
+#define RISAF5_MAX_REGION			0
+#endif
+#define RISAF_MAX_REGION			(RISAF1_MAX_REGION + RISAF2_MAX_REGION + \
+						 RISAF4_MAX_REGION + RISAF5_MAX_REGION)
+
+#define RISAF_KEY_SIZE_IN_BYTES			RISAF_ENCRYPTION_KEY_SIZE_IN_BYTES
+#define RISAF_SEED_SIZE_IN_BYTES		U(4)
+
+/*******************************************************************************
+ * RIFSC
+ ******************************************************************************/
+#define STM32MP2_RIMU_USB3DR			U(4)
+
+/*
+ * USB3DR Secure/Priv Master (DMA) access
+ */
+#define RIFSC_USB_BOOT_USB3DR_RIMC_CONF		(RIFSC_RIMC_ATTRx_MPRIV | RIFSC_RIMC_ATTRx_MSEC | \
+						 RIF_CID1 << RIFSC_RIMC_ATTRx_MCID_SHIFT | \
+						 RIFSC_RIMC_ATTRx_CIDSEL)
 
 /*******************************************************************************
  * STM32MP CA35SSC
@@ -422,7 +523,11 @@ static inline uintptr_t tamp_bkpr(uint32_t idx)
 #define DT_BSEC_COMPAT				"st,stm32mp25-bsec"
 #define DT_DDR_COMPAT				"st,stm32mp2-ddr"
 #define DT_PWR_COMPAT				"st,stm32mp25-pwr"
+#if STM32MP21
+#define DT_RCC_CLK_COMPAT			"st,stm32mp21-rcc"
+#else
 #define DT_RCC_CLK_COMPAT			"st,stm32mp25-rcc"
+#endif
 #define DT_SDMMC2_COMPAT			"st,stm32mp25-sdmmc2"
 #define DT_UART_COMPAT				"st,stm32h7-uart"
 

@@ -1396,20 +1396,6 @@ environment is initialized.
    The address from where it was called is stored in x30 (Link Register).
    The default implementation simply spins.
 
-Function : plat_system_reset()
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-::
-
-    Argument : void
-    Return   : void
-
-This function is used by the platform to resets the system. It can be used
-in any specific use-case where system needs to be resetted. For example,
-in case of DRTM implementation this function reset the system after
-writing the DRTM error code in the non-volatile storage. This function
-never returns. Failure in reset results in panic.
-
 Function : plat_get_bl_image_load_info()
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1511,6 +1497,23 @@ This function returns soc revision in below format
 
     soc_revision[0:30] = SOC revision of specific SOC
 
+Function : plat_get_soc_name()
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+    Argument : char **
+    Return   : int32_t
+
+The plat_get_soc_name() function allows a platform to expose the SoC name to
+the firmware. It takes a pointer to a character pointer as an argument, which
+must be set to point to a static, null-terminated SoC name string. The string
+must be encoded in UTF-8 and should use only printable ASCII characters for
+compatibility. It must not exceed 136 bytes, including the null terminator. On
+success, the function returns SMC_ARCH_CALL_SUCCESS. If the platform does not
+support SoC name retrieval, it returns SMC_ARCH_CALL_NOT_SUPPORTED. This API
+allows platforms to support SoC name queries via SMCCC_ARCH_SOC_ID.
+
 Function : plat_is_smccc_feature_available()
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1572,6 +1575,41 @@ used, it is mandatory that the backup image is on the same media.
 This is required for MTD devices like NAND.
 The argument is the ID of the image for which we are looking for an alternative
 place. It returns 0 in case of success and a negative errno value otherwise.
+
+Function : plat_setup_log_gpt_corrupted [optional]
+..................................................
+
+::
+
+    Argument : const struct plat_log_gpt_corrupted *
+    Return   : void
+
+This optional function is called to register platform log GPT corrupted functions,
+given as argument.
+
+Function : plat_setup_log_gpt_corrupted.plat_set_gpt_corruption [optional]
+..........................................................................
+
+::
+
+    Argument : uintptr_t gpt_corrupted_info_ptr, uint8_t flags
+    Return   : void
+
+This optional function will log error information if the GPT is corrupted, by
+setting the address passed by gpt_corrupted_info_ptr to flags value, currently
+bit[0] is used for logging primary GPT corruption, bit[7:1] are reserved.
+The data type passed by reference is uint8_t.
+
+Function : plat_setup_log_gpt_corrupted.plat_log_gpt_corruption [optional]
+..........................................................................
+
+::
+
+    Argument : uintptr_t log_address, uint8_t gpt_corrupted_info
+    Return   : void
+
+This optional function will log if the primary GPT is corrupted, by writing
+the value of gpt_corrupted_info to the address passed by log_address.
 
 Modifications specific to a Boot Loader stage
 ---------------------------------------------
@@ -1832,6 +1870,18 @@ This function must return 0 on success, a non-null error code otherwise.
 
 The default implementation of this function asserts therefore platforms must
 override it when using the FWU feature.
+
+Function : bl1_plat_is_shared_nv_ctr() [optional]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+    Argument : void
+    Return   : bool
+
+This function inquiry the platform if the non-volatile counter is shared
+across all secure images (BL2, BL31, BL32, etc.). It is used only in BL1
+and when `PSA_FWU_SUPPORT` is enabled.
 
 Boot Loader Stage 2 (BL2)
 -------------------------
@@ -2350,23 +2400,41 @@ RMM image and stores it in the area specified by manifest.
 
 When ENABLE_RME is disabled, this function is not used.
 
-Function : plat_rmm_mecid_key_update() [when ENABLE_RME == 1]
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Function : plat_rmmd_mecid_key_update() [when ENABLE_RME == 1]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ::
 
-    Argument : uint16_t
+    Argument : uint16_t, unsigned int
     Return   : int
 
 This function is invoked by BL31's RMMD when there is a request from the RMM
 monitor to update the tweak for the encryption key associated to a MECID.
 
 The first parameter (``uint16_t mecid``) contains the MECID for which the
-encryption key is to be updated.
+encryption key is to be updated. The second argument specifies the reason
+for key update. Possible values are: 0 - Realm creation, 1 - Realm destruction.
 
 Return value is 0 upon success and -EFAULT otherwise.
 
 This function needs to be implemented by a platform if it enables RME.
+
+Function : plat_rmmd_reserve_memory() [when ENABLE_RME == 1]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+    Arguments : size_t size, unsigned long alignment
+    Return    : uintptr_t
+
+Reserve memory to be used by the RMM. This could be memory simply taken from a pool of reserved
+memory, for instance from a carveout dedicated to RMM.
+
+Return value is the physical address of a memory region of at least ``size`` bytes, which needs
+to be aligned to ``alignment`` bytes.
+
+This function needs to be implemented if a platform enables RME and the RMM requires the memory
+reservation feature.
 
 Function : plat_rmmd_el3_token_sign_push_req() [mandatory when RMMD_ENABLE_EL3_TOKEN_SIGN == 1]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2647,7 +2715,9 @@ Function : plat_init_apkey [optional]
 This function returns the 128-bit value which can be used to program ARMv8.3
 pointer authentication keys.
 
-The value should be obtained from a reliable source of randomness.
+The value should be obtained from a reliable source of randomness. It will be
+called each time a core powers up and it is the platform's responsibility to
+decide when to regenerate the keys if generating them is an expensive operation.
 
 This function is only needed if ARMv8.3 pointer authentication is used in the
 Trusted Firmware by building with ``BRANCH_PROTECTION`` option set to 1, 2 or 3.
@@ -2809,7 +2879,7 @@ is available, it must return false and the storage must not be written.
 
 .. _psci_in_bl31:
 
-Power State Coordination Interface (in BL31)
+Power State Coordination Interface (PSCI)
 --------------------------------------------
 
 The TF-A implementation of the PSCI API is based around the concept of a
@@ -3107,13 +3177,14 @@ operation and it encodes the platform coordinated target local power states for
 the CPU power domain and its parent power domain levels.
 
 It is preferred that this function returns. The caller will invoke
-``psci_power_down_wfi()`` to powerdown the CPU, mitigate any powerdown errata,
+``wfi()`` to powerdown the CPU, mitigate any powerdown errata,
 and handle any wakeups that may arise. Previously, this function did not return
 and instead called ``wfi`` (in an infinite loop) directly. This is still
 possible on platforms where this is guaranteed to be terminal, however, it is
 strongly discouraged going forward.
 
-Previously this function was called ``pwr_domain_pwr_down_wfi()``.
+Previously this function was called ``pwr_domain_pwr_down_wfi()`` and invoked
+``psci_power_down_wfi()`` (now removed).
 
 plat_psci_ops.pwr_domain_on_finish()
 ....................................
@@ -3291,6 +3362,79 @@ bytes is protected by ``MEM_PROTECT``.  If the region is protected
 then it must return 0, otherwise it must return a negative number.
 
 .. _porting_guide_imf_in_bl31:
+
+Secure payload power management callback
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+During PSCI power management operations, the EL3 Runtime Software may
+need to perform some bookkeeping, and PSCI library provides
+``spd_pm_ops_t`` callbacks for this purpose. These hooks must be
+populated and registered by using ``psci_register_spd_pm_hook()`` PSCI
+library interface.
+
+Typical bookkeeping during PSCI power management calls include save/restore
+of the EL3 Runtime Software context. Also if the EL3 Runtime Software makes
+use of secure interrupts, then these interrupts must also be managed
+appropriately during CPU power down/power up. Any secure interrupt targeted
+to the current CPU must be disabled or re-targeted to other running CPU prior
+to power down of the current CPU. During power up, these interrupt can be
+enabled/re-targeted back to the current CPU.
+
+.. code:: c
+
+        typedef struct spd_pm_ops {
+                void (*svc_on)(u_register_t target_cpu);
+                int32_t (*svc_off)(u_register_t __unused);
+                void (*svc_suspend)(u_register_t max_off_pwrlvl);
+                void (*svc_on_finish)(u_register_t __unused);
+                void (*svc_suspend_finish)(u_register_t max_off_pwrlvl);
+                int32_t (*svc_migrate)(u_register_t from_cpu, u_register_t to_cpu);
+                int32_t (*svc_migrate_info)(u_register_t *resident_cpu);
+                void (*svc_system_off)(void);
+                void (*svc_system_reset)(void);
+        } spd_pm_ops_t;
+
+A brief description of each callback is given below:
+
+-  svc_on, svc_off, svc_on_finish
+
+   The ``svc_on``, ``svc_off`` callbacks are called during PSCI_CPU_ON,
+   PSCI_CPU_OFF APIs respectively. The ``svc_on_finish`` is called when the
+   target CPU of PSCI_CPU_ON API powers up and executes the
+   ``psci_warmboot_entrypoint()`` PSCI library interface.
+
+-  svc_suspend, svc_suspend_finish
+
+   The ``svc_suspend`` callback is called during power down bu either
+   PSCI_SUSPEND or PSCI_SYSTEM_SUSPEND APIs. The ``svc_suspend_finish`` is
+   called when the CPU wakes up from suspend and executes the
+   ``psci_warmboot_entrypoint()`` PSCI library interface. The ``max_off_pwrlvl``
+   (first parameter) denotes the highest power domain level being powered down
+   to or woken up from suspend.
+
+-  svc_system_off, svc_system_reset
+
+   These callbacks are called during PSCI_SYSTEM_OFF and PSCI_SYSTEM_RESET
+   PSCI APIs respectively.
+
+-  svc_migrate_info
+
+   This callback is called in response to PSCI_MIGRATE_INFO_TYPE or
+   PSCI_MIGRATE_INFO_UP_CPU APIs. The return value of this callback must
+   correspond to the return value of PSCI_MIGRATE_INFO_TYPE API as described
+   in `PSCI`_. If the secure payload is a Uniprocessor (UP)
+   implementation, then it must update the mpidr of the CPU it is resident in
+   via ``resident_cpu`` (first argument). The updates to ``resident_cpu`` is
+   ignored if the secure payload is a multiprocessor (MP) implementation.
+
+-  svc_migrate
+
+   This callback is only relevant if the secure payload in EL3 Runtime
+   Software is a Uniprocessor (UP) implementation and supports migration from
+   the current CPU ``from_cpu`` (first argument) to another CPU ``to_cpu``
+   (second argument). This callback is called in response to PSCI_MIGRATE
+   API. This callback is never called if the secure payload is a
+   Multiprocessor (MP) implementation.
 
 Interrupt Management framework (in BL31)
 ----------------------------------------
@@ -3634,8 +3778,8 @@ This API is used to setup the early console, it is required only if the flag
 External Abort handling and RAS Support
 ---------------------------------------
 
-If any cores on the platform support powerdown abandon (i.e. ``FEAT_PABANDON``
-is set, check the "Core powerup and powerdown sequence" in their TRMs), then
+If any cores on the platform support powerdown abandon (check the "Core powerup
+and powerdown sequence" in their TRMs), then
 these functions should be able to handle being called with power domains off and
 after the powerdown ``wfi``. In other words it may run after a call to
 ``pwr_domain_suspend()`` and before a call to ``pwr_domain_suspend_finish()``
@@ -3928,13 +4072,81 @@ Measured Boot Platform Interface
 Enabling the MEASURED_BOOT flag adds extra platform requirements. Please refer
 to :ref:`Measured Boot Design` for more details.
 
+Live Firmware Activation Interface
+----------------------------------
+
+Function : plat_lfa_get_components()
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+    Argument : plat_lfa_component_info_t **
+    Return   : int
+
+This platform API provides the list of LFA components available for activation.
+It populates a pointer to an array of ``plat_lfa_component_info_t`` structures,
+which contain information about each component (like UUID, ID, etc.). It returns
+0 on success, or a standard error code on failure.
+
+Function : is_plat_lfa_activation_pending()
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+    Argument : uint32_t
+    Return   : bool
+
+This platform API checks if the specified LFA component, identified
+by its ``lfa_component_id``, is available for activation. It returns
+true if available, otherwise false.
+
+Function : plat_lfa_cancel()
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+    Argument : uint32_t
+    Return   : int
+
+This platform API allows the platform to cancel an ongoing update or activation
+process for the specified ``lfa_component_id``. It returns 0 on success or
+a standard error code on failure.
+
+Function : plat_lfa_load_auth_image()
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+    Argument : uint32_t
+    Return   : int
+
+The platform uses this API to load, authenticate and measure the component
+specified by ``lfa_component_id``. It should return 0 on success or appropriate
+error codes for load/authentication failures.
+
+NOTE: The error code -EAGAIN is not treated as an error, it means the operation
+is incomplete and the function should be called again by the caller.
+
+Function : plat_lfa_notify_activate()
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+    Argument : uint32_t
+    Return   : int
+
+This API is invoked by the platform to notify its security engine to initiate
+the required steps for component activation. The function takes the component
+identifier ``lfa_component_id`` as an argument. It should return 0 on success
+or appropriate negative error codes on failures.
+
 --------------
 
 *Copyright (c) 2013-2025, Arm Limited and Contributors. All rights reserved.*
 
 .. _PSCI: https://developer.arm.com/documentation/den0022/latest/
-.. _Arm Generic Interrupt Controller version 2.0 (GICv2): http://infocenter.arm.com/help/topic/com.arm.doc.ihi0048b/index.html
-.. _3.0 (GICv3): http://infocenter.arm.com/help/topic/com.arm.doc.ihi0069b/index.html
+.. _Arm Generic Interrupt Controller version 2.0 (GICv2): https://developer.arm.com/documentation/ihi0048/b/
+.. _3.0 (GICv3): https://developer.arm.com/documentation/ihi0069
 .. _FreeBSD: https://www.freebsd.org
 .. _SCC: http://www.simple-cc.org/
-.. _DRTM: https://developer.arm.com/documentation/den0113/a
+.. _DRTM: https://developer.arm.com/documentation/den0113

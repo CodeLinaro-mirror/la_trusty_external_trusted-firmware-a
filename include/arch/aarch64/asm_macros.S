@@ -281,6 +281,14 @@
 	.endm
 
 	/*
+	 * Clear Branch History instruction, translates to NOP on CPUs
+	 * that don't implement the clrbhb instruction.
+	 */
+	.macro clrbhb
+	hint	#22
+	.endm
+
+	/*
 	 * Macro for mitigating against speculative execution beyond ERET. Uses the
 	 * speculation barrier instruction introduced by FEAT_SB, if it's enabled.
 	 */
@@ -357,7 +365,7 @@
 	.endm
 
 .macro call_reset_handler
-#if !(defined(IMAGE_BL2) && ENABLE_RME)
+#if defined(IMAGE_BL1) || defined(IMAGE_BL31) || (defined(IMAGE_BL2) && RESET_TO_BL2)
 	/* ---------------------------------------------------------------------
 	 * It is a cold boot.
 	 * Perform any processor specific actions upon reset e.g. cache, TLB
